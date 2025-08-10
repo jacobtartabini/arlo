@@ -8,9 +8,9 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* Arlo Dark Theme - Fixed #0D1117 background */
-    --background: 220 13% 9%;
-    --foreground: 0 0% 98%;
+    /* Arlo Light Theme - Clean light background */
+    --background: 0 0% 100%;
+    --foreground: 222 84% 5%;
 
     --card: 0 0% 100%;
     --card-foreground: 222 84% 5%;
@@ -39,12 +39,12 @@ All colors MUST be HSL.
     --input: 214 32% 91%;
     --ring: 214 75% 58%;
 
-    /* Glassmorphism effects */
+    /* Light mode glassmorphism */
     --glass-bg: 0 0% 100% / 0.8;
     --glass-border: 214 75% 58% / 0.2;
     --glass-shadow: 214 75% 58% / 0.1;
 
-    /* AI Core colors */
+    /* AI Core colors for light mode */
     --ai-core-primary: 214 75% 58%;
     --ai-core-secondary: 214 95% 75%;
     --ai-core-glow: 214 75% 58% / 0.4;
