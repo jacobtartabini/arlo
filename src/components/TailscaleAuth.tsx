@@ -103,15 +103,16 @@ const TailscaleAuth: React.FC = () => {
         {/* Large Shield Icon with multiple animations */}
         <div className="flex justify-center mb-8 animate-fade-in-up">
           <div className="relative group">
-            <Shield className="w-24 h-24 text-gray-800 animate-breathe transition-all duration-500 group-hover:text-gray-600" />
-            
-            {/* Multiple subtle loading rings */}
-            <div className="absolute inset-0 rounded-full border border-gray-300/50 animate-spin-slow" />
-            <div className="absolute inset-2 rounded-full border border-gray-400/30 animate-pulse" />
-            <div className="absolute inset-4 rounded-full border border-gray-500/20 animate-ping" style={{ animationDuration: '3s' }} />
-            
+            {/* Multiple subtle loading rings - behind the shield */}
+            <div className="absolute inset-0 rounded-full border border-gray-300/50 animate-spin-slow z-0" />
+            <div className="absolute inset-2 rounded-full border border-gray-400/30 animate-pulse z-0" />
+            <div className="absolute inset-4 rounded-full border border-gray-500/20 animate-ping z-0" style={{ animationDuration: '3s' }} />
+
+            {/* Shield stays on top */}
+            <Shield className="relative z-10 w-24 h-24 text-gray-800 animate-breathe transition-all duration-500 group-hover:text-gray-600" />
+
             {/* Hover glow effect */}
-            <div className="absolute inset-0 rounded-full bg-gray-800/5 scale-150 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl" />
+            <div className="absolute inset-0 rounded-full bg-gray-800/5 scale-150 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl z-0" />
           </div>
         </div>
 
