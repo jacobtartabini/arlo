@@ -7,7 +7,7 @@ import Dashboard from "./pages/Dashboard";
 import Settings from "./pages/Settings";
 import Unauthorized from "./pages/Unauthorized";
 import NotFound from "./pages/NotFound";
-import TailscaleAuth from "./components/TailscaleAuth";
+import Login from "./pages/Login";
 import AuthCallback from "./pages/AuthCallback";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { ThemeProvider } from "./providers/ThemeProvider";
@@ -31,7 +31,7 @@ const App = () => (
               <ConditionalNavBar />
               <Routes>
                 {/* Public routes */}
-                <Route path="/login" element={<TailscaleAuth />} />
+                <Route path="/login" element={<Login />} />
                 <Route path="/auth/callback" element={<AuthCallback />} />
                 
                 {/* Protected routes */}
