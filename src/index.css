@@ -207,7 +207,6 @@ All colors MUST be HSL.
     background-size: 40px 40px;
   }
 }
-}
 
 @layer base {
   * {
