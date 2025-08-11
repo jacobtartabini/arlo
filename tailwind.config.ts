@@ -154,6 +154,84 @@ export default {
 						opacity: '1',
 						transform: 'translateY(0) scale(1)'
 					}
+				},
+				'breathe': {
+					'0%, 100%': {
+						transform: 'scale(1)'
+					},
+					'50%': {
+						transform: 'scale(1.05)'
+					}
+				},
+				'float': {
+					'0%, 100%': {
+						transform: 'translateY(0px) rotate(0deg)'
+					},
+					'33%': {
+						transform: 'translateY(-15px) rotate(2deg)'
+					},
+					'66%': {
+						transform: 'translateY(-5px) rotate(-1deg)'
+					}
+				},
+				'bounce-subtle': {
+					'0%, 100%': {
+						transform: 'translateY(0)'
+					},
+					'50%': {
+						transform: 'translateY(-5px)'
+					}
+				},
+				'wave': {
+					'0%, 100%': {
+						transform: 'scale(1)',
+						opacity: '0.7'
+					},
+					'50%': {
+						transform: 'scale(1.2)',
+						opacity: '1'
+					}
+				},
+				'fade-in-up': {
+					'0%': {
+						opacity: '0',
+						transform: 'translateY(30px)'
+					},
+					'100%': {
+						opacity: '1',
+						transform: 'translateY(0)'
+					}
+				},
+				'fade-in-down': {
+					'0%': {
+						opacity: '0',
+						transform: 'translateY(-20px)'
+					},
+					'100%': {
+						opacity: '1',
+						transform: 'translateY(0)'
+					}
+				},
+				'scale-in': {
+					'0%': {
+						opacity: '0',
+						transform: 'scale(0.8)'
+					},
+					'100%': {
+						opacity: '1',
+						transform: 'scale(1)'
+					}
+				},
+				'shake': {
+					'0%, 100%': {
+						transform: 'translateX(0)'
+					},
+					'25%': {
+						transform: 'translateX(-5px)'
+					},
+					'75%': {
+						transform: 'translateX(5px)'
+					}
 				}
 			},
 			animation: {
@@ -161,11 +239,19 @@ export default {
 				'accordion-up': 'accordion-up 0.2s ease-out',
 				'ai-pulse': 'ai-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
 				'ai-thinking': 'ai-thinking 1.5s ease-in-out infinite',
-				'float': 'float 3s ease-in-out infinite',
+				'float': 'float 8s ease-in-out infinite',
 				'fade-in': 'fade-in 0.3s ease-out',
 				'core-float': 'core-float 6s ease-in-out infinite',
 				'neural-pulse': 'neural-pulse 3s ease-in-out infinite',
-				'chat-bubble-rise': 'chat-bubble-rise 0.6s ease-out'
+				'chat-bubble-rise': 'chat-bubble-rise 0.6s ease-out',
+				'breathe': 'breathe 3s ease-in-out infinite',
+				'bounce-subtle': 'bounce-subtle 2s ease-in-out infinite',
+				'wave': 'wave 1.5s ease-in-out infinite',
+				'fade-in-up': 'fade-in-up 1s ease-out',
+				'fade-in-down': 'fade-in-down 1s ease-out',
+				'scale-in': 'scale-in 0.8s ease-out',
+				'shake': 'shake 0.5s ease-in-out',
+				'spin-slow': 'spin 8s linear infinite'
 			}
 		}
 	},

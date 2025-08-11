@@ -81,31 +81,73 @@ const TailscaleAuth: React.FC = () => {
   }, [navigate, verifyTailscaleAccess]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 relative">
-      {/* Favicon */}
-      <div className="absolute top-8 left-8">
-        <img src="/favicon2.png" alt="Arlo" className="w-8 h-8" />
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 relative overflow-hidden">
+      {/* Subtle floating background elements */}
+      <div className="absolute inset-0 overflow-hidden">
+        <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-gray-200/30 rounded-full blur-3xl animate-float" />
+        <div className="absolute bottom-1/3 right-1/4 w-48 h-48 bg-gray-300/20 rounded-full blur-2xl animate-float-delayed" />
+        <div className="absolute top-1/2 left-1/2 w-32 h-32 bg-gray-400/10 rounded-full blur-xl animate-pulse transform -translate-x-1/2 -translate-y-1/2" />
+      </div>
+
+      {/* Favicon with entrance animation */}
+      <div className="absolute top-8 left-8 animate-fade-in-down">
+        <img 
+          src="/favicon2.png" 
+          alt="Arlo" 
+          className="w-8 h-8 hover:scale-110 transition-transform duration-300 cursor-pointer" 
+        />
       </div>
 
       {/* Content */}
-      <div className="text-center">
-        {/* Large Shield Icon */}
-        <div className="flex justify-center mb-8">
-          <div className="relative">
-            <Shield className="w-24 h-24 text-gray-800" />
-            {/* Subtle loading animation */}
-            <div className="absolute inset-0 rounded-full border-2 border-gray-300 animate-pulse" />
+      <div className="text-center relative z-10">
+        {/* Large Shield Icon with multiple animations */}
+        <div className="flex justify-center mb-8 animate-fade-in-up">
+          <div className="relative group">
+            <Shield className="w-24 h-24 text-gray-800 animate-breathe transition-all duration-500 group-hover:text-gray-600" />
+            
+            {/* Multiple subtle loading rings */}
+            <div className="absolute inset-0 rounded-full border border-gray-300/50 animate-spin-slow" />
+            <div className="absolute inset-2 rounded-full border border-gray-400/30 animate-pulse" />
+            <div className="absolute inset-4 rounded-full border border-gray-500/20 animate-ping" style={{ animationDuration: '3s' }} />
+            
+            {/* Hover glow effect */}
+            <div className="absolute inset-0 rounded-full bg-gray-800/5 scale-150 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl" />
           </div>
         </div>
 
-        {/* App Title */}
-        <h1 className="text-6xl font-light text-gray-900 tracking-wide">
-          Arlo
-        </h1>
+        {/* App Title with staggered letter animation */}
+        <div className="overflow-hidden animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
+          <h1 className="text-6xl font-light text-gray-900 tracking-wide hover:tracking-widest transition-all duration-700 cursor-default">
+            <span className="inline-block animate-bounce-subtle" style={{ animationDelay: '0s' }}>A</span>
+            <span className="inline-block animate-bounce-subtle" style={{ animationDelay: '0.1s' }}>r</span>
+            <span className="inline-block animate-bounce-subtle" style={{ animationDelay: '0.2s' }}>l</span>
+            <span className="inline-block animate-bounce-subtle" style={{ animationDelay: '0.3s' }}>o</span>
+          </h1>
+        </div>
 
-        {/* Error State (only show if network denied) */}
+        {/* Loading dots with wave animation */}
+        {isVerifying && (
+          <div className="mt-12 flex justify-center animate-fade-in" style={{ animationDelay: '0.6s' }}>
+            <div className="flex space-x-2">
+              <div className="w-2 h-2 bg-gray-400 rounded-full animate-wave" style={{ animationDelay: '0s' }} />
+              <div className="w-2 h-2 bg-gray-400 rounded-full animate-wave" style={{ animationDelay: '0.2s' }} />
+              <div className="w-2 h-2 bg-gray-400 rounded-full animate-wave" style={{ animationDelay: '0.4s' }} />
+            </div>
+          </div>
+        )}
+
+        {/* Success state with scale animation */}
+        {!isVerifying && !networkDenied && (
+          <div className="mt-12 animate-scale-in">
+            <div className="text-green-600 text-sm font-medium animate-fade-in">
+              ✓ Connected
+            </div>
+          </div>
+        )}
+
+        {/* Error State with shake animation */}
         {networkDenied && (
-          <div className="mt-12 text-red-600 text-sm">
+          <div className="mt-12 text-red-600 text-sm animate-shake">
             Network access required
           </div>
         )}
