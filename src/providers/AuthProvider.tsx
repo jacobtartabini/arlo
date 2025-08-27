@@ -53,7 +53,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       setAuthState(prev => ({ ...prev, isLoading: true, error: null }));
       await authService.initiateLogin();
-      // Note: This will redirect, so state update won't complete
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Login failed';
       setAuthState(prev => ({
@@ -69,11 +68,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = async (): Promise<void> => {
     try {
       setAuthState(prev => ({ ...prev, isLoading: true, error: null }));
-
       const currentUser = authState.user;
       await authService.logout(currentUser?.idToken);
 
-      // Clear Tailscale verification as well
       sessionStorage.removeItem('arlo_access_verified');
       sessionStorage.removeItem('arlo_access_verified_expiry');
 
@@ -120,39 +117,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  // --- Updated Tailscale verification ---
+  // Verify Tailscale access
   const verifyTailscaleAccess = async (): Promise<void> => {
     try {
-      const response = await fetch(
-        'https://jacobs-macbook-pro.tailf531bd.ts.net/api/verify',
-        {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
-      );
+      const response = await fetch('https://jacobs-macbook-pro.tailf531bd.ts.net/api/verify', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
 
       if (!response.ok) {
-        throw new Error(`Access denied: ${response.status}`);
+        throw new Error('Access denied. Please connect to Tailscale.');
       }
 
-      const data = await response.json();
+      // Store verification with 15-minute expiry
+      const expiry = Date.now() + 15 * 60 * 1000;
+      sessionStorage.setItem('arlo_access_verified', 'true');
+      sessionStorage.setItem('arlo_access_verified_expiry', expiry.toString());
 
-      if (data.message && data.message.includes('Tailscale access verified')) {
-        // Store verification with expiry (15 minutes)
-        const expiry = Date.now() + 15 * 60 * 1000;
-        sessionStorage.setItem('arlo_access_verified', 'true');
-        sessionStorage.setItem('arlo_access_verified_expiry', expiry.toString());
-
-        setAuthState(prev => ({
-          ...prev,
-          tailscaleVerified: true,
-          error: null,
-        }));
-      } else {
-        throw new Error('Tailscale verification denied by backend');
-      }
+      setAuthState(prev => ({ ...prev, tailscaleVerified: true, error: null }));
     } catch (error) {
       sessionStorage.removeItem('arlo_access_verified');
       sessionStorage.removeItem('arlo_access_verified_expiry');
@@ -162,12 +144,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         tailscaleVerified: false,
         error: error instanceof Error ? error.message : 'Failed to verify access',
       }));
-
       throw error;
     }
   };
 
-  // Set Tailscale verification status manually
+  // Set Tailscale verification status
   const setTailscaleVerified = (verified: boolean) => {
     if (verified) {
       const expiry = Date.now() + 15 * 60 * 1000;
@@ -178,13 +159,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       sessionStorage.removeItem('arlo_access_verified_expiry');
     }
 
-    setAuthState(prev => ({
-      ...prev,
-      tailscaleVerified: verified,
-    }));
+    setAuthState(prev => ({ ...prev, tailscaleVerified: verified }));
   };
 
-  // Handle auth success (callback)
+  // Handle auth success
   const handleAuthSuccess = (user: AuthUser) => {
     setAuthState(prev => ({
       ...prev,
@@ -198,3 +176,38 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Handle auth error
   const handleAuthError = (error: string) => {
     setAuthState({
+      user: null,
+      isAuthenticated: false,
+      tailscaleVerified: false,
+      isLoading: false,
+      error,
+    });
+  };
+
+  const contextValue: AuthContextType = {
+    ...authState,
+    login,
+    logout,
+    refreshSession,
+    verifyTailscaleAccess,
+    setTailscaleVerified,
+  };
+
+  return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;
+};
+
+// Custom hook
+export const useAuth = (): AuthContextType => {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
+  return context;
+};
+
+// Hook for components that require authentication
+export const useRequireAuth = () => {
+  const { isAuthenticated, isLoading } = useAuth();
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) window.location.href = '/login';
+  }, [isAuthenticated, isLoading]);
+  return { isAuthenticated, isLoading };
+};
