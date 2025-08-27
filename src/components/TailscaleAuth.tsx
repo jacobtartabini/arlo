@@ -100,21 +100,20 @@ const TailscaleAuth: React.FC = () => {
 
       {/* Content */}
       <div className="text-center relative z-10">
-        {/* Large Shield Icon with multiple animations */}
+        {/* Shield Icon with centered rings */}
         <div className="flex justify-center mb-6 animate-fade-in-up">
-        <div className="relative group flex items-center justify-center">
-          {/* Larger subtle loading rings - fixed sizes */}
-          <div className="absolute w-32 h-32 rounded-full border border-gray-300/50 animate-spin-slow z-0" />
-          <div className="absolute w-28 h-28 rounded-full border border-gray-400/30 animate-pulse z-0" />
-          <div className="absolute w-24 h-24 rounded-full border border-gray-500/20 animate-ping z-0" style={{ animationDuration: '3s' }} />
-      
-          {/* Shield stays on top, smaller */}
-          <Shield className="relative z-10 w-16 h-16 text-gray-800 animate-breathe transition-all duration-500 group-hover:text-gray-600" />
-      
-          {/* Hover glow effect */}
-          <div className="absolute w-36 h-36 rounded-full bg-gray-800/5 scale-150 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl z-0" />
-        </div>
-      </div>
+          <div className="relative group flex items-center justify-center">
+            {/* Larger subtle loading rings - fixed sizes, centered */}
+            <div className="absolute top-1/2 left-1/2 w-32 h-32 rounded-full border border-gray-300/50 animate-spin-slow z-0 -translate-x-1/2 -translate-y-1/2" />
+            <div className="absolute top-1/2 left-1/2 w-28 h-28 rounded-full border border-gray-400/30 animate-pulse z-0 -translate-x-1/2 -translate-y-1/2" />
+            <div className="absolute top-1/2 left-1/2 w-24 h-24 rounded-full border border-gray-500/20 animate-ping z-0 -translate-x-1/2 -translate-y-1/2" style={{ animationDuration: '3s' }} />
+
+            {/* Shield stays on top, smaller */}
+            <Shield className="relative z-10 w-16 h-16 text-gray-800 animate-breathe transition-all duration-500 group-hover:text-gray-600" />
+
+            {/* Hover glow effect */}
+            <div className="absolute top-1/2 left-1/2 w-36 h-36 rounded-full bg-gray-800/5 scale-150 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl z-0 -translate-x-1/2 -translate-y-1/2" />
+          </div>
         </div>
 
         {/* App Title with staggered letter animation */}
