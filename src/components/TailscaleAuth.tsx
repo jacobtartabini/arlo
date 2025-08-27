@@ -106,21 +106,21 @@ const TailscaleAuth: React.FC = () => {
             {/* Multiple subtle loading rings - behind the shield */}
             <div
               className="absolute inset-1 rounded-full border border-gray-300/50 animate-spin-slow z-0"
-              style={{ animationDuration: '4s' }}
+              style={{ animationDuration: '4s', animationIterationCount: 'infinite' }}
             />
             <div
               className="absolute inset-4 rounded-full border border-gray-400/30 animate-pulse z-0"
-              style={{ animationDuration: '4s' }}
+              style={{ animationDuration: '4s', animationIterationCount: 'infinite' }}
             />
             <div
               className="absolute inset-7 rounded-full border border-gray-500/20 animate-ping z-0"
-              style={{ animationDuration: '4s' }}
+              style={{ animationDuration: '4s', animationIterationCount: 'infinite' }}
             />
 
             {/* Shield stays on top */}
             <Shield
               className="relative z-10 w-20 h-20 text-gray-800 animate-breathe transition-all duration-500 group-hover:text-gray-600"
-              style={{ animationDuration: '4s' }}
+              style={{ animationDuration: '4s', animationIterationCount: 'infinite' }}
             />
 
             {/* Hover glow effect */}
