@@ -101,7 +101,7 @@ const TailscaleAuth: React.FC = () => {
       {/* Content */}
       <div className="text-center relative z-10">
         {/* Large Shield Icon with multiple animations */}
-        <div className="flex justify-center mb-8 animate-fade-in-up">
+        <div className="flex justify-center mb-6 animate-fade-in-up">
           <div className="relative group">
             {/* Multiple subtle loading rings - behind the shield */}
             <div className="absolute inset-0 rounded-full border border-gray-300/50 animate-spin-slow z-0" />
