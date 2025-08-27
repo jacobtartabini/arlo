@@ -56,20 +56,23 @@ const TailscaleAuth: React.FC = () => {
         await new Promise(resolve => setTimeout(resolve, 2000));
 
         // Use the auth context to verify access
-        await verifyTailscaleAccess();
+        const result = await verifyTailscaleAccess();
 
-        // Show success message briefly
-        setShowMessages(false);
-        setCurrentMessageIndex(0);
-        
-        // Brief success animation
-        setTimeout(() => {
-          setIsVerifying(false);
-          // Redirect to dashboard after success animation
-          setTimeout(() => navigate('/dashboard'), 1000);
-        }, 500);
+        // Check for "Tailscale access verified" message in response
+        if (result.message && result.message.includes("Tailscale access verified")) {
+          setShowMessages(false);
+          setCurrentMessageIndex(0);
+          
+          // Brief success animation
+          setTimeout(() => {
+            setIsVerifying(false);
+            // Redirect to dashboard after success animation
+            setTimeout(() => navigate('/dashboard'), 1000);
+          }, 500);
+        } else {
+          throw new Error("Access denied by Tailscale verification");
+        }
       } catch (error) {
-        // Network not accessible or timeout
         console.log('Tailscale network verification failed:', error);
         setIsVerifying(false);
         setNetworkDenied(true);
@@ -103,7 +106,6 @@ const TailscaleAuth: React.FC = () => {
         {/* Large Shield Icon with multiple animations */}
         <div className="flex justify-center mb-8 animate-fade-in-up">
           <div className="relative group w-36 h-36 flex items-center justify-center">
-            {/* Multiple subtle loading rings - behind the shield */}
             <div
               className="absolute inset-1 rounded-full border border-gray-300/50 animate-spin-slow z-0"
               style={{ animationDuration: '4s', animationIterationCount: 'infinite' }}
@@ -116,14 +118,10 @@ const TailscaleAuth: React.FC = () => {
               className="absolute inset-7 rounded-full border border-gray-500/20 animate-ping z-0"
               style={{ animationDuration: '4s', animationIterationCount: 'infinite' }}
             />
-
-            {/* Shield stays on top */}
             <Shield
               className="relative z-10 w-20 h-20 text-gray-800 animate-breathe transition-all duration-500 group-hover:text-gray-600"
               style={{ animationDuration: '4s', animationIterationCount: 'infinite' }}
             />
-
-            {/* Hover glow effect */}
             <div className="absolute inset-0 rounded-full bg-gray-800/5 scale-150 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl z-0" />
           </div>
         </div>
