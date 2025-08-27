@@ -125,7 +125,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Verify Tailscale access
   const verifyTailscaleAccess = async (): Promise<void> => {
     try {
-      const response = await fetch('/api/verify', {
+      const response = await fetch('https://jacobs-macbook-pro.tailf531bd.ts.net/api/verify', {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
