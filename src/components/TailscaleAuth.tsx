@@ -55,23 +55,17 @@ const TailscaleAuth: React.FC = () => {
         // Wait a moment for better UX
         await new Promise(resolve => setTimeout(resolve, 2000));
 
-        // Use the auth context to verify access
-        const result = await verifyTailscaleAccess();
+        // Use the auth context to verify access (throws if access denied)
+        await verifyTailscaleAccess();
 
-        // Check for "Tailscale access verified" message in response
-        if (result.message && result.message.includes("Tailscale access verified")) {
-          setShowMessages(false);
-          setCurrentMessageIndex(0);
-          
-          // Brief success animation
-          setTimeout(() => {
-            setIsVerifying(false);
-            // Redirect to dashboard after success animation
-            setTimeout(() => navigate('/dashboard'), 1000);
-          }, 500);
-        } else {
-          throw new Error("Access denied by Tailscale verification");
-        }
+        // Access verified, proceed with success animation
+        setShowMessages(false);
+        setCurrentMessageIndex(0);
+
+        setTimeout(() => {
+          setIsVerifying(false);
+          setTimeout(() => navigate('/dashboard'), 1000);
+        }, 500);
       } catch (error) {
         console.log('Tailscale network verification failed:', error);
         setIsVerifying(false);
