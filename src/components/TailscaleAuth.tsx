@@ -109,7 +109,7 @@ const TailscaleAuth: React.FC = () => {
             <div className="absolute inset-4 rounded-full border border-gray-500/20 animate-ping z-0" style={{ animationDuration: '3s' }} />
 
             {/* Shield stays on top */}
-            <Shield className="relative z-10 w-24 h-24 text-gray-800 animate-breathe transition-all duration-500 group-hover:text-gray-600" />
+            <Shield className="relative z-10 w-16 h-16 text-gray-800 animate-breathe transition-all duration-500 group-hover:text-gray-600" />
 
             {/* Hover glow effect */}
             <div className="absolute inset-0 rounded-full bg-gray-800/5 scale-150 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl z-0" />
