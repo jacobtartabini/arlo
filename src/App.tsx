@@ -15,6 +15,9 @@ import { ArloProvider } from "./providers/ArloProvider";
 import ConditionalNavBar from "./components/ConditionalNavBar";
 import Chat from "./pages/Chat";
 import CalendarPage from "./pages/Calendar";
+import Habits from "./pages/modules/Habits";
+import Budget from "./pages/modules/Budget";
+import Nutrition from "./pages/modules/Nutrition";
 
 const queryClient = new QueryClient();
 
@@ -56,6 +59,23 @@ const App = () => (
                 <Route path="/settings" element={
                   <ProtectedRoute>
                     <Settings />
+                  </ProtectedRoute>
+                } />
+
+                {/* Module routes */}
+                <Route path="/habits" element={
+                  <ProtectedRoute>
+                    <Habits />
+                  </ProtectedRoute>
+                } />
+                <Route path="/budget" element={
+                  <ProtectedRoute>
+                    <Budget />
+                  </ProtectedRoute>
+                } />
+                <Route path="/nutrition" element={
+                  <ProtectedRoute>
+                    <Nutrition />
                   </ProtectedRoute>
                 } />
 

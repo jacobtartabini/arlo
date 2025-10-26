@@ -206,6 +206,11 @@ All colors MUST be HSL.
       radial-gradient(circle at 1px 1px, hsl(var(--primary) / 0.1) 1px, transparent 0);
     background-size: 40px 40px;
   }
+
+  /* Smooth scrolling for infinite canvas */
+  .infinite-canvas {
+    scroll-behavior: smooth;
+  }
 }
 
 @layer base {
