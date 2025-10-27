@@ -38,7 +38,7 @@ export function FloatingChatBar() {
           scale: isFocused ? 1.02 : 1,
         }}
         transition={{ type: "spring", stiffness: 350, damping: 30 }}
-        className="glass-intense rounded-full shadow-2xl backdrop-blur-xl"
+        className="glass-chat rounded-full shadow-2xl backdrop-blur-2xl"
       >
         <form onSubmit={handleSubmit} className="flex items-center gap-2 px-4 py-2.5">
           <Input
