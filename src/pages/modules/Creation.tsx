@@ -8,8 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowLeft,
   PenTool,
-  Cube,
-  Printer3d,
+  Boxes,
+  Printer,
   CircuitBoard,
   FileText,
   ImagePlus,
@@ -92,7 +92,7 @@ export default function Creation() {
               <Card className="glass-intense p-6 space-y-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <Cube className="w-5 h-5 text-accent" />
+                    <Boxes className="w-5 h-5 text-accent" />
                     <div>
                       <h2 className="text-xl font-semibold text-foreground">CAD / 3D Design</h2>
                       <p className="text-xs text-muted-foreground">View models and generate new iterations.</p>
@@ -104,7 +104,7 @@ export default function Creation() {
                 </div>
                 <div className="rounded-xl border border-border/40 bg-gradient-to-br from-accent/10 via-transparent to-accent/5 h-48 relative overflow-hidden">
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <Cube className="w-16 h-16 text-accent/40" />
+                    <Boxes className="w-16 h-16 text-accent/40" />
                   </div>
                   <div className="absolute bottom-4 left-4 text-xs text-muted-foreground bg-background/80 backdrop-blur rounded-full px-3 py-1">
                     Orbit with trackpad to inspect model
@@ -130,7 +130,7 @@ export default function Creation() {
               <Card className="glass p-6 space-y-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <Printer3d className="w-5 h-5 text-accent" />
+                    <Printer className="w-5 h-5 text-accent" />
                     <div>
                       <h2 className="text-xl font-semibold text-foreground">3D Scanning & Printing</h2>
                       <p className="text-xs text-muted-foreground">Queue management and recent output.</p>
