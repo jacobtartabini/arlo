@@ -8,105 +8,139 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* Arlo Light Theme - Clean light background */
-    --background: 0 0% 100%;
-    --foreground: 222 84% 5%;
+    /* Arlo Light Theme - Refined neutral palette */
+    --background: 220 15% 98%;
+    --foreground: 220 15% 10%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222 84% 5%;
+    --card-foreground: 220 15% 10%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222 84% 5%;
+    --popover-foreground: 220 15% 10%;
 
-    /* Primary blue - soft yet vivid #4A90E2 */
-    --primary: 214 75% 58%;
+    /* Primary - refined soft blue */
+    --primary: 220 60% 50%;
     --primary-foreground: 0 0% 100%;
-    --primary-glow: 214 95% 75%;
+    --primary-glow: 220 80% 60%;
 
-    --secondary: 214 20% 95%;
-    --secondary-foreground: 222 84% 5%;
+    --secondary: 220 15% 96%;
+    --secondary-foreground: 220 15% 15%;
 
-    --muted: 214 20% 95%;
-    --muted-foreground: 215 16% 47%;
+    --muted: 220 15% 95%;
+    --muted-foreground: 220 10% 45%;
 
-    --accent: 214 75% 58%;
+    --accent: 220 60% 50%;
     --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 84% 60%;
+    --destructive: 0 70% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 214 75% 58%;
+    --border: 220 15% 88%;
+    --input: 220 15% 88%;
+    --ring: 220 60% 50%;
 
-    /* Light mode glassmorphism */
-    --glass-bg: 0 0% 100% / 0.8;
-    --glass-border: 214 75% 58% / 0.2;
-    --glass-shadow: 214 75% 58% / 0.1;
+    /* Enhanced glassmorphism */
+    --glass-bg: 0 0% 100% / 0.7;
+    --glass-border: 220 15% 88% / 0.5;
+    --glass-shadow: 220 60% 50% / 0.05;
 
-    /* AI Core colors for light mode */
-    --ai-core-primary: 214 75% 58%;
-    --ai-core-secondary: 214 95% 75%;
-    --ai-core-glow: 214 75% 58% / 0.4;
+    /* Module accent colors - subtle and cohesive */
+    --module-accent-1: 220 60% 50%;
+    --module-accent-2: 200 55% 48%;
+    --module-accent-3: 180 50% 45%;
+
+    /* AI Core colors */
+    --ai-core-primary: 220 60% 50%;
+    --ai-core-secondary: 220 80% 60%;
+    --ai-core-glow: 220 60% 50% / 0.3;
 
     --radius: 1rem;
   }
 
   .dark {
-    /* Arlo Dark Theme - Enhanced #0D1117 background */
-    --background: 220 13% 9%;
+    /* Arlo Dark Theme - Refined deep background */
+    --background: 220 20% 8%;
     --foreground: 0 0% 98%;
 
-    --card: 240 13% 12%;
+    --card: 220 18% 11%;
     --card-foreground: 0 0% 98%;
 
-    --popover: 240 13% 12%;
+    --popover: 220 18% 11%;
     --popover-foreground: 0 0% 98%;
 
-    --primary: 214 75% 58%;
+    --primary: 220 60% 55%;
     --primary-foreground: 0 0% 100%;
-    --primary-glow: 214 95% 75%;
+    --primary-glow: 220 80% 65%;
 
-    --secondary: 240 13% 18%;
+    --secondary: 220 18% 16%;
     --secondary-foreground: 0 0% 98%;
 
-    --muted: 240 13% 18%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 220 18% 16%;
+    --muted-foreground: 220 15% 60%;
 
-    --accent: 214 75% 58%;
+    --accent: 220 60% 55%;
     --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 63% 31%;
+    --destructive: 0 63% 35%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 240 13% 18%;
-    --input: 240 13% 18%;
-    --ring: 214 75% 58%;
+    --border: 220 18% 20%;
+    --input: 220 18% 20%;
+    --ring: 220 60% 55%;
 
-    /* Dark mode glassmorphism */
-    --glass-bg: 240 13% 12% / 0.8;
-    --glass-border: 214 75% 58% / 0.3;
-    --glass-shadow: 214 75% 58% / 0.2;
+    /* Enhanced dark mode glassmorphism */
+    --glass-bg: 220 18% 11% / 0.6;
+    --glass-border: 220 60% 55% / 0.2;
+    --glass-shadow: 220 60% 55% / 0.15;
+
+    /* Module accent colors - dark mode */
+    --module-accent-1: 220 60% 55%;
+    --module-accent-2: 200 55% 52%;
+    --module-accent-3: 180 50% 48%;
 
     /* AI Core colors for dark mode */
-    --ai-core-primary: 214 75% 58%;
-    --ai-core-secondary: 214 95% 75%;
-    --ai-core-glow: 214 75% 58% / 0.6;
+    --ai-core-primary: 220 60% 55%;
+    --ai-core-secondary: 220 80% 65%;
+    --ai-core-glow: 220 60% 55% / 0.4;
   }
 
-  /* Glassmorphism utility classes */
+  /* Enhanced Glassmorphism utility classes */
   .glass {
     background: hsl(var(--glass-bg));
-    backdrop-filter: blur(20px);
+    backdrop-filter: blur(24px) saturate(180%);
     border: 1px solid hsl(var(--glass-border));
-    box-shadow: 0 8px 32px hsl(var(--glass-shadow));
+    box-shadow: 
+      0 8px 32px hsl(var(--glass-shadow)),
+      inset 0 1px 0 hsl(0 0% 100% / 0.1);
   }
 
   .glass-intense {
     background: hsl(var(--glass-bg));
-    backdrop-filter: blur(40px);
+    backdrop-filter: blur(40px) saturate(180%);
     border: 1px solid hsl(var(--glass-border));
-    box-shadow: 0 12px 40px hsl(var(--glass-shadow));
+    box-shadow: 
+      0 12px 48px hsl(var(--glass-shadow)),
+      inset 0 1px 0 hsl(0 0% 100% / 0.15);
+  }
+
+  .glass-module {
+    background: hsl(var(--card) / 0.6);
+    backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid hsl(var(--border) / 0.5);
+    box-shadow: 
+      0 4px 24px hsl(var(--foreground) / 0.03),
+      inset 0 1px 0 hsl(0 0% 100% / 0.1);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .glass-module:hover {
+    background: hsl(var(--card) / 0.8);
+    border-color: hsl(var(--primary) / 0.3);
+    box-shadow: 
+      0 8px 40px hsl(var(--foreground) / 0.06),
+      0 0 0 1px hsl(var(--primary) / 0.1),
+      inset 0 1px 0 hsl(0 0% 100% / 0.15);
+    transform: translateY(-2px);
   }
 
   /* AI Core animations */
@@ -200,11 +234,51 @@ All colors MUST be HSL.
     animation: shake 0.5s ease-in-out;
   }
 
-  /* Spatial grid */
+  /* Animated spatial grid with micro-parallax */
   .spatial-grid {
+    position: relative;
+    background: hsl(var(--background));
+  }
+
+  .spatial-grid::before {
+    content: '';
+    position: absolute;
+    inset: 0;
     background-image: 
-      radial-gradient(circle at 1px 1px, hsl(var(--primary) / 0.1) 1px, transparent 0);
-    background-size: 40px 40px;
+      radial-gradient(circle at center, hsl(var(--foreground) / 0.03) 1px, transparent 1px);
+    background-size: 32px 32px;
+    animation: grid-drift 60s linear infinite;
+    pointer-events: none;
+  }
+
+  .spatial-grid::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+      ellipse at center,
+      hsl(var(--primary) / 0.02) 0%,
+      transparent 70%
+    );
+    pointer-events: none;
+  }
+
+  @keyframes grid-drift {
+    0% {
+      background-position: 0 0;
+    }
+    100% {
+      background-position: 32px 32px;
+    }
+  }
+
+  /* Module hover lift effect */
+  .module-hover-lift {
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .module-hover-lift:hover {
+    transform: translateY(-4px) scale(1.01);
   }
 
   /* Smooth scrolling for infinite canvas */

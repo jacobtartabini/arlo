@@ -31,7 +31,7 @@ const modules: Module[] = [
     title: "Habits",
     icon: Heart,
     route: "/habits",
-    color: "from-pink-500 to-rose-500",
+    color: "primary",
     size: "medium",
     summary: "5 active habits • 3 day streak"
   },
@@ -40,7 +40,7 @@ const modules: Module[] = [
     title: "Budget",
     icon: DollarSign,
     route: "/budget",
-    color: "from-green-500 to-emerald-500",
+    color: "accent",
     size: "large",
     summary: "$2,340 remaining this month"
   },
@@ -49,7 +49,7 @@ const modules: Module[] = [
     title: "Nutrition",
     icon: Apple,
     route: "/nutrition",
-    color: "from-orange-500 to-amber-500",
+    color: "primary",
     size: "medium",
     summary: "1,800 / 2,200 calories today"
   },
@@ -58,7 +58,7 @@ const modules: Module[] = [
     title: "Automation",
     icon: Zap,
     route: "/automation",
-    color: "from-yellow-500 to-orange-500",
+    color: "accent",
     size: "small",
     summary: "12 active automations"
   },
@@ -67,7 +67,7 @@ const modules: Module[] = [
     title: "Goals",
     icon: Target,
     route: "/goals",
-    color: "from-blue-500 to-cyan-500",
+    color: "primary",
     size: "medium",
     summary: "3 goals in progress"
   },
@@ -76,7 +76,7 @@ const modules: Module[] = [
     title: "Analytics",
     icon: TrendingUp,
     route: "/analytics",
-    color: "from-purple-500 to-pink-500",
+    color: "accent",
     size: "large",
     summary: "View your insights"
   },
@@ -85,7 +85,7 @@ const modules: Module[] = [
     title: "Calendar",
     icon: Calendar,
     route: "/calendar",
-    color: "from-indigo-500 to-purple-500",
+    color: "primary",
     size: "small",
     summary: "3 events today"
   },
@@ -94,7 +94,7 @@ const modules: Module[] = [
     title: "Journal",
     icon: BookOpen,
     route: "/journal",
-    color: "from-teal-500 to-green-500",
+    color: "accent",
     size: "medium",
     summary: "Write your thoughts"
   },
@@ -103,7 +103,7 @@ const modules: Module[] = [
     title: "Wellness",
     icon: Activity,
     route: "/wellness",
-    color: "from-red-500 to-pink-500",
+    color: "primary",
     size: "small",
     summary: "Heart rate: 72 bpm"
   },
@@ -112,7 +112,7 @@ const modules: Module[] = [
     title: "Focus",
     icon: Brain,
     route: "/focus",
-    color: "from-violet-500 to-purple-500",
+    color: "accent",
     size: "medium",
     summary: "Deep work mode"
   }
@@ -122,6 +122,7 @@ export function BentoGrid() {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [scale, setScale] = useState(1);
+  const [parallaxOffset, setParallaxOffset] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
@@ -146,9 +147,14 @@ export function BentoGrid() {
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (isDragging) {
-      setPosition({
-        x: position.x + e.movementX,
-        y: position.y + e.movementY
+      const newX = position.x + e.movementX;
+      const newY = position.y + e.movementY;
+      setPosition({ x: newX, y: newY });
+      
+      // Micro-parallax effect
+      setParallaxOffset({
+        x: newX * 0.02,
+        y: newY * 0.02
       });
     }
   };
@@ -168,22 +174,42 @@ export function BentoGrid() {
       onMouseLeave={handleMouseUp}
       style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
     >
+      {/* Parallax background layer */}
       <motion.div
         animate={{
-          x: position.x,
-          y: position.y,
-          scale: scale
+          x: parallaxOffset.x,
+          y: parallaxOffset.y
         }}
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-      >
-        <div className="grid grid-cols-4 gap-4 p-8">
+        transition={{ type: "spring", stiffness: 100, damping: 20 }}
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: `radial-gradient(circle at ${50 + parallaxOffset.x * 0.1}% ${50 + parallaxOffset.y * 0.1}%, hsl(var(--primary) / 0.03) 0%, transparent 50%)`
+        }}
+      />
+
+      {/* Main grid - centered */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <motion.div
+          animate={{
+            x: position.x,
+            y: position.y,
+            scale: scale
+          }}
+          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          className="grid grid-cols-4 gap-6 p-8"
+          style={{ width: 'fit-content' }}
+        >
           {modules.map((module, index) => (
             <motion.div
               key={module.id}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: index * 0.05 }}
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ 
+                delay: index * 0.05,
+                type: "spring",
+                stiffness: 200,
+                damping: 20
+              }}
               className={`
                 ${module.size === "small" ? "col-span-1 row-span-1" : ""}
                 ${module.size === "medium" ? "col-span-2 row-span-1" : ""}
@@ -193,13 +219,18 @@ export function BentoGrid() {
               <ModuleTile module={module} onClick={() => handleModuleClick(module)} />
             </motion.div>
           ))}
-        </div>
-      </motion.div>
+        </motion.div>
+      </div>
 
       {/* Zoom indicator */}
-      <div className="fixed bottom-24 right-6 glass rounded-lg px-4 py-2 text-sm text-muted-foreground">
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5 }}
+        className="fixed bottom-24 right-6 glass rounded-lg px-3 py-2 text-xs text-muted-foreground font-medium"
+      >
         {Math.round(scale * 100)}%
-      </div>
+      </motion.div>
     </div>
   );
 }
