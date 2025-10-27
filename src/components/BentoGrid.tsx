@@ -3,6 +3,7 @@ import {
   useRef,
   useEffect,
   useCallback,
+  useMemo,
   type PointerEvent as ReactPointerEvent,
   type WheelEvent as ReactWheelEvent
 } from "react";
@@ -130,6 +131,50 @@ const modules: Module[] = [
   }
 ];
 
+const moduleMap = modules.reduce<Record<string, Module>>((acc, module) => {
+  acc[module.id] = module;
+  return acc;
+}, {});
+
+const moduleOrderPresets: Record<number, string[]> = {
+  3: [
+    "budget",
+    "habits",
+    "analytics",
+    "nutrition",
+    "goals",
+    "journal",
+    "automation",
+    "calendar",
+    "focus",
+    "wellness"
+  ],
+  4: [
+    "budget",
+    "habits",
+    "analytics",
+    "goals",
+    "nutrition",
+    "automation",
+    "journal",
+    "calendar",
+    "focus",
+    "wellness"
+  ],
+  5: [
+    "budget",
+    "habits",
+    "analytics",
+    "nutrition",
+    "goals",
+    "automation",
+    "journal",
+    "calendar",
+    "focus",
+    "wellness"
+  ]
+};
+
 interface BentoGridProps {
   onScaleChange?: (value: number) => void;
   scale?: number;
@@ -142,20 +187,43 @@ type LayoutConfig = {
   baseTile: number;
 };
 
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(Math.max(value, min), max);
+
 const getLayoutConfig = (width: number): LayoutConfig => {
   if (width >= 1600) {
-    return { columns: 5, gap: 36, padding: 56, baseTile: 300 };
+    const gap = clamp(width * 0.02, 32, 48);
+    const padding = clamp(width * 0.04, 56, 120);
+    const rawTile = (width - padding * 2 - gap * 4) / 5;
+    const baseTile = clamp(rawTile, 280, 360);
+    return { columns: 5, gap, padding, baseTile };
   }
   if (width >= 1280) {
-    return { columns: 4, gap: 32, padding: 48, baseTile: 280 };
+    const gap = clamp(width * 0.018, 28, 40);
+    const padding = clamp(width * 0.035, 48, 96);
+    const rawTile = (width - padding * 2 - gap * 3) / 4;
+    const baseTile = clamp(rawTile, 260, 340);
+    return { columns: 4, gap, padding, baseTile };
   }
   if (width >= 1024) {
-    return { columns: 3, gap: 28, padding: 40, baseTile: 260 };
+    const gap = clamp(width * 0.018, 24, 32);
+    const padding = clamp(width * 0.032, 40, 80);
+    const rawTile = (width - padding * 2 - gap * 2) / 3;
+    const baseTile = clamp(rawTile, 240, 320);
+    return { columns: 3, gap, padding, baseTile };
   }
   if (width >= 768) {
-    return { columns: 2, gap: 24, padding: 32, baseTile: 240 };
+    const gap = clamp(width * 0.022, 20, 28);
+    const padding = clamp(width * 0.04, 32, 64);
+    const rawTile = (width - padding * 2 - gap) / 2;
+    const baseTile = clamp(rawTile, 220, 320);
+    return { columns: 2, gap, padding, baseTile };
   }
-  return { columns: 1, gap: 20, padding: 24, baseTile: 220 };
+  const gap = clamp(width * 0.04, 12, 20);
+  const padding = clamp(width * 0.06, 16, 32);
+  const rawTile = width - padding * 2;
+  const baseTile = clamp(rawTile, 200, 260);
+  return { columns: 1, gap, padding, baseTile };
 };
 
 type ModuleSpan = {
@@ -180,11 +248,22 @@ const getModuleSpan = (size: Module["size"], columns: number): ModuleSpan => {
         return { colSpan: 2, rowSpan: 1 };
       }
       return { colSpan: 1, rowSpan: 1 };
+    case 4:
+      if (size === "large") {
+        return { colSpan: 3, rowSpan: 2 };
+      }
+      if (size === "medium") {
+        return { colSpan: 2, rowSpan: 1 };
+      }
+      return { colSpan: 1, rowSpan: 1 };
     default:
-      return {
-        colSpan: size === "small" ? 1 : 2,
-        rowSpan: size === "large" ? 2 : 1
-      };
+      if (size === "large") {
+        return { colSpan: 3, rowSpan: 2 };
+      }
+      if (size === "medium") {
+        return { colSpan: 2, rowSpan: 1 };
+      }
+      return { colSpan: 1, rowSpan: 1 };
   }
 };
 
@@ -210,7 +289,7 @@ export function BentoGrid({ onScaleChange, scale: controlledScale }: BentoGridPr
   );
 
   const isControlled = controlledScale !== undefined;
-  const scale = isControlled ? controlledScale : internalScale;
+  const userScale = isControlled ? controlledScale : internalScale;
 
   const setScaleValue = useCallback(
     (next: number) => {
@@ -290,7 +369,7 @@ export function BentoGrid({ onScaleChange, scale: controlledScale }: BentoGridPr
     setPosition({ x: 0, y: 0 });
     positionRef.current = { x: 0, y: 0 };
     setParallaxOffset({ x: 0, y: 0 });
-  }, [layoutConfig.columns]);
+  }, [layoutConfig.baseTile, layoutConfig.columns, layoutConfig.gap, layoutConfig.padding]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -299,7 +378,7 @@ export function BentoGrid({ onScaleChange, scale: controlledScale }: BentoGridPr
     const handleGestureStart = (event: Event) => {
       const gestureEvent = event as GestureEventType;
       gestureEvent.preventDefault();
-      pinchStartScale.current = scale;
+      pinchStartScale.current = userScale;
       isPinchingRef.current = true;
     };
 
@@ -328,11 +407,45 @@ export function BentoGrid({ onScaleChange, scale: controlledScale }: BentoGridPr
       container.removeEventListener("gesturechange", handleGestureChange as EventListener, options);
       container.removeEventListener("gestureend", handleGestureEnd as EventListener, options);
     };
-  }, [scale, setScaleValue]);
+  }, [userScale, setScaleValue]);
 
   const handleModuleClick = (module: Module) => {
     navigate(module.route);
   };
+
+  const columns = layoutConfig.columns;
+
+  const orderedModules = useMemo(() => {
+    const preset = moduleOrderPresets[columns];
+    if (!preset) {
+      return modules;
+    }
+
+    const seen = new Set<string>();
+    const arranged: Module[] = [];
+
+    for (const id of preset) {
+      const module = moduleMap[id];
+      if (module && !seen.has(id)) {
+        arranged.push(module);
+        seen.add(id);
+      }
+    }
+
+    for (const module of modules) {
+      if (!seen.has(module.id)) {
+        arranged.push(module);
+      }
+    }
+
+    return arranged;
+  }, [columns]);
+
+  const { baseTile, gap, padding } = layoutConfig;
+
+  const gridWidth = useMemo(() => {
+    return columns * baseTile + gap * (columns - 1) + padding * 2;
+  }, [baseTile, columns, gap, padding]);
 
   const applyMomentum = useCallback(() => {
     const friction = 0.95;
@@ -376,7 +489,7 @@ export function BentoGrid({ onScaleChange, scale: controlledScale }: BentoGridPr
       e.preventDefault();
       const zoomIntensity = e.deltaMode === 0 ? 0.002 : 0.001;
       const delta = e.deltaY * -zoomIntensity;
-      const newScale = scale + delta;
+      const newScale = userScale + delta;
       setScaleValue(newScale);
       return;
     }
@@ -423,7 +536,7 @@ export function BentoGrid({ onScaleChange, scale: controlledScale }: BentoGridPr
       const points = Array.from(activePointers.current.values());
       const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
       pinchStartDistance.current = distance;
-      pinchStartScale.current = scale;
+      pinchStartScale.current = userScale;
       isPinchingRef.current = true;
       setIsDragging(false);
     }
@@ -548,24 +661,29 @@ export function BentoGrid({ onScaleChange, scale: controlledScale }: BentoGridPr
       />
 
       {/* Main grid - centered */}
-      <div className="absolute inset-0 flex items-center justify-center">
+      <div className="absolute inset-0 flex items-start justify-center">
         <motion.div
           animate={{
             x: position.x,
             y: position.y,
-            scale: scale
+            scale: userScale
           }}
           transition={{ type: "spring", stiffness: 300, damping: 30 }}
           className="grid"
           style={{
-            width: "fit-content",
-            gridTemplateColumns: `repeat(${layoutConfig.columns}, minmax(${layoutConfig.baseTile}px, 1fr))`,
+            width: "100%",
+            maxWidth: `${gridWidth}px`,
+            gridTemplateColumns: `repeat(${layoutConfig.columns}, minmax(${Math.round(
+              layoutConfig.baseTile * 0.9
+            )}px, 1fr))`,
             gap: layoutConfig.gap,
             padding: layoutConfig.padding,
-            gridAutoRows: layoutConfig.baseTile
+            gridAutoRows: layoutConfig.baseTile,
+            gridAutoFlow: "dense",
+            boxSizing: "border-box"
           }}
         >
-          {modules.map((module, index) => {
+          {orderedModules.map((module, index) => {
             const span = getModuleSpan(module.size, layoutConfig.columns);
             return (
               <motion.div
@@ -581,8 +699,12 @@ export function BentoGrid({ onScaleChange, scale: controlledScale }: BentoGridPr
                 style={{
                   gridColumn: `span ${span.colSpan} / span ${span.colSpan}`,
                   gridRow: `span ${span.rowSpan} / span ${span.rowSpan}`,
-                  minWidth: layoutConfig.baseTile * Math.min(span.colSpan, layoutConfig.columns),
-                  minHeight: layoutConfig.baseTile * span.rowSpan
+                  minWidth:
+                    layoutConfig.baseTile * Math.min(span.colSpan, layoutConfig.columns),
+                  minHeight: layoutConfig.baseTile * span.rowSpan,
+                  width: "100%",
+                  height: "100%",
+                  maxWidth: "100%"
                 }}
               >
                 <ModuleTile module={module} onClick={() => handleModuleClick(module)} />
