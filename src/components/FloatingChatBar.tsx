@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Mic, MicOff } from "lucide-react";
+import { ArrowUp, Mic, MicOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useArlo } from "@/providers/ArloProvider";
@@ -74,7 +74,7 @@ export function FloatingChatBar() {
               className="rounded-full bg-primary hover:bg-primary/90"
               disabled={!input.trim()}
             >
-              <Send className="w-5 h-5" />
+              <ArrowUp className="w-5 h-5" />
             </Button>
           </motion.div>
         </form>
