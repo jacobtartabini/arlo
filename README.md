@@ -1,73 +1,96 @@
-# Welcome to your Lovable project
+Here’s a **clean, genuine, and well-structured README** for your Arlo project — written in a natural voice, not overly polished or “AI-sounding,” but still professional and clear:
 
-## Project info
+---
 
-**URL**: https://lovable.dev/projects/5901d388-9aa1-46d0-a038-dc8340d632be
+# 🧠 Arlo
 
-## How can I edit this code?
+**Arlo** is a personal AI assistant built to run locally and privately — powered by Ollama and accessible securely through Tailscale. It connects natural language intelligence with real system-level tools like weather, maps, and voice input/output.
 
-There are several ways of editing your application.
+It’s designed to be modular, secure, and genuinely useful — not just another chatbot.
 
-**Use Lovable**
+---
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/5901d388-9aa1-46d0-a038-dc8340d632be) and start prompting.
+## ✨ What Arlo Can Do
 
-Changes made via Lovable will be committed automatically to this repo.
+Arlo’s goal is to feel more like a personal operating system than a web app. Here’s what it can handle:
 
-**Use your preferred IDE**
+* **Voice input + speech output** (STT + TTS integration)
+* **Location-aware tools** like weather and maps
+* **Modular assistant core** that can connect to new tools easily
+* **Secure API access** using **Tailscale authentication**
+* **Private by design** — everything runs on your local network
+* **Expandable backend** with endpoints for chat, requests, and other functions
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+Each component is written in Python and designed to be simple to extend.
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+---
 
-Follow these steps:
+## 🧩 Project Structure (Core Files)
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+* `assistant.py` – main logic for the AI assistant
+* `server.py` – API server for local/remote connections
+* `security.py` – handles Tailscale authentication and access control
+* `stt.py` / `tts.py` – speech recognition and text-to-speech
+* `weather.py`, `arlomaps.py`, `location.py` – contextual tools
+* `web_search.py`, `google_quota.py` – external data access
+* `start-arlo.sh` – starts the full backend + Ollama
+* `serve-arlo.sh` – runs the Arlo API server
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+---
 
-# Step 3: Install the necessary dependencies.
-npm i
+## 🚀 How to Launch Arlo
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+### Option 1: Start the full Arlo environment
+
+```bash
+./start-arlo.sh
 ```
 
-**Edit a file directly in GitHub**
+This script:
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+* Starts Ollama (Llama 3 model by default)
+* Activates your Python virtual environment
+* Launches the Arlo backend on port `4000`
 
-**Use GitHub Codespaces**
+### Option 2: Run the API server manually (for Tailscale access)
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+1. Activate your virtual environment
 
-## What technologies are used for this project?
+   ```bash
+   source venv/bin/activate
+   ```
 
-This project is built with:
+2. Launch the API server
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+   ```bash
+   uvicorn api_server:app --host 0.0.0.0 --port 8000 --reload
+   ```
 
-## How can I deploy this project?
+3. Start Tailscale and open your secure tunnel
 
-Simply open [Lovable](https://lovable.dev/projects/5901d388-9aa1-46d0-a038-dc8340d632be) and click on Share -> Publish.
+   ```bash
+   sudo tailscale up
+   tailscale funnel 8000
+   ```
 
-## Can I connect a custom domain to my Lovable project?
+You can now securely access your Arlo API from anywhere on your Tailnet.
 
-Yes, you can!
+---
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## 🧭 Next Steps
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+1. Update `api_server.py` to include **port 4000** in the same Tailscale funnel as port 8000.
+2. Connect the `assistant.py` webhook to `api_server.py` for real-time chat and backend communication.
+3. Continue expanding backend tools and modules — Arlo is designed to grow with you.
+
+---
+
+## 👤 Created by
+
+**Jacob Tartabini**
+Independent developer & designer of Arlo
+Focused on building intelligent, private-first AI systems.
+
+---
+
+Would you like me to include a small section for **“Developer Setup”** (Python version, dependencies, venv creation, etc.) at the top for new environments? It would make this README ready for GitHub.
