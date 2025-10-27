@@ -15,6 +15,7 @@ import { ArloProvider } from "./providers/ArloProvider";
 import ConditionalNavBar from "./components/ConditionalNavBar";
 import Chat from "./pages/Chat";
 import CalendarPage from "./pages/Calendar";
+import PublicBookingPage from "./pages/PublicBooking";
 import Finance from "./pages/modules/Finance";
 import Productivity from "./pages/modules/Productivity";
 import Travel from "./pages/modules/Travel";
@@ -41,6 +42,8 @@ const App = () => (
               <Routes>
                 {/* Public routes */}
                 <Route path="/login" element={<TailscaleAuth />} />
+                <Route path="/book/:handle" element={<PublicBookingPage />} />
+                <Route path="/book" element={<PublicBookingPage />} />
 
                 {/* Protected routes */}
                 <Route path="/" element={
