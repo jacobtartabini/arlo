@@ -1,959 +1,1156 @@
 "use client";
 
 import * as React from "react";
-import { useState, useCallback, useMemo, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Calendar as CalendarIcon, 
-  ChevronLeft, 
-  ChevronRight, 
-  Plus, 
-  Search, 
-  Settings, 
-  Clock, 
-  Users, 
-  Briefcase, 
-  Target,
-  GripVertical,
-  X,
-  Edit3,
-  Trash2,
-  MoreHorizontal
-} from "lucide-react";
-import { 
-  format, 
-  addDays, 
-  addWeeks, 
-  addMonths, 
-  startOfWeek, 
-  startOfMonth, 
-  startOfDay,
-  endOfWeek,
-  endOfMonth,
+import {
+  addDays,
+  addMinutes,
+  addMonths,
+  addWeeks,
+  compareAsc,
   eachDayOfInterval,
-  isSameDay,
-  isToday,
+  endOfMonth,
+  endOfWeek,
+  format,
   isSameMonth,
-  parseISO
+  isToday,
+  parseISO,
+  startOfDay,
+  startOfMonth,
+  startOfWeek
 } from "date-fns";
+import {
+  BadgeCheck,
+  BookMarked,
+  Calendar as CalendarIcon,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  ExternalLink,
+  Globe,
+  Link,
+  Plus,
+  RefreshCw,
+  Settings,
+  Target,
+  Users,
+  Zap
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import {
+  BOOKING_STORAGE_KEY,
+  DEFAULT_BOOKINGS,
+  DEFAULT_EVENTS,
+  DEFAULT_PROJECTS,
+  DEFAULT_TASKS,
+  EVENT_STORAGE_KEY,
+  BookingSlot,
+  CalendarEvent,
+  Project,
+  Task,
+  getPublicBookingUrl,
+  getStoredBookings,
+  getStoredEvents,
+  setStoredBookings,
+  setStoredEvents
+} from "@/lib/calendar-data";
 
-// Types
-interface CalendarEvent {
+const WORK_START_MINUTES = 8 * 60;
+const WORK_END_MINUTES = 18 * 60;
+const DISPLAY_START_MINUTES = 6 * 60;
+const DISPLAY_END_MINUTES = 22 * 60;
+const HOUR_HEIGHT = 52;
+
+type CalendarView = "month" | "week" | "day";
+type BlockType = "event" | "task" | "booking" | "milestone";
+
+interface CalendarBlock {
   id: string;
+  source: BlockType;
   title: string;
-  description?: string;
-  startTime: string;
-  endTime: string;
+  subtitle?: string;
   date: string;
-  category: 'personal' | 'work' | 'school' | 'meeting' | 'project';
+  startMinutes: number;
+  endMinutes: number;
   color: string;
-  attendees?: string[];
+  allDay?: boolean;
+  isAvailable?: boolean;
+  meta?: Record<string, unknown>;
 }
 
-interface Task {
-  id: string;
-  title: string;
-  description?: string;
-  priority: 'low' | 'medium' | 'high';
-  category: 'personal' | 'work' | 'school';
-  dueDate?: string;
-  completed: boolean;
-  estimatedTime?: number; // in minutes
-}
+const PRIORITY_COLOR: Record<Task["priority"], string> = {
+  high: "#ef4444",
+  medium: "#f59e0b",
+  low: "#10b981"
+};
 
-interface Project {
-  id: string;
-  name: string;
-  description?: string;
-  startDate: string;
-  endDate: string;
-  progress: number;
-  milestones: Milestone[];
-  color: string;
-}
+const PRIORITY_LABEL: Record<Task["priority"], string> = {
+  high: "High",
+  medium: "Medium",
+  low: "Low"
+};
 
-interface Milestone {
-  id: string;
-  title: string;
-  date: string;
-  completed: boolean;
-}
-
-interface BookingSlot {
-  id: string;
-  startTime: string;
-  endTime: string;
-  date: string;
-  available: boolean;
-  title?: string;
-  bookedBy?: string;
-}
-
-type ViewMode = 'month' | 'week' | 'day';
-type PanelMode = 'calendar' | 'tasks' | 'projects' | 'bookings';
-
-// Sample data
-const sampleEvents: CalendarEvent[] = [
+const calendarConnections = [
   {
-    id: '1',
-    title: 'Team Standup',
-    description: 'Daily team sync meeting',
-    startTime: '09:00',
-    endTime: '09:30',
-    date: '2024-01-15',
-    category: 'work',
-    color: '#3B82F6',
-    attendees: ['john@example.com', 'jane@example.com']
+    id: "google",
+    name: "Google Calendar",
+    description: "Two-way sync for events, tasks and meeting links",
+    icon: CalendarIcon
   },
   {
-    id: '2',
-    title: 'Project Review',
-    description: 'Quarterly project review with stakeholders',
-    startTime: '14:00',
-    endTime: '15:30',
-    date: '2024-01-15',
-    category: 'work',
-    color: '#8B5CF6',
-    attendees: ['manager@example.com']
+    id: "apple",
+    name: "Apple Calendar",
+    description: "Sync primary and delegated calendars from iCloud",
+    icon: CalendarIcon
   },
   {
-    id: '3',
-    title: 'Gym Session',
-    startTime: '18:00',
-    endTime: '19:30',
-    date: '2024-01-16',
-    category: 'personal',
-    color: '#10B981'
+    id: "outlook",
+    name: "Outlook",
+    description: "Sync work calendars, Teams meetings and bookings",
+    icon: CalendarIcon
   }
-];
+] as const;
 
-const sampleTasks: Task[] = [
-  {
-    id: '1',
-    title: 'Complete project proposal',
-    description: 'Draft and finalize the Q1 project proposal',
-    priority: 'high',
-    category: 'work',
-    dueDate: '2024-01-20',
-    completed: false,
-    estimatedTime: 120
-  },
-  {
-    id: '2',
-    title: 'Review design mockups',
-    priority: 'medium',
-    category: 'work',
-    dueDate: '2024-01-18',
-    completed: false,
-    estimatedTime: 60
-  },
-  {
-    id: '3',
-    title: 'Buy groceries',
-    priority: 'low',
-    category: 'personal',
-    completed: false,
-    estimatedTime: 30
-  }
-];
+const priorityOrder: Record<Task["priority"], number> = {
+  high: 3,
+  medium: 2,
+  low: 1
+};
 
-const sampleProjects: Project[] = [
-  {
-    id: '1',
-    name: 'Website Redesign',
-    description: 'Complete overhaul of company website',
-    startDate: '2024-01-01',
-    endDate: '2024-03-31',
-    progress: 35,
-    color: '#F59E0B',
-    milestones: [
-      { id: '1', title: 'Design Phase Complete', date: '2024-01-31', completed: true },
-      { id: '2', title: 'Development Phase', date: '2024-02-28', completed: false },
-      { id: '3', title: 'Testing & Launch', date: '2024-03-31', completed: false }
-    ]
-  }
-];
-
-const sampleBookings: BookingSlot[] = [
-  {
-    id: '1',
-    startTime: '10:00',
-    endTime: '11:00',
-    date: '2024-01-17',
-    available: true
-  },
-  {
-    id: '2',
-    startTime: '11:00',
-    endTime: '12:00',
-    date: '2024-01-17',
-    available: false,
-    title: 'Client Meeting',
-    bookedBy: 'client@example.com'
-  }
-];
-
-// Event Form Component
-interface EventFormProps {
-  event?: CalendarEvent;
-  selectedDate?: string;
-  selectedTime?: string;
-  onSave: (event: Omit<CalendarEvent, 'id'>) => void;
-  onCancel: () => void;
+function timeToMinutes(time: string) {
+  const [hour, minute] = time.split(":").map(Number);
+  return hour * 60 + minute;
 }
 
-function EventForm({ event, selectedDate, selectedTime, onSave, onCancel }: EventFormProps) {
-  const [formData, setFormData] = useState({
-    title: event?.title || '',
-    description: event?.description || '',
-    date: event?.date || selectedDate || format(new Date(), 'yyyy-MM-dd'),
-    startTime: event?.startTime || selectedTime || '09:00',
-    endTime: event?.endTime || '10:00',
-    category: event?.category || 'work' as const,
-    color: event?.color || '#3B82F6'
+function minutesToTime(minutes: number) {
+  const hrs = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+}
+
+function clampToDayRange(start: number, end: number) {
+  return {
+    start: Math.max(0, Math.min(start, 24 * 60)),
+    end: Math.max(0, Math.min(end, 24 * 60))
+  };
+}
+
+interface Interval {
+  start: number;
+  end: number;
+}
+
+function mergeBusyIntervals(intervals: Interval[]): Interval[] {
+  if (!intervals.length) return [];
+  const sorted = [...intervals].sort((a, b) => a.start - b.start);
+  const merged: Interval[] = [];
+
+  for (const current of sorted) {
+    if (!merged.length) {
+      merged.push({ ...current });
+      continue;
+    }
+
+    const last = merged[merged.length - 1];
+    if (current.start <= last.end) {
+      last.end = Math.max(last.end, current.end);
+    } else {
+      merged.push({ ...current });
+    }
+  }
+
+  return merged;
+}
+
+function computeFreeIntervals(intervals: Interval[]): Interval[] {
+  const merged = mergeBusyIntervals(
+    intervals
+      .map(interval => ({
+        start: Math.max(interval.start, WORK_START_MINUTES),
+        end: Math.min(interval.end, WORK_END_MINUTES)
+      }))
+      .filter(interval => interval.end > interval.start)
+  );
+
+  const free: Interval[] = [];
+  let cursor = WORK_START_MINUTES;
+
+  for (const interval of merged) {
+    if (interval.start > cursor) {
+      free.push({ start: cursor, end: interval.start });
+    }
+    cursor = Math.max(cursor, interval.end);
+  }
+
+  if (cursor < WORK_END_MINUTES) {
+    free.push({ start: cursor, end: WORK_END_MINUTES });
+  }
+
+  return free;
+}
+
+function priorityComparator(a: Task, b: Task) {
+  const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority];
+  if (priorityDiff !== 0) return priorityDiff;
+
+  if (a.dueDate && b.dueDate) {
+    return compareAsc(parseISO(a.dueDate), parseISO(b.dueDate));
+  }
+
+  if (a.dueDate) return -1;
+  if (b.dueDate) return 1;
+
+  return a.title.localeCompare(b.title);
+}
+
+interface GenerateScheduleArgs {
+  days: Date[];
+  tasks: Task[];
+  events: CalendarEvent[];
+  bookings: BookingSlot[];
+}
+
+function generateOptimizedSchedule({ days, tasks, events, bookings }: GenerateScheduleArgs) {
+  const queue = tasks.filter(task => !task.completed).sort(priorityComparator);
+  const scheduled: CalendarBlock[] = [];
+
+  for (const day of days) {
+    if (!queue.length) break;
+    const dateKey = format(day, "yyyy-MM-dd");
+
+    const busy: Interval[] = [];
+    events
+      .filter(event => event.date === dateKey)
+      .forEach(event => {
+        busy.push({ start: timeToMinutes(event.startTime), end: timeToMinutes(event.endTime) });
+      });
+
+    bookings
+      .filter(slot => slot.date === dateKey)
+      .forEach(slot => {
+        busy.push({ start: timeToMinutes(slot.startTime), end: timeToMinutes(slot.endTime) });
+      });
+
+    const freeIntervals = computeFreeIntervals(busy);
+
+    for (const interval of freeIntervals) {
+      let cursor = interval.start;
+
+      while (cursor < interval.end - 20 && queue.length) {
+        const available = interval.end - cursor;
+        const taskIndex = queue.findIndex(task => (task.estimatedTime ?? 60) <= available);
+        if (taskIndex === -1) break;
+
+        const [task] = queue.splice(taskIndex, 1);
+        const duration = task.estimatedTime ?? 60;
+        const end = Math.min(cursor + duration, interval.end);
+
+        scheduled.push({
+          id: `task-${task.id}-${dateKey}`,
+          source: "task",
+          title: task.title,
+          subtitle: `${PRIORITY_LABEL[task.priority]} priority • ${duration} min`,
+          date: dateKey,
+          startMinutes: cursor,
+          endMinutes: end,
+          color: PRIORITY_COLOR[task.priority],
+          meta: {
+            taskId: task.id,
+            dueDate: task.dueDate
+          }
+        });
+
+        cursor = end + 10;
+      }
+    }
+  }
+
+  return {
+    scheduled,
+    remaining: queue
+  };
+}
+
+interface EventComposerProps {
+  open: boolean;
+  onOpenChange: (value: boolean) => void;
+  draft?: {
+    date: string;
+    startTime: string;
+    endTime: string;
+  };
+  event?: CalendarEvent | null;
+  onSubmit: (event: Omit<CalendarEvent, "id"> & { id?: string }) => void;
+  onDelete?: (id: string) => void;
+}
+
+function EventComposer({ open, onOpenChange, draft, event, onSubmit, onDelete }: EventComposerProps) {
+  const isEditing = Boolean(event);
+  const [formData, setFormData] = React.useState({
+    title: event?.title ?? "",
+    description: event?.description ?? "",
+    date: event?.date ?? draft?.date ?? format(new Date(), "yyyy-MM-dd"),
+    startTime: event?.startTime ?? draft?.startTime ?? "09:00",
+    endTime: event?.endTime ?? draft?.endTime ?? "10:00",
+    category: event?.category ?? ("work" as const),
+    color: event?.color ?? "#3b82f6"
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSave(formData);
-  };
+  React.useEffect(() => {
+    if (!open) return;
+    setFormData({
+      title: event?.title ?? "",
+      description: event?.description ?? "",
+      date: event?.date ?? draft?.date ?? format(new Date(), "yyyy-MM-dd"),
+      startTime: event?.startTime ?? draft?.startTime ?? "09:00",
+      endTime: event?.endTime ?? draft?.endTime ?? "10:00",
+      category: event?.category ?? ("work" as const),
+      color: event?.color ?? "#3b82f6"
+    });
+  }, [open, event, draft]);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/20 backdrop-blur-sm"
-    >
-      <Card className="w-full max-w-md bg-background/90 backdrop-blur-xl border-border/20">
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-foreground">
-              {event ? 'Edit Event' : 'New Event'}
-            </h3>
-            <Button variant="ghost" size="icon" onClick={onCancel}>
-              <X className="h-4 w-4" />
-            </Button>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{isEditing ? "Edit event" : "Create event"}</DialogTitle>
+          <DialogDescription>
+            Synced instantly to every connected calendar and your booking page.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="grid gap-2">
+            <label className="text-sm font-medium text-foreground">Title</label>
+            <Input
+              value={formData.title}
+              onChange={event => setFormData(prev => ({ ...prev, title: event.target.value }))}
+              placeholder="Event name"
+            />
           </div>
-          
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="text-sm font-medium mb-1 block text-foreground">Title</label>
+          <div className="grid gap-2">
+            <label className="text-sm font-medium text-foreground">Description</label>
+            <Textarea
+              value={formData.description}
+              onChange={event => setFormData(prev => ({ ...prev, description: event.target.value }))}
+              placeholder="Agenda, links, or AI briefing notes"
+              rows={3}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium text-foreground">Date</label>
               <Input
-                value={formData.title}
-                onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                placeholder="Event title"
-                required
+                type="date"
+                value={formData.date}
+                onChange={event => setFormData(prev => ({ ...prev, date: event.target.value }))}
               />
             </div>
-            
-            <div>
-              <label className="text-sm font-medium mb-1 block text-foreground">Description</label>
-              <Textarea
-                value={formData.description}
-                onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                placeholder="Event description"
-                rows={3}
-              />
-            </div>
-            
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-sm font-medium mb-1 block text-foreground">Start Time</label>
-                <Input
-                  type="time"
-                  value={formData.startTime}
-                  onChange={(e) => setFormData(prev => ({ ...prev, startTime: e.target.value }))}
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium mb-1 block text-foreground">End Time</label>
-                <Input
-                  type="time"
-                  value={formData.endTime}
-                  onChange={(e) => setFormData(prev => ({ ...prev, endTime: e.target.value }))}
-                />
-              </div>
-            </div>
-            
-            <div>
-              <label className="text-sm font-medium mb-1 block text-foreground">Category</label>
-              <Select value={formData.category} onValueChange={(value: any) => setFormData(prev => ({ ...prev, category: value }))}>
+            <div className="grid gap-2">
+              <label className="text-sm font-medium text-foreground">Category</label>
+              <Select
+                value={formData.category}
+                onValueChange={value => setFormData(prev => ({ ...prev, category: value as CalendarEvent["category"] }))}
+              >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Select" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="work">Work</SelectItem>
-                  <SelectItem value="personal">Personal</SelectItem>
-                  <SelectItem value="school">School</SelectItem>
                   <SelectItem value="meeting">Meeting</SelectItem>
                   <SelectItem value="project">Project</SelectItem>
+                  <SelectItem value="personal">Personal</SelectItem>
+                  <SelectItem value="school">School</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            
-            <div className="flex gap-2 pt-4">
-              <Button type="submit" className="flex-1">
-                {event ? 'Update' : 'Create'} Event
-              </Button>
-              <Button type="button" variant="outline" onClick={onCancel}>
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-    </motion.div>
-  );
-}
-
-// Task Panel Component
-function TaskPanel({ tasks, onTaskUpdate }: { tasks: Task[], onTaskUpdate: (tasks: Task[]) => void }) {
-  const [draggedTask, setDraggedTask] = useState<Task | null>(null);
-
-  const handleDragStart = (task: Task) => {
-    setDraggedTask(task);
-  };
-
-  const handleDragEnd = () => {
-    setDraggedTask(null);
-  };
-
-  const toggleTask = (taskId: string) => {
-    onTaskUpdate(tasks.map(task => 
-      task.id === taskId ? { ...task, completed: !task.completed } : task
-    ));
-  };
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'bg-red-500';
-      case 'medium': return 'bg-yellow-500';
-      case 'low': return 'bg-green-500';
-      default: return 'bg-gray-500';
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-foreground">Tasks</h3>
-        <Button size="sm" className="gap-2">
-          <Plus className="h-4 w-4" />
-          Add Task
-        </Button>
-      </div>
-      
-      <div className="space-y-2">
-        {tasks.map((task) => (
-          <motion.div
-            key={task.id}
-            layout
-            draggable
-            onDragStart={() => handleDragStart(task)}
-            onDragEnd={handleDragEnd}
-            className={cn(
-              "p-3 rounded-lg border bg-background/60 backdrop-blur-sm cursor-move",
-              "hover:bg-background/80 transition-all",
-              task.completed && "opacity-60"
-            )}
-          >
-            <div className="flex items-start gap-3">
-              <input
-                type="checkbox"
-                checked={task.completed}
-                onChange={() => toggleTask(task.id)}
-                className="mt-1"
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium text-foreground">Start</label>
+              <Input
+                type="time"
+                value={formData.startTime}
+                onChange={event => setFormData(prev => ({ ...prev, startTime: event.target.value }))}
               />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <h4 className={cn(
-                    "font-medium text-sm text-foreground",
-                    task.completed && "line-through"
-                  )}>
-                    {task.title}
-                  </h4>
-                  <div className={cn("w-2 h-2 rounded-full", getPriorityColor(task.priority))} />
-                </div>
-                {task.description && (
-                  <p className="text-xs text-muted-foreground mb-2">{task.description}</p>
-                )}
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Badge variant="outline" className="text-xs">
-                    {task.category}
-                  </Badge>
-                  {task.estimatedTime && (
-                    <span className="flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {task.estimatedTime}m
-                    </span>
-                  )}
-                  {task.dueDate && (
-                    <span>{format(parseISO(task.dueDate), 'MMM d')}</span>
-                  )}
-                </div>
-              </div>
-              <GripVertical className="h-4 w-4 text-muted-foreground" />
             </div>
-          </motion.div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Project Panel Component
-function ProjectPanel({ projects }: { projects: Project[] }) {
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-foreground">Projects</h3>
-        <Button size="sm" className="gap-2">
-          <Plus className="h-4 w-4" />
-          New Project
-        </Button>
-      </div>
-      
-      <div className="space-y-4">
-        {projects.map((project) => (
-          <Card key={project.id} className="bg-background/60 backdrop-blur-sm">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3 mb-3">
-                <div 
-                  className="w-3 h-3 rounded-full" 
-                  style={{ backgroundColor: project.color }}
+            <div className="grid gap-2">
+              <label className="text-sm font-medium text-foreground">End</label>
+              <Input
+                type="time"
+                value={formData.endTime}
+                onChange={event => setFormData(prev => ({ ...prev, endTime: event.target.value }))}
+              />
+            </div>
+          </div>
+          <div className="grid gap-2">
+            <label className="text-sm font-medium text-foreground">Color</label>
+            <div className="flex gap-2">
+              {["#3b82f6", "#10b981", "#f97316", "#8b5cf6", "#ef4444"].map(color => (
+                <button
+                  key={color}
+                  type="button"
+                  className={cn(
+                    "h-8 w-8 rounded-full border-2 border-transparent transition hover:scale-105",
+                    formData.color === color && "ring-2 ring-offset-2 ring-ring"
+                  )}
+                  style={{ backgroundColor: color }}
+                  onClick={() => setFormData(prev => ({ ...prev, color }))}
+                  aria-label={`Use ${color}`}
                 />
-                <h4 className="font-medium text-foreground">{project.name}</h4>
-              </div>
-              
-              {project.description && (
-                <p className="text-sm text-muted-foreground mb-3">{project.description}</p>
-              )}
-              
-              <div className="space-y-2 mb-3">
-                <div className="flex justify-between text-sm text-foreground">
-                  <span>Progress</span>
-                  <span>{project.progress}%</span>
-                </div>
-                <div className="w-full bg-muted rounded-full h-2">
-                  <div 
-                    className="h-2 rounded-full transition-all"
-                    style={{ 
-                      width: `${project.progress}%`,
-                      backgroundColor: project.color 
-                    }}
-                  />
-                </div>
-              </div>
-              
-              <div className="space-y-1">
-                <h5 className="text-sm font-medium text-foreground">Milestones</h5>
-                {project.milestones.map((milestone) => (
-                  <div key={milestone.id} className="flex items-center gap-2 text-sm">
-                    <div className={cn(
-                      "w-2 h-2 rounded-full",
-                      milestone.completed ? "bg-green-500" : "bg-muted"
-                    )} />
-                    <span className={cn(
-                      "text-foreground",
-                      milestone.completed && "line-through opacity-60"
-                    )}>
-                      {milestone.title}
-                    </span>
-                    <span className="text-muted-foreground ml-auto">
-                      {format(parseISO(milestone.date), 'MMM d')}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Booking Panel Component
-function BookingPanel({ bookings }: { bookings: BookingSlot[] }) {
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-foreground">Bookings</h3>
-        <Button size="sm" className="gap-2">
-          <Plus className="h-4 w-4" />
-          Add Slot
-        </Button>
-      </div>
-      
-      <div className="space-y-2">
-        {bookings.map((slot) => (
-          <div
-            key={slot.id}
-            className={cn(
-              "p-3 rounded-lg border",
-              slot.available 
-                ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800" 
-                : "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
-            )}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-medium text-sm text-foreground">
-                  {slot.startTime} - {slot.endTime}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {format(parseISO(slot.date), 'MMM d, yyyy')}
-                </div>
-                {slot.title && (
-                  <div className="text-sm mt-1 text-foreground">{slot.title}</div>
-                )}
-                {slot.bookedBy && (
-                  <div className="text-xs text-muted-foreground">
-                    Booked by: {slot.bookedBy}
-                  </div>
-                )}
-              </div>
-              <Badge variant={slot.available ? "default" : "destructive"}>
-                {slot.available ? "Available" : "Booked"}
-              </Badge>
+              ))}
             </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Main Calendar Component
-export default function CalendarPage() {
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState<ViewMode>('month');
-  const [panelMode, setPanelMode] = useState<PanelMode>('calendar');
-  const [events, setEvents] = useState<CalendarEvent[]>(sampleEvents);
-  const [tasks, setTasks] = useState<Task[]>(sampleTasks);
-  const [projects] = useState<Project[]>(sampleProjects);
-  const [bookings] = useState<BookingSlot[]>(sampleBookings);
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [showEventForm, setShowEventForm] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
-  const [draggedTask, setDraggedTask] = useState<Task | null>(null);
-
-  useEffect(() => {
-    document.title = "Calendar – Arlo AI";
-  }, []);
-
-  // Calendar navigation
-  const navigateCalendar = useCallback((direction: 'prev' | 'next') => {
-    setCurrentDate(prev => {
-      switch (viewMode) {
-        case 'day':
-          return direction === 'next' ? addDays(prev, 1) : addDays(prev, -1);
-        case 'week':
-          return direction === 'next' ? addWeeks(prev, 1) : addWeeks(prev, -1);
-        case 'month':
-          return direction === 'next' ? addMonths(prev, 1) : addMonths(prev, -1);
-        default:
-          return prev;
-      }
-    });
-  }, [viewMode]);
-
-  const goToToday = useCallback(() => {
-    setCurrentDate(new Date());
-  }, []);
-
-  // Get calendar days for month view
-  const calendarDays = useMemo(() => {
-    if (viewMode !== 'month') return [];
-    
-    const start = startOfWeek(startOfMonth(currentDate));
-    const end = endOfWeek(endOfMonth(currentDate));
-    
-    return eachDayOfInterval({ start, end });
-  }, [currentDate, viewMode]);
-
-  // Get events for a specific date
-  const getEventsForDate = useCallback((date: Date) => {
-    const dateStr = format(date, 'yyyy-MM-dd');
-    return events.filter(event => event.date === dateStr);
-  }, [events]);
-
-  // Handle event creation/editing
-  const handleSaveEvent = useCallback((eventData: Omit<CalendarEvent, 'id'>) => {
-    if (editingEvent) {
-      setEvents(prev => prev.map(event => 
-        event.id === editingEvent.id 
-          ? { ...eventData, id: editingEvent.id }
-          : event
-      ));
-    } else {
-      const newEvent: CalendarEvent = {
-        ...eventData,
-        id: Date.now().toString()
-      };
-      setEvents(prev => [...prev, newEvent]);
-    }
-    setShowEventForm(false);
-    setEditingEvent(null);
-  }, [editingEvent]);
-
-  // Handle task drag to calendar
-  const handleTaskDrop = useCallback((date: Date, time?: string) => {
-    if (!draggedTask) return;
-    
-    const newEvent: CalendarEvent = {
-      id: Date.now().toString(),
-      title: draggedTask.title,
-      description: draggedTask.description,
-      date: format(date, 'yyyy-MM-dd'),
-      startTime: time || '09:00',
-      endTime: time ? format(addDays(parseISO(`2000-01-01T${time}`), 0), 'HH:mm') : '10:00',
-      category: draggedTask.category as any,
-      color: draggedTask.priority === 'high' ? '#EF4444' : 
-             draggedTask.priority === 'medium' ? '#F59E0B' : '#10B981'
-    };
-    
-    setEvents(prev => [...prev, newEvent]);
-    setTasks(prev => prev.filter(task => task.id !== draggedTask.id));
-    setDraggedTask(null);
-  }, [draggedTask]);
-
-  // Handle day click
-  const handleDayClick = useCallback((date: Date) => {
-    setSelectedDate(date);
-    if (viewMode === 'month') {
-      setShowEventForm(true);
-    }
-  }, [viewMode]);
-
-  // Time slots for week/day view
-  const timeSlots = useMemo(() => {
-    const slots = [];
-    for (let hour = 0; hour < 24; hour++) {
-      slots.push(format(new Date().setHours(hour, 0, 0, 0), 'HH:mm'));
-    }
-    return slots;
-  }, []);
-
-  return (
-    <div className="h-screen bg-gradient-to-br from-background via-background/95 to-background/90 relative overflow-hidden pt-20">
-      {/* Background Pattern */}
-      <div className="absolute inset-0 opacity-5">
-        <div className="absolute inset-0" style={{
-          backgroundImage: `radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)`,
-          backgroundSize: '20px 20px'
-        }} />
-      </div>
-
-      <div className="h-full flex">
-        {/* Sidebar */}
-        <motion.div 
-          initial={{ x: -300 }}
-          animate={{ x: 0 }}
-          className="w-80 bg-background/30 backdrop-blur-xl border-r border-border/20 p-6 overflow-y-auto"
-        >
-          <div className="space-y-6">
-            {/* Header */}
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-background/50">
-                <CalendarIcon className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-foreground">Motion Calendar</h1>
-                <p className="text-sm text-muted-foreground">AI-powered scheduling</p>
-              </div>
-            </div>
-
-            {/* Panel Mode Selector */}
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant={panelMode === 'calendar' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setPanelMode('calendar')}
-                className="gap-2"
-              >
-                <CalendarIcon className="h-4 w-4" />
-                Calendar
-              </Button>
-              <Button
-                variant={panelMode === 'tasks' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setPanelMode('tasks')}
-                className="gap-2"
-              >
-                <Target className="h-4 w-4" />
-                Tasks
-              </Button>
-              <Button
-                variant={panelMode === 'projects' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setPanelMode('projects')}
-                className="gap-2"
-              >
-                <Briefcase className="h-4 w-4" />
-                Projects
-              </Button>
-              <Button
-                variant={panelMode === 'bookings' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setPanelMode('bookings')}
-                className="gap-2"
-              >
-                <Users className="h-4 w-4" />
-                Bookings
-              </Button>
-            </div>
-
-            {/* Panel Content */}
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={panelMode}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.2 }}
-              >
-                {panelMode === 'calendar' && (
-                  <div className="space-y-4">
-                    <Button 
-                      className="w-full gap-2" 
-                      onClick={() => setShowEventForm(true)}
-                    >
-                      <Plus className="h-4 w-4" />
-                      New Event
-                    </Button>
-                    
-                    <div className="space-y-2">
-                      <h3 className="font-medium text-foreground">Upcoming Events</h3>
-                      {events.slice(0, 5).map((event) => (
-                        <div
-                          key={event.id}
-                          className="p-3 rounded-lg bg-background/60 backdrop-blur-sm border border-border/20"
-                        >
-                          <div className="flex items-center gap-2 mb-1">
-                            <div 
-                              className="w-2 h-2 rounded-full" 
-                              style={{ backgroundColor: event.color }}
-                            />
-                            <span className="font-medium text-sm text-foreground">{event.title}</span>
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {format(parseISO(event.date), 'MMM d')} • {event.startTime}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {panelMode === 'tasks' && (
-                  <TaskPanel 
-                    tasks={tasks} 
-                    onTaskUpdate={setTasks}
-                  />
-                )}
-                
-                {panelMode === 'projects' && (
-                  <ProjectPanel projects={projects} />
-                )}
-                
-                {panelMode === 'bookings' && (
-                  <BookingPanel bookings={bookings} />
-                )}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </motion.div>
-
-        {/* Main Calendar Area */}
-        <div className="flex-1 flex flex-col">
-          {/* Top Bar */}
-          <div className="bg-background/30 backdrop-blur-xl border-b border-border/20 p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="icon" onClick={() => navigateCalendar('prev')}>
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" size="icon" onClick={() => navigateCalendar('next')}>
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" onClick={goToToday}>
-                    Today
-                  </Button>
-                </div>
-                
-                <h2 className="text-2xl font-bold text-foreground">
-                  {format(currentDate, 'MMMM yyyy')}
-                </h2>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <div className="flex items-center bg-background/50 rounded-lg p-1">
-                  <Button
-                    variant={viewMode === 'month' ? 'default' : 'ghost'}
-                    size="sm"
-                    onClick={() => setViewMode('month')}
-                  >
-                    Month
-                  </Button>
-                  <Button
-                    variant={viewMode === 'week' ? 'default' : 'ghost'}
-                    size="sm"
-                    onClick={() => setViewMode('week')}
-                  >
-                    Week
-                  </Button>
-                  <Button
-                    variant={viewMode === 'day' ? 'default' : 'ghost'}
-                    size="sm"
-                    onClick={() => setViewMode('day')}
-                  >
-                    Day
-                  </Button>
-                </div>
-                
-                <Button variant="outline" size="icon">
-                  <Search className="h-4 w-4" />
-                </Button>
-                <Button variant="outline" size="icon">
-                  <Settings className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Calendar Grid */}
-          <div className="flex-1 p-6">
-            {viewMode === 'month' && (
-              <div className="h-full">
-                {/* Week Headers */}
-                <div className="grid grid-cols-7 gap-px mb-2">
-                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-                    <div key={day} className="p-2 text-center text-sm font-medium text-muted-foreground">
-                      {day}
-                    </div>
-                  ))}
-                </div>
-                
-                {/* Calendar Days */}
-                <div className="grid grid-cols-7 gap-px h-full">
-                  {calendarDays.map((day, index) => {
-                    const dayEvents = getEventsForDate(day);
-                    const isCurrentMonth = isSameMonth(day, currentDate);
-                    const isSelected = selectedDate && isSameDay(day, selectedDate);
-                    
-                    return (
-                      <motion.div
-                        key={index}
-                        layout
-                        className={cn(
-                          "bg-background/40 backdrop-blur-sm border border-border/20 p-2 cursor-pointer",
-                          "hover:bg-background/60 transition-all",
-                          !isCurrentMonth && "opacity-50",
-                          isSelected && "ring-2 ring-primary",
-                          isToday(day) && "bg-primary/10"
-                        )}
-                        onClick={() => handleDayClick(day)}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={() => handleTaskDrop(day)}
-                      >
-                        <div className={cn(
-                          "text-sm font-medium mb-1 text-foreground",
-                          isToday(day) && "text-primary font-bold"
-                        )}>
-                          {format(day, 'd')}
-                        </div>
-                        
-                        <div className="space-y-1">
-                          {dayEvents.slice(0, 3).map((event) => (
-                            <motion.div
-                              key={event.id}
-                              layout
-                              className="text-xs p-1 rounded truncate cursor-pointer text-foreground"
-                              style={{ backgroundColor: event.color + '20', color: event.color }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingEvent(event);
-                                setShowEventForm(true);
-                              }}
-                            >
-                              {event.title}
-                            </motion.div>
-                          ))}
-                          {dayEvents.length > 3 && (
-                            <div className="text-xs text-muted-foreground">
-                              +{dayEvents.length - 3} more
-                            </div>
-                          )}
-                        </div>
-                      </motion.div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {(viewMode === 'week' || viewMode === 'day') && (
-              <div className="h-full flex">
-                {/* Time Column */}
-                <div className="w-20 border-r border-border/20">
-                  {timeSlots.map((time) => (
-                    <div key={time} className="h-12 border-b border-border/10 p-2 text-xs text-muted-foreground">
-                      {time}
-                    </div>
-                  ))}
-                </div>
-                
-                {/* Days Columns */}
-                <div className="flex-1 grid grid-cols-1 gap-px">
-                  {/* Single day for now - can be extended for week view */}
-                  <div className="bg-background/20 backdrop-blur-sm">
-                    {timeSlots.map((time) => (
-                      <div
-                        key={time}
-                        className="h-12 border-b border-border/10 p-1 hover:bg-background/30 cursor-pointer"
-                        onClick={() => {
-                          setSelectedDate(currentDate);
-                          setShowEventForm(true);
-                        }}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={() => handleTaskDrop(currentDate, time)}
-                      >
-                        {/* Events for this time slot would go here */}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
-        {/* Event Form Modal */}
-        <AnimatePresence>
-          {showEventForm && (
-            <EventForm
-              event={editingEvent || undefined}
-              selectedDate={selectedDate ? format(selectedDate, 'yyyy-MM-dd') : undefined}
-              onSave={handleSaveEvent}
-              onCancel={() => {
-                setShowEventForm(false);
-                setEditingEvent(null);
-              }}
-            />
+        <DialogFooter className="pt-4">
+          {isEditing && event ? (
+            <Button variant="destructive" type="button" onClick={() => onDelete?.(event.id)}>
+              Delete
+            </Button>
+          ) : (
+            <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
           )}
-        </AnimatePresence>
+          <Button type="button" onClick={() => onSubmit(isEditing && event ? { ...formData, id: event.id } : formData)}>
+            {isEditing ? "Save changes" : "Create"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface TimeGridProps {
+  days: Date[];
+  blocks: CalendarBlock[];
+  onSelectSlot: (options: { date: string; startMinutes: number }) => void;
+  onSelectBlock: (block: CalendarBlock) => void;
+}
+
+function TimeGrid({ days, blocks, onSelectSlot, onSelectBlock }: TimeGridProps) {
+  const hours = React.useMemo(
+    () => Array.from({ length: (DISPLAY_END_MINUTES - DISPLAY_START_MINUTES) / 60 + 1 }, (_, index) => DISPLAY_START_MINUTES + index * 60),
+    []
+  );
+  const timelineHeight = (DISPLAY_END_MINUTES - DISPLAY_START_MINUTES) / 60 * HOUR_HEIGHT;
+
+  return (
+    <div className="rounded-2xl border bg-background shadow-sm">
+      <div className="grid" style={{ gridTemplateColumns: `72px repeat(${days.length}, minmax(0, 1fr))` }}>
+        <div className="border-b border-r bg-muted/30 px-4 py-3 text-sm font-medium uppercase tracking-wide text-muted-foreground">
+          All day
+        </div>
+        {days.map(day => {
+          const dateKey = format(day, "yyyy-MM-dd");
+          const dayBlocks = blocks.filter(block => block.date === dateKey && block.allDay);
+
+          return (
+            <div key={dateKey} className="border-b border-l px-3 py-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium uppercase text-muted-foreground">{format(day, "EEE")}</p>
+                  <p className={cn("text-lg font-semibold", isToday(day) && "text-primary")}>{format(day, "MMM d")}</p>
+                </div>
+                {isToday(day) && (
+                  <Badge variant="outline" className="text-xs">
+                    Today
+                  </Badge>
+                )}
+              </div>
+              <div className="mt-3 space-y-2">
+                {dayBlocks.length ? (
+                  dayBlocks.map(block => (
+                    <button
+                      key={block.id}
+                      onClick={() => onSelectBlock(block)}
+                      className="w-full rounded-md border bg-muted/40 px-3 py-2 text-left transition hover:bg-muted/60"
+                    >
+                      <p className="text-sm font-medium" style={{ color: block.color }}>
+                        {block.title}
+                      </p>
+                      {block.subtitle && <p className="text-xs text-muted-foreground">{block.subtitle}</p>}
+                    </button>
+                  ))
+                ) : (
+                  <p className="text-xs text-muted-foreground">No all-day events</p>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
+
+      <div className="grid" style={{ gridTemplateColumns: `72px repeat(${days.length}, minmax(0, 1fr))` }}>
+        <div className="relative border-r text-right text-xs text-muted-foreground">
+          {hours.map(minute => (
+            <div key={minute} className="h-[52px] border-b px-3">
+              <span className="-mt-2 inline-block translate-y-[-50%]">
+                {format(addMinutes(startOfDay(new Date()), minute), "ha")}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {days.map(day => {
+          const dateKey = format(day, "yyyy-MM-dd");
+          const dayBlocks = blocks.filter(block => block.date === dateKey && !block.allDay);
+
+          return (
+            <div key={dateKey} className="relative border-l" style={{ height: timelineHeight }}>
+              {Array.from({ length: (DISPLAY_END_MINUTES - DISPLAY_START_MINUTES) / 30 }, (_, index) => index).map(index => {
+                const minute = DISPLAY_START_MINUTES + index * 30;
+                const isHour = minute % 60 === 0;
+                return (
+                  <div
+                    key={`${dateKey}-${minute}`}
+                    className={cn(
+                      "absolute left-0 right-0 border-b border-dashed",
+                      isHour ? "border-muted" : "border-muted/40"
+                    )}
+                    style={{ top: ((minute - DISPLAY_START_MINUTES) / 60) * HOUR_HEIGHT }}
+                  />
+                );
+              })}
+
+              <div
+                className="absolute inset-0 cursor-crosshair"
+                onDoubleClick={event => {
+                  const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
+                  const relativeY = event.clientY - rect.top;
+                  const minutesFromStart = Math.max(0, Math.floor((relativeY / timelineHeight) * (DISPLAY_END_MINUTES - DISPLAY_START_MINUTES)));
+                  const startMinutes = DISPLAY_START_MINUTES + Math.round(minutesFromStart / 30) * 30;
+                  onSelectSlot({ date: dateKey, startMinutes });
+                }}
+              />
+
+              {dayBlocks.map(block => {
+                const { start, end } = clampToDayRange(block.startMinutes, block.endMinutes);
+                if (end <= DISPLAY_START_MINUTES || start >= DISPLAY_END_MINUTES) return null;
+
+                const top = Math.max(start, DISPLAY_START_MINUTES);
+                const height = Math.max(32, (Math.min(end, DISPLAY_END_MINUTES) - Math.max(start, DISPLAY_START_MINUTES)) / 60 * HOUR_HEIGHT);
+
+                return (
+                  <button
+                    key={block.id}
+                    onClick={() => onSelectBlock(block)}
+                    className={cn(
+                      "absolute left-2 right-2 rounded-lg border px-3 py-2 text-left shadow-sm transition focus:outline-none",
+                      block.source === "task"
+                        ? "bg-primary/10 hover:bg-primary/20"
+                        : block.source === "booking" && block.isAvailable
+                          ? "bg-emerald-500/10 hover:bg-emerald-500/20"
+                          : "bg-background/80 hover:bg-background"
+                    )}
+                    style={{
+                      top: ((top - DISPLAY_START_MINUTES) / 60) * HOUR_HEIGHT,
+                      height,
+                      borderColor: block.color
+                    }}
+                  >
+                    <div className="flex items-center gap-2 text-xs font-medium" style={{ color: block.color }}>
+                      <span className="inline-flex h-2 w-2 rounded-full" style={{ backgroundColor: block.color }} />
+                      {block.source === "booking" && block.isAvailable ? "Availability" : block.title}
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {minutesToTime(Math.max(start, DISPLAY_START_MINUTES))} – {minutesToTime(Math.min(end, DISPLAY_END_MINUTES))}
+                    </p>
+                    {block.subtitle && <p className="mt-1 text-xs text-muted-foreground">{block.subtitle}</p>}
+                  </button>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+interface MonthGridProps {
+  days: Date[];
+  blocks: CalendarBlock[];
+  month: Date;
+  onSelectDay: (day: Date) => void;
+  onSelectBlock: (block: CalendarBlock) => void;
+  onCreate: (day: Date) => void;
+}
+
+function MonthGrid({ days, blocks, month, onSelectDay, onSelectBlock, onCreate }: MonthGridProps) {
+  return (
+    <div className="rounded-2xl border bg-background p-4 shadow-sm">
+      <div className="grid grid-cols-7 gap-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {Array.from({ length: 7 }).map((_, index) => (
+          <div key={index} className="px-2 text-center">
+            {format(addDays(startOfWeek(new Date()), index), "EEE")}
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 grid grid-cols-7 gap-2">
+        {days.map(day => {
+          const dateKey = format(day, "yyyy-MM-dd");
+          const dayBlocks = blocks.filter(block => block.date === dateKey);
+          const isCurrentMonth = isSameMonth(day, month);
+
+          return (
+            <div
+              key={dateKey}
+              className={cn(
+                "min-h-[120px] rounded-xl border p-2 transition",
+                isCurrentMonth ? "bg-muted/20" : "bg-muted/10 opacity-60",
+                isToday(day) && "ring-2 ring-primary"
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => onSelectDay(day)}
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium",
+                    isToday(day) ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+                  )}
+                >
+                  {format(day, "d")}
+                </button>
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => onCreate(day)}>
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
+
+              <div className="mt-2 space-y-2 text-xs">
+                {dayBlocks.length ? (
+                  dayBlocks.slice(0, 4).map(block => (
+                    <button
+                      key={block.id}
+                      onClick={() => onSelectBlock(block)}
+                      className="flex w-full items-center gap-2 truncate rounded-md bg-background/80 px-2 py-1 text-left shadow-sm transition hover:bg-background"
+                    >
+                      <span className="h-2 w-2 rounded-full" style={{ backgroundColor: block.color }} />
+                      <span className="truncate font-medium" style={{ color: block.color }}>
+                        {block.title}
+                      </span>
+                    </button>
+                  ))
+                ) : (
+                  <p className="text-muted-foreground">No events</p>
+                )}
+                {dayBlocks.length > 4 && <p className="text-[10px] text-muted-foreground">+{dayBlocks.length - 4} more</p>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export default function CalendarPage() {
+  const [currentDate, setCurrentDate] = React.useState(new Date("2024-01-15T08:00:00"));
+  const [view, setView] = React.useState<CalendarView>("week");
+  const [events, setEvents] = React.useState<CalendarEvent[]>(() => getStoredEvents());
+  const [tasks] = React.useState<Task[]>(DEFAULT_TASKS);
+  const [projects] = React.useState<Project[]>(DEFAULT_PROJECTS);
+  const [bookings, setBookings] = React.useState<BookingSlot[]>(() => getStoredBookings());
+  const [composerOpen, setComposerOpen] = React.useState(false);
+  const [editingEvent, setEditingEvent] = React.useState<CalendarEvent | null>(null);
+  const [draftSlot, setDraftSlot] = React.useState<{ date: string; startTime: string; endTime: string } | undefined>();
+  const [connections, setConnections] = React.useState<Record<string, boolean>>({ google: true, apple: false, outlook: false });
+  const [copied, setCopied] = React.useState(false);
+
+  React.useEffect(() => {
+    setStoredEvents(events);
+  }, [events]);
+
+  React.useEffect(() => {
+    setStoredBookings(bookings);
+  }, [bookings]);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === EVENT_STORAGE_KEY) {
+        setEvents(getStoredEvents());
+      }
+      if (event.key === BOOKING_STORAGE_KEY) {
+        setBookings(getStoredBookings());
+      }
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
+
+  React.useEffect(() => {
+    document.title = "Calendar • Arlo";
+  }, []);
+
+  const visibleRange = React.useMemo(() => {
+    switch (view) {
+      case "day":
+        return { start: startOfDay(currentDate), end: startOfDay(currentDate) };
+      case "week":
+        return { start: startOfWeek(currentDate, { weekStartsOn: 0 }), end: endOfWeek(currentDate, { weekStartsOn: 0 }) };
+      default:
+        return { start: startOfWeek(startOfMonth(currentDate)), end: endOfWeek(endOfMonth(currentDate)) };
+    }
+  }, [currentDate, view]);
+
+  const visibleDays = React.useMemo(() => eachDayOfInterval({ start: visibleRange.start, end: visibleRange.end }), [visibleRange]);
+
+  const { scheduled: scheduledTasks, remaining: unscheduledTasks } = React.useMemo(
+    () => generateOptimizedSchedule({ days: visibleDays, tasks, events, bookings }),
+    [visibleDays, tasks, events, bookings]
+  );
+
+  const milestoneBlocks = React.useMemo<CalendarBlock[]>(() =>
+    projects.flatMap(project =>
+      project.milestones.map(milestone => ({
+        id: `milestone-${project.id}-${milestone.id}`,
+        source: "milestone" as const,
+        title: `${milestone.title} · ${project.name}`,
+        subtitle: milestone.completed ? "Completed" : "Upcoming milestone",
+        date: milestone.date,
+        startMinutes: 0,
+        endMinutes: 24 * 60,
+        color: project.color,
+        allDay: true
+      }))
+    ),
+  [projects]);
+
+  const bookingBlocks = React.useMemo<CalendarBlock[]>(() =>
+    bookings.map(slot => ({
+      id: `booking-${slot.id}`,
+      source: "booking" as const,
+      title: slot.title ?? (slot.available ? "Available" : "Booked session"),
+      subtitle: slot.bookedBy ?? (slot.available ? "Open for scheduling" : undefined),
+      date: slot.date,
+      startMinutes: timeToMinutes(slot.startTime),
+      endMinutes: timeToMinutes(slot.endTime),
+      color: slot.available ? "#10b981" : "#2563eb",
+      isAvailable: slot.available
+    })),
+  [bookings]);
+
+  const eventBlocks = React.useMemo<CalendarBlock[]>(() =>
+    events.map(event => ({
+      id: event.id,
+      source: "event" as const,
+      title: event.title,
+      subtitle: event.description,
+      date: event.date,
+      startMinutes: timeToMinutes(event.startTime),
+      endMinutes: timeToMinutes(event.endTime),
+      color: event.color
+    })),
+  [events]);
+
+  const allBlocks = React.useMemo(
+    () => [...eventBlocks, ...bookingBlocks, ...scheduledTasks, ...milestoneBlocks],
+    [eventBlocks, bookingBlocks, scheduledTasks, milestoneBlocks]
+  );
+
+  const upcomingItems = React.useMemo(() => {
+    const today = format(new Date(), "yyyy-MM-dd");
+    return allBlocks
+      .filter(block => block.date >= today)
+      .sort((a, b) => (a.date === b.date ? a.startMinutes - b.startMinutes : a.date.localeCompare(b.date)))
+      .slice(0, 8);
+  }, [allBlocks]);
+
+  const navigate = (direction: "next" | "prev") => {
+    setCurrentDate(previous => {
+      switch (view) {
+        case "day":
+          return addDays(previous, direction === "next" ? 1 : -1);
+        case "week":
+          return addWeeks(previous, direction === "next" ? 1 : -1);
+        default:
+          return addMonths(previous, direction === "next" ? 1 : -1);
+      }
+    });
+  };
+
+  const openComposerForSlot = React.useCallback((date: string, startMinutes: number) => {
+    const startTime = minutesToTime(startMinutes);
+    const endTime = minutesToTime(startMinutes + 60);
+    setDraftSlot({ date, startTime, endTime });
+    setEditingEvent(null);
+    setComposerOpen(true);
+  }, []);
+
+  const handleCreateEvent = (payload: Omit<CalendarEvent, "id"> & { id?: string }) => {
+    const normalized: CalendarEvent = {
+      id: payload.id ?? crypto.randomUUID(),
+      title: payload.title,
+      description: payload.description,
+      date: payload.date,
+      startTime: payload.startTime,
+      endTime: payload.endTime,
+      category: payload.category,
+      color: payload.color,
+      attendees: payload.attendees ?? []
+    };
+
+    setEvents(previous => {
+      const existingIndex = previous.findIndex(event => event.id === normalized.id);
+      if (existingIndex >= 0) {
+        const clone = [...previous];
+        clone[existingIndex] = normalized;
+        return clone;
+      }
+      return [...previous, normalized];
+    });
+
+    setComposerOpen(false);
+    setEditingEvent(null);
+  };
+
+  const handleSelectBlock = (block: CalendarBlock) => {
+    if (block.source === "event") {
+      const selected = events.find(event => event.id === block.id);
+      if (selected) {
+        setEditingEvent(selected);
+        setDraftSlot({ date: selected.date, startTime: selected.startTime, endTime: selected.endTime });
+        setComposerOpen(true);
+      }
+      return;
+    }
+
+    if (block.source === "booking" && block.isAvailable) {
+      openComposerForSlot(block.date, block.startMinutes);
+    }
+  };
+
+  const handleDeleteEvent = (eventId: string) => {
+    setEvents(previous => previous.filter(event => event.id !== eventId));
+    setComposerOpen(false);
+    setEditingEvent(null);
+  };
+
+  const bookingHandle = "jacob";
+  const bookingLink = React.useMemo(() => getPublicBookingUrl(bookingHandle), [bookingHandle]);
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(bookingLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-background via-background to-muted/40 p-6">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+        <header className="flex flex-col gap-8">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                <Zap className="h-3.5 w-3.5" />
+                Motion intelligence active
+              </div>
+              <div className="space-y-2">
+                <h1 className="text-3xl font-semibold tracking-tight text-foreground md:text-4xl">A calmer, more elegant calendar</h1>
+                <p className="max-w-xl text-sm text-muted-foreground">
+                  Arlo balances meetings, deep work, and travel buffers across your connected calendars while keeping your public availability pristine.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col items-start gap-3 lg:items-end">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="outline" className="gap-2" onClick={copyLink}>
+                  <Link className="h-4 w-4" />
+                  {copied ? "Link copied" : "Share booking link"}
+                </Button>
+                <Button className="gap-2" onClick={() => setComposerOpen(true)}>
+                  <Plus className="h-4 w-4" />
+                  New event
+                </Button>
+                <Sheet>
+                  <SheetTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 border border-transparent hover:border-border"
+                    >
+                      <Settings className="h-4 w-4" />
+                      <span className="sr-only">Open calendar control center</span>
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent side="right" className="w-full max-w-lg overflow-y-auto sm:max-w-lg">
+                    <SheetHeader className="space-y-2">
+                      <SheetTitle>Calendar control center</SheetTitle>
+                      <SheetDescription>
+                        Fine-tune integrations, availability, and automation without leaving the timeline.
+                      </SheetDescription>
+                    </SheetHeader>
+                    <div className="mt-6 space-y-8">
+                      <section className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-semibold text-foreground">Connected calendars</h3>
+                          <Badge variant="outline" className="gap-1 text-xs">
+                            <Globe className="h-3.5 w-3.5" />
+                            Sync live
+                          </Badge>
+                        </div>
+                        <div className="space-y-3">
+                          {calendarConnections.map(connection => (
+                            <div
+                              key={connection.id}
+                              className="flex items-start justify-between gap-3 rounded-xl border bg-muted/20 p-3"
+                            >
+                              <div className="space-y-1">
+                                <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                                  <connection.icon className="h-4 w-4 text-muted-foreground" />
+                                  {connection.name}
+                                </p>
+                                <p className="text-xs text-muted-foreground">{connection.description}</p>
+                              </div>
+                              <Switch
+                                checked={connections[connection.id]}
+                                onCheckedChange={checked => setConnections(prev => ({ ...prev, [connection.id]: checked }))}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        <p className="rounded-lg border border-dashed bg-muted/10 p-3 text-xs text-muted-foreground">
+                          Bring in unlimited calendars. Arlo resolves duplicate meetings, merges buffers, and routes tasks to the best home automatically.
+                        </p>
+                      </section>
+                      <Separator />
+                      <section className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-semibold text-foreground">Public booking page</h3>
+                          <Badge variant="outline" className="gap-1 text-xs">
+                            <Users className="h-3.5 w-3.5" />
+                            External
+                          </Badge>
+                        </div>
+                        <div className="space-y-3">
+                          <div className="rounded-xl border bg-muted/10 p-4">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Share link</p>
+                            <div className="mt-2 flex items-center gap-2 rounded-lg border bg-background px-3 py-2">
+                              <Link className="h-4 w-4 text-muted-foreground" />
+                              <span className="truncate text-sm text-foreground">{bookingLink}</span>
+                            </div>
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                              <Button size="sm" className="gap-2" onClick={copyLink}>
+                                <ExternalLink className="h-3.5 w-3.5" />
+                                {copied ? "Link copied" : "Copy link"}
+                              </Button>
+                              <Button size="sm" variant="outline" className="gap-2" asChild>
+                                <a href={bookingLink} target="_blank" rel="noreferrer">
+                                  <CalendarIcon className="h-3.5 w-3.5" />
+                                  Open public view
+                                </a>
+                              </Button>
+                            </div>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Confirmed bookings block the slot instantly on your private calendar and notify your assistant workflows.
+                          </p>
+                        </div>
+                      </section>
+                      <Separator />
+                      <section className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-semibold text-foreground">Motion-style automation</h3>
+                          <Button size="sm" variant="outline" className="gap-2" onClick={() => setView("week")}>
+                            <RefreshCw className="h-3.5 w-3.5" />
+                            Rebalance schedule
+                          </Button>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Arlo continuously threads tasks between meetings, protects deep work, and adapts buffers whenever plans shift.
+                        </p>
+                      </section>
+                    </div>
+                  </SheetContent>
+                </Sheet>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-full border bg-muted/20 px-3 py-1 text-xs text-muted-foreground">
+                <BadgeCheck className="h-3.5 w-3.5" />
+                AI optimized every refresh
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="ghost" className="gap-2" onClick={() => setCurrentDate(new Date())}>
+                <CalendarIcon className="h-4 w-4" />
+                Today
+              </Button>
+              <div className="flex items-center rounded-full border bg-background p-1">
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate("prev")}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigate("next")}>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1 rounded-full border bg-background p-1">
+                {(["day", "week", "month"] as CalendarView[]).map(mode => (
+                  <Button
+                    key={mode}
+                    variant={view === mode ? "default" : "ghost"}
+                    className="px-4"
+                    onClick={() => setView(mode)}
+                  >
+                    {mode[0].toUpperCase() + mode.slice(1)}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(320px,1fr)]">
+          <div className="space-y-6">
+            <Card className="border bg-background/60 backdrop-blur">
+              <CardHeader className="flex flex-col gap-2 border-b bg-background/80">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">{format(visibleRange.start, "MMMM yyyy")}</p>
+                <h2 className="text-2xl font-semibold text-foreground">{view === "month" ? "Month overview" : view === "week" ? "Week agenda" : "Day focus"}</h2>
+              </CardHeader>
+              <CardContent className="space-y-4 p-4">
+                {view === "month" ? (
+                  <MonthGrid
+                    days={visibleDays}
+                    blocks={allBlocks}
+                    month={currentDate}
+                    onSelectDay={day => {
+                      setCurrentDate(day);
+                      setView("day");
+                    }}
+                    onSelectBlock={handleSelectBlock}
+                    onCreate={day => openComposerForSlot(format(day, "yyyy-MM-dd"), WORK_START_MINUTES)}
+                  />
+                ) : (
+                  <TimeGrid
+                    days={view === "week" ? visibleDays : [currentDate]}
+                    blocks={allBlocks}
+                    onSelectBlock={handleSelectBlock}
+                    onSelectSlot={({ date, startMinutes }) => openComposerForSlot(date, startMinutes)}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          <aside className="space-y-6">
+            <Card className="border bg-background/60 backdrop-blur">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Target className="h-4 w-4 text-muted-foreground" />
+                  Optimized focus plan
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ScrollArea className="h-[300px] pr-4">
+                  <div className="space-y-4">
+                    {scheduledTasks.length ? (
+                      scheduledTasks.map(block => {
+                        const dueDate = typeof block.meta?.dueDate === "string" ? block.meta?.dueDate : undefined;
+
+                        return (
+                          <div key={block.id} className="space-y-2 rounded-xl border bg-muted/20 p-3">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm font-medium" style={{ color: block.color }}>
+                                {block.title}
+                              </p>
+                              <Badge variant="outline" className="text-xs">
+                                {dueDate ? `Due ${format(parseISO(dueDate), "MMM d")}` : "Scheduled"}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Clock className="h-3.5 w-3.5" />
+                              {minutesToTime(block.startMinutes)} – {minutesToTime(block.endMinutes)}
+                            </div>
+                            {block.subtitle && <p className="text-xs text-muted-foreground">{block.subtitle}</p>}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="rounded-xl border border-dashed bg-muted/10 p-4 text-center text-xs text-muted-foreground">
+                        No tasks scheduled yet. Connect a task list and let Arlo orchestrate it.
+                      </div>
+                    )}
+                    {unscheduledTasks.length > 0 && (
+                      <div className="rounded-xl border border-dashed bg-amber-50 p-4 text-xs text-amber-900">
+                        {unscheduledTasks.length} task(s) still need time. Free up space or extend your working hours to place them.
+                      </div>
+                    )}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+
+            <Card className="border bg-background/60 backdrop-blur">
+              <CardHeader className="flex items-center justify-between">
+                <CardTitle className="text-base">Unified upcoming</CardTitle>
+                <Badge variant="outline" className="gap-1 text-xs">
+                  <BookMarked className="h-3.5 w-3.5" />
+                  Next 7 items
+                </Badge>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {upcomingItems.length ? (
+                  upcomingItems.map(item => (
+                    <div key={`${item.source}-${item.id}`} className="flex items-start justify-between gap-3 rounded-xl border bg-muted/20 p-3">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium" style={{ color: item.color }}>
+                          {item.title}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {format(parseISO(item.date), "EEE, MMM d")} · {minutesToTime(item.startMinutes)}
+                        </p>
+                        {item.subtitle && <p className="text-xs text-muted-foreground">{item.subtitle}</p>}
+                      </div>
+                      <Badge variant="outline" className="text-xs capitalize">
+                        {item.source}
+                      </Badge>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-xl border border-dashed bg-muted/10 p-4 text-center text-xs text-muted-foreground">
+                    Nothing coming up. Your calendar is clear.
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </aside>
+        </div>
+      </div>
+
+      <EventComposer
+        open={composerOpen}
+        onOpenChange={setComposerOpen}
+        draft={draftSlot}
+        event={editingEvent}
+        onSubmit={handleCreateEvent}
+        onDelete={handleDeleteEvent}
+      />
     </div>
   );
 }
