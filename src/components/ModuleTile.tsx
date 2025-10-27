@@ -366,7 +366,7 @@ export function ModuleTile({ module, onClick }: ModuleTileProps) {
       onClick={onClick}
       className="h-full cursor-pointer group"
     >
-      <Card className="glass-module h-full p-6 relative overflow-hidden">
+      <Card className="glass-module h-full p-5 relative overflow-hidden">
         {/* Subtle accent line */}
         <div 
           className="absolute top-0 left-0 right-0 h-[2px] opacity-0 group-hover:opacity-100 transition-opacity duration-300"
@@ -377,25 +377,25 @@ export function ModuleTile({ module, onClick }: ModuleTileProps) {
         
         {/* Content */}
         <div className="relative z-10 h-full flex flex-col">
-          <div className="space-y-3 mb-4">
+          <div className="space-y-2 mb-3">
             {/* Icon with subtle background */}
-            <div className="w-11 h-11 rounded-lg bg-primary/8 flex items-center justify-center group-hover:bg-primary/12 transition-colors">
-              <Icon className="w-5 h-5 text-primary" strokeWidth={2} />
+            <div className="w-10 h-10 rounded-lg bg-primary/8 flex items-center justify-center group-hover:bg-primary/12 transition-colors">
+              <Icon className="w-4 h-4 text-primary" strokeWidth={2} />
             </div>
-            
+
             {/* Title */}
-            <h3 className="text-lg font-semibold text-foreground tracking-tight">
+            <h3 className="text-base font-semibold text-foreground tracking-tight">
               {module.title}
             </h3>
           </div>
-          
+
           {/* Rich widget content */}
           <div className="flex-1">
             {renderModuleContent()}
           </div>
-          
+
           {/* Action hint */}
-          <div className="flex items-center gap-2 text-xs text-muted-foreground/60 group-hover:text-primary/80 transition-colors mt-4 pt-3 border-t border-border/30">
+          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60 group-hover:text-primary/80 transition-colors mt-3 pt-2 border-t border-border/30">
             <span className="font-medium">View details</span>
             <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
           </div>

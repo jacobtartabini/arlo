@@ -192,37 +192,37 @@ const clamp = (value: number, min: number, max: number) =>
 
 const getLayoutConfig = (width: number): LayoutConfig => {
   if (width >= 1600) {
-    const gap = clamp(width * 0.02, 32, 48);
-    const padding = clamp(width * 0.04, 56, 120);
+    const gap = clamp(width * 0.018, 24, 40);
+    const padding = clamp(width * 0.035, 48, 96);
     const rawTile = (width - padding * 2 - gap * 4) / 5;
-    const baseTile = clamp(rawTile, 280, 360);
+    const baseTile = clamp(rawTile, 250, 320);
     return { columns: 5, gap, padding, baseTile };
   }
   if (width >= 1280) {
-    const gap = clamp(width * 0.018, 28, 40);
-    const padding = clamp(width * 0.035, 48, 96);
+    const gap = clamp(width * 0.016, 22, 32);
+    const padding = clamp(width * 0.03, 40, 80);
     const rawTile = (width - padding * 2 - gap * 3) / 4;
-    const baseTile = clamp(rawTile, 260, 340);
+    const baseTile = clamp(rawTile, 230, 300);
     return { columns: 4, gap, padding, baseTile };
   }
   if (width >= 1024) {
-    const gap = clamp(width * 0.018, 24, 32);
-    const padding = clamp(width * 0.032, 40, 80);
+    const gap = clamp(width * 0.016, 20, 28);
+    const padding = clamp(width * 0.028, 32, 64);
     const rawTile = (width - padding * 2 - gap * 2) / 3;
-    const baseTile = clamp(rawTile, 240, 320);
+    const baseTile = clamp(rawTile, 210, 280);
     return { columns: 3, gap, padding, baseTile };
   }
   if (width >= 768) {
-    const gap = clamp(width * 0.022, 20, 28);
-    const padding = clamp(width * 0.04, 32, 64);
+    const gap = clamp(width * 0.02, 16, 24);
+    const padding = clamp(width * 0.035, 28, 48);
     const rawTile = (width - padding * 2 - gap) / 2;
-    const baseTile = clamp(rawTile, 220, 320);
+    const baseTile = clamp(rawTile, 190, 260);
     return { columns: 2, gap, padding, baseTile };
   }
-  const gap = clamp(width * 0.04, 12, 20);
-  const padding = clamp(width * 0.06, 16, 32);
+  const gap = clamp(width * 0.035, 10, 16);
+  const padding = clamp(width * 0.055, 14, 28);
   const rawTile = width - padding * 2;
-  const baseTile = clamp(rawTile, 200, 260);
+  const baseTile = clamp(rawTile, 180, 240);
   return { columns: 1, gap, padding, baseTile };
 };
 
