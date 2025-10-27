@@ -31,14 +31,15 @@ export function FloatingChatBar() {
       animate={{ y: 0, opacity: 1 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
       className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50"
+      style={{ left: '50%' }}
     >
       <motion.div
         animate={{
-          width: isFocused ? "640px" : "400px",
+          width: isFocused ? "min(90vw, 640px)" : "min(90vw, 400px)",
           scale: isFocused ? 1.02 : 1,
         }}
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="glass-intense rounded-full shadow-2xl"
+        transition={{ type: "spring", stiffness: 350, damping: 30 }}
+        className="glass-intense rounded-full shadow-2xl backdrop-blur-xl"
       >
         <form onSubmit={handleSubmit} className="flex items-center gap-2 px-4 py-2.5">
           <Input

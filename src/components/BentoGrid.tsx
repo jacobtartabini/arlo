@@ -123,7 +123,9 @@ export function BentoGrid() {
   const [isDragging, setIsDragging] = useState(false);
   const [scale, setScale] = useState(1);
   const [parallaxOffset, setParallaxOffset] = useState({ x: 0, y: 0 });
+  const [velocity, setVelocity] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const lastMousePos = useRef({ x: 0, y: 0 });
   const navigate = useNavigate();
 
   const handleModuleClick = (module: Module) => {
@@ -145,15 +147,27 @@ export function BentoGrid() {
       // Allow dragging from background or grid container
       if (target === containerRef.current || target.classList.contains('spatial-grid') || target.closest('.grid')) {
         setIsDragging(true);
+        lastMousePos.current = { x: e.clientX, y: e.clientY };
+        setVelocity({ x: 0, y: 0 });
+        // Disable text selection while dragging
+        document.body.style.userSelect = 'none';
       }
     }
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (isDragging) {
-      const newX = position.x + e.movementX;
-      const newY = position.y + e.movementY;
+      const deltaX = e.clientX - lastMousePos.current.x;
+      const deltaY = e.clientY - lastMousePos.current.y;
+      
+      const newX = position.x + deltaX;
+      const newY = position.y + deltaY;
       setPosition({ x: newX, y: newY });
+      
+      // Track velocity for momentum
+      setVelocity({ x: deltaX, y: deltaY });
+      
+      lastMousePos.current = { x: e.clientX, y: e.clientY };
       
       // Micro-parallax effect
       setParallaxOffset({
@@ -164,7 +178,35 @@ export function BentoGrid() {
   };
 
   const handleMouseUp = () => {
-    setIsDragging(false);
+    if (isDragging) {
+      setIsDragging(false);
+      // Re-enable text selection
+      document.body.style.userSelect = '';
+      
+      // Apply momentum/inertia
+      const friction = 0.95;
+      let currentVelocity = { ...velocity };
+      let currentPosition = { ...position };
+      
+      const animate = () => {
+        if (Math.abs(currentVelocity.x) > 0.5 || Math.abs(currentVelocity.y) > 0.5) {
+          currentVelocity.x *= friction;
+          currentVelocity.y *= friction;
+          currentPosition.x += currentVelocity.x;
+          currentPosition.y += currentVelocity.y;
+          
+          setPosition({ ...currentPosition });
+          setParallaxOffset({
+            x: currentPosition.x * 0.02,
+            y: currentPosition.y * 0.02
+          });
+          
+          requestAnimationFrame(animate);
+        }
+      };
+      
+      requestAnimationFrame(animate);
+    }
   };
 
   return (
