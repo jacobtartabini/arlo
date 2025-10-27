@@ -16,6 +16,7 @@ import ConditionalNavBar from "./components/ConditionalNavBar";
 import Chat from "./pages/Chat";
 import CalendarPage from "./pages/Calendar";
 import PublicBookingPage from "./pages/PublicBooking";
+import GlobalSearch from "./components/GlobalSearch";
 import Finance from "./pages/modules/Finance";
 import Productivity from "./pages/modules/Productivity";
 import Travel from "./pages/modules/Travel";
@@ -38,6 +39,7 @@ const App = () => (
             <Toaster />
             <Sonner />
             <BrowserRouter>
+              <GlobalSearch />
               <ConditionalNavBar />
               <Routes>
                 {/* Public routes */}
