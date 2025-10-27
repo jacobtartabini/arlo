@@ -23,6 +23,10 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
+type GestureEventType = Event & {
+  scale: number;
+};
+
 export interface Module {
   id: string;
   title: string;
@@ -208,13 +212,16 @@ export function BentoGrid({ onScaleChange, scale: controlledScale }: BentoGridPr
   const isControlled = controlledScale !== undefined;
   const scale = isControlled ? controlledScale : internalScale;
 
-  const setScaleValue = (next: number) => {
-    const clamped = Math.min(Math.max(next, 0.5), 2);
-    if (!isControlled) {
-      setInternalScale(clamped);
-    }
-    onScaleChange?.(clamped);
-  };
+  const setScaleValue = useCallback(
+    (next: number) => {
+      const clamped = Math.min(Math.max(next, 0.5), 2);
+      if (!isControlled) {
+        setInternalScale(clamped);
+      }
+      onScaleChange?.(clamped);
+    },
+    [isControlled, onScaleChange]
+  );
 
   useEffect(() => {
     if (!isControlled && controlledScale !== undefined) {
@@ -285,6 +292,44 @@ export function BentoGrid({ onScaleChange, scale: controlledScale }: BentoGridPr
     setParallaxOffset({ x: 0, y: 0 });
   }, [layoutConfig.columns]);
 
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleGestureStart = (event: Event) => {
+      const gestureEvent = event as GestureEventType;
+      gestureEvent.preventDefault();
+      pinchStartScale.current = scale;
+      isPinchingRef.current = true;
+    };
+
+    const handleGestureChange = (event: Event) => {
+      const gestureEvent = event as GestureEventType;
+      if (typeof gestureEvent.scale !== "number") {
+        return;
+      }
+      gestureEvent.preventDefault();
+      setScaleValue(pinchStartScale.current * gestureEvent.scale);
+    };
+
+    const handleGestureEnd = (event: Event) => {
+      const gestureEvent = event as GestureEventType;
+      gestureEvent.preventDefault();
+      isPinchingRef.current = false;
+    };
+
+    const options: AddEventListenerOptions = { passive: false };
+    container.addEventListener("gesturestart", handleGestureStart as EventListener, options);
+    container.addEventListener("gesturechange", handleGestureChange as EventListener, options);
+    container.addEventListener("gestureend", handleGestureEnd as EventListener, options);
+
+    return () => {
+      container.removeEventListener("gesturestart", handleGestureStart as EventListener, options);
+      container.removeEventListener("gesturechange", handleGestureChange as EventListener, options);
+      container.removeEventListener("gestureend", handleGestureEnd as EventListener, options);
+    };
+  }, [scale, setScaleValue]);
+
   const handleModuleClick = (module: Module) => {
     navigate(module.route);
   };
@@ -329,16 +374,30 @@ export function BentoGrid({ onScaleChange, scale: controlledScale }: BentoGridPr
   const handleWheel = (e: ReactWheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
-      const delta = e.deltaY * -0.001;
+      const zoomIntensity = e.deltaMode === 0 ? 0.002 : 0.001;
+      const delta = e.deltaY * -zoomIntensity;
       const newScale = scale + delta;
       setScaleValue(newScale);
       return;
     }
 
-    e.preventDefault();
     const multiplier = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerHeight : 1;
-    const deltaX = e.deltaX * multiplier * -1;
-    const deltaY = e.deltaY * multiplier * -1;
+    let deltaX = e.deltaX;
+    let deltaY = e.deltaY;
+
+    if (Math.abs(deltaX) < 0.01 && Math.abs(deltaY) > 0 && e.shiftKey) {
+      deltaX = deltaY;
+      deltaY = 0;
+    }
+
+    deltaX *= multiplier * -1;
+    deltaY *= multiplier * -1;
+
+    if (deltaX === 0 && deltaY === 0) {
+      return;
+    }
+
+    e.preventDefault();
 
     velocityRef.current = { x: deltaX, y: deltaY };
     setPosition((prev) => {
@@ -353,7 +412,6 @@ export function BentoGrid({ onScaleChange, scale: controlledScale }: BentoGridPr
     const container = containerRef.current;
     if (!container) return;
 
-    container.setPointerCapture?.(e.pointerId);
     activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
     if (activePointers.current.size === 1) {
@@ -400,7 +458,10 @@ export function BentoGrid({ onScaleChange, scale: controlledScale }: BentoGridPr
           return;
         }
         setIsDragging(true);
+        const selection = window.getSelection?.();
+        selection?.removeAllRanges?.();
         document.body.style.userSelect = "none";
+        containerRef.current?.setPointerCapture?.(e.pointerId);
       }
 
       e.preventDefault();
@@ -468,6 +529,7 @@ export function BentoGrid({ onScaleChange, scale: controlledScale }: BentoGridPr
     <div
       ref={containerRef}
       className="w-full h-full overflow-hidden relative spatial-grid"
+      data-dragging={isDragging ? "true" : undefined}
       onWheel={handleWheel}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
