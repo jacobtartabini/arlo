@@ -15,7 +15,10 @@ import {
   Calendar,
   Thermometer,
   Droplets,
-  UtensilsCrossed
+  UtensilsCrossed,
+  ExternalLink,
+  Route,
+  Luggage
 } from "lucide-react";
 import { FloatingChatBar } from "@/components/FloatingChatBar";
 
@@ -29,6 +32,21 @@ const restaurants = [
   { name: "Terra Rooftop", time: "Thu 7:30 PM", status: "Confirmed" },
   { name: "Noir Bistro", time: "Waitlist", status: "Join" },
   { name: "Green Market", time: "Fri 12:00 PM", status: "Confirmed" }
+];
+
+const tripTimeline = [
+  { time: "Apr 27, 21:30", event: "Pack + sync boarding passes" },
+  { time: "Apr 28, 05:45", event: "Depart home for SFO" },
+  { time: "Apr 28, 07:15", event: "Security & lounge" },
+  { time: "Apr 28, 09:10", event: "Flight DL204 departs" },
+  { time: "Apr 28, 18:05", event: "Arrive JFK + rideshare" }
+];
+
+const packingChecklist = [
+  { item: "Passport & TSA PreCheck", required: true },
+  { item: "Conference badge", required: true },
+  { item: "Camera kit", required: false },
+  { item: "Portable charger", required: false }
 ];
 
 const cardVariants = {
@@ -188,6 +206,16 @@ export default function Travel() {
                       transition={{ duration: 0.8, ease: "easeOut" }}
                     />
                   </div>
+                  <Button asChild size="sm" variant="outline" className="w-full">
+                    <a
+                      href="https://www.google.com/travel/flights?hl=en#search;flt=SFO.JFK.2024-04-28;c:USD;e:1;sd:1;t:f"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center justify-center gap-2"
+                    >
+                      <ExternalLink className="w-4 h-4" /> Live flight map
+                    </a>
+                  </Button>
                 </div>
               </Card>
             </motion.div>
@@ -255,6 +283,68 @@ export default function Travel() {
               </Card>
             </motion.div>
           </div>
+
+          <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={5}>
+            <Card className="glass p-6 space-y-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Route className="w-5 h-5 text-primary" />
+                  <div>
+                    <h2 className="text-lg font-semibold text-foreground">Trip Timeline & Packing</h2>
+                    <p className="text-xs text-muted-foreground">Preview travel milestones and stay checklist-ready.</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="border-primary/30 text-primary">
+                  Auto-syncing itinerary
+                </Badge>
+              </div>
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="space-y-3 text-sm">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Trip timeline</p>
+                  <div className="space-y-3">
+                    {tripTimeline.map((entry) => (
+                      <div key={entry.time} className="flex gap-3">
+                        <div className="flex flex-col items-center">
+                          <span className="text-[10px] text-muted-foreground">{entry.time}</span>
+                          <span className="h-full w-px bg-border/60" />
+                        </div>
+                        <p className="text-muted-foreground leading-snug">{entry.event}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-3 text-sm">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Packing checklist</p>
+                  <div className="space-y-2">
+                    {packingChecklist.map((item) => (
+                      <div
+                        key={item.item}
+                        className="flex items-center justify-between rounded-lg border border-border/40 px-3 py-2"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Luggage className="w-4 h-4 text-primary" />
+                          <span className="text-foreground">{item.item}</span>
+                        </div>
+                        <Badge
+                          variant="secondary"
+                          className={
+                            item.required
+                              ? "bg-primary/15 text-primary border-primary/30"
+                              : "bg-muted text-muted-foreground border-border/40"
+                          }
+                        >
+                          {item.required ? "Required" : "Optional"}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="rounded-lg border border-dashed border-primary/30 p-3 text-xs text-muted-foreground">
+                    Tip: Arlo watches weather shifts and will prompt if a wardrobe change is needed.
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </motion.div>
         </div>
       </main>
 

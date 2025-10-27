@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,10 @@ import {
   Newspaper,
   Search,
   Sparkles,
-  Globe2
+  Globe2,
+  Pin,
+  Lightbulb,
+  Loader2
 } from "lucide-react";
 import { FloatingChatBar } from "@/components/FloatingChatBar";
 
@@ -35,6 +38,19 @@ const researchResults = [
   { title: "Cultural memory vault", snippet: "Decentralized preservation of language and art." }
 ];
 
+const pinnedNotes = [
+  {
+    title: "Orbital manufacturing thesis",
+    excerpt: "Link energy storage findings with microgravity alloy tests — include delta from March sprint.",
+    updated: "Updated 4h ago"
+  },
+  {
+    title: "Bio-adaptive habitats",
+    excerpt: "Reference Dr. Chen's paper on regenerative materials and cross-link with Mars analog study.",
+    updated: "Pinned yesterday"
+  }
+];
+
 const cardVariants = {
   hidden: { opacity: 0, y: 16 },
   visible: (index: number) => ({
@@ -46,10 +62,32 @@ const cardVariants = {
 
 export default function Knowledge() {
   const navigate = useNavigate();
+  const [semanticResults, setSemanticResults] = useState(researchResults);
+  const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
     document.title = "Knowledge & Archives — Arlo";
   }, []);
+
+  const handleSemanticSearch = async () => {
+    setIsSearching(true);
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    setSemanticResults([
+      {
+        title: "Productivity uplift analysis",
+        snippet: "Arlo indexed your weekly journal and found a 12% output jump when focus mode was enabled."
+      },
+      {
+        title: "Investor memo highlights",
+        snippet: "Semantic recall matched key talking points from Q1 updates and climate deck annotations."
+      },
+      {
+        title: "Research backlog",
+        snippet: "4 experiments tagged 'bioprinting' waiting for follow-up. Suggest scheduling post-trip review."
+      }
+    ]);
+    setIsSearching(false);
+  };
 
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
@@ -87,7 +125,7 @@ export default function Knowledge() {
 
       <main className="relative z-10 p-6 pb-32">
         <div className="max-w-6xl mx-auto space-y-6">
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div className="grid gap-6 lg:grid-cols-3">
             <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={0}>
               <Card className="glass-intense p-6 space-y-5">
                 <div className="flex items-center gap-3">
@@ -141,9 +179,34 @@ export default function Knowledge() {
                 </div>
               </Card>
             </motion.div>
+
+            <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={2}>
+              <Card className="glass p-6 space-y-4">
+                <div className="flex items-center gap-3">
+                  <Pin className="w-5 h-5 text-primary" />
+                  <div>
+                    <h2 className="text-xl font-semibold text-foreground">Recent Insights</h2>
+                    <p className="text-xs text-muted-foreground">Pinned notes stay surfaced for fast recall.</p>
+                  </div>
+                </div>
+                <div className="space-y-3 text-sm">
+                  {pinnedNotes.map((note) => (
+                    <div key={note.title} className="rounded-lg border border-border/40 p-3 space-y-2">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span className="flex items-center gap-2 text-foreground font-semibold">
+                          <Lightbulb className="w-3.5 h-3.5 text-primary" /> {note.title}
+                        </span>
+                        <span>{note.updated}</span>
+                      </div>
+                      <p className="text-muted-foreground leading-relaxed">{note.excerpt}</p>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </motion.div>
           </div>
 
-          <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={2}>
+          <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={3}>
             <Card className="glass p-6 space-y-5">
               <div className="flex items-center gap-3">
                 <Globe2 className="w-5 h-5 text-primary" />
@@ -153,12 +216,18 @@ export default function Knowledge() {
                 </div>
               </div>
               <Textarea placeholder="Ask anything — e.g. ‘climate-positive manufacturing breakthroughs’" className="text-sm" />
-              <div className="flex items-center gap-3">
-                <Button>Query</Button>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button onClick={handleSemanticSearch} disabled={isSearching}>
+                  {isSearching ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                  {isSearching ? "Searching..." : "Semantic recall"}
+                </Button>
                 <Button variant="outline">Add to briefing</Button>
+                <p className="text-xs text-muted-foreground">
+                  Powered by /api/semantic-search — rehydrates context from archives and personal notes.
+                </p>
               </div>
               <div className="space-y-3 text-sm">
-                {researchResults.map((result) => (
+                {semanticResults.map((result) => (
                   <div key={result.title} className="rounded-lg border border-border/40 p-3">
                     <p className="text-foreground font-semibold">{result.title}</p>
                     <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{result.snippet}</p>

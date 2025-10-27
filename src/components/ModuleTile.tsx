@@ -11,7 +11,13 @@ import {
   Pause,
   Sparkles,
   Search,
-  Newspaper
+  Newspaper,
+  Workflow,
+  RefreshCcw,
+  BellRing,
+  CheckCircle2,
+  TrendingUp,
+  Clock3
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -184,6 +190,86 @@ d">
             <div className="flex items-center justify-between text-xs">
               <span className="text-muted-foreground">Uptime</span>
               <span className="text-foreground">12d 4h 18m</span>
+            </div>
+          </div>
+        );
+
+      case "automations":
+        return (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">3 active playbooks</p>
+                <p className="text-lg font-semibold text-foreground">6.4 hrs saved</p>
+              </div>
+              <Workflow className="w-5 h-5 text-accent" />
+            </div>
+            <div className="space-y-2 text-xs">
+              <div className="rounded-md border border-border/40 p-2 flex items-center justify-between">
+                <span className="text-muted-foreground">Finance digest</span>
+                <span className="text-foreground">Fri · 09:00</span>
+              </div>
+              <div className="rounded-md border border-border/40 p-2 flex items-center justify-between">
+                <span className="text-muted-foreground">System health check</span>
+                <span className="text-emerald-400">Running</span>
+              </div>
+              <div className="rounded-md border border-border/40 p-2 flex items-center justify-between">
+                <span className="text-muted-foreground">Investor brief draft</span>
+                <span className="text-amber-400">Queued</span>
+              </div>
+            </div>
+            <Button size="sm" variant="outline" className="w-full" onClick={(event) => event.stopPropagation()}>
+              <RefreshCcw className="w-4 h-4 mr-2" /> Run quick fixes
+            </Button>
+          </div>
+        );
+
+      case "insights":
+        return (
+          <div className="space-y-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Weekly intelligence</p>
+                <p className="text-lg font-semibold text-foreground">Productivity up 12%</p>
+              </div>
+              <TrendingUp className="w-5 h-5 text-primary" />
+            </div>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Focus mode streaks aligned with calendar locks gave you the boost. Arlo queued 3 follow-up actions.
+            </p>
+            <div className="rounded-md bg-primary/10 p-3 text-xs text-primary flex items-center gap-2">
+              <Clock3 className="w-4 h-4" /> Last refreshed moments ago — tap for full insight board.
+            </div>
+          </div>
+        );
+
+      case "notifications":
+        return (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Unified alerts</p>
+                <p className="text-lg font-semibold text-foreground">3 waiting</p>
+              </div>
+              <BellRing className="w-5 h-5 text-accent" />
+            </div>
+            <div className="space-y-2 text-xs">
+              <div className="rounded-md border border-border/40 p-2 flex items-center justify-between">
+                <span className="text-muted-foreground">Finance · Bill Apr 28</span>
+                <span className="text-foreground">Queued</span>
+              </div>
+              <div className="rounded-md border border-border/40 p-2 flex items-center justify-between">
+                <span className="text-muted-foreground">System · Quick fixes</span>
+                <span className="text-emerald-400">Healthy</span>
+              </div>
+              <div className="rounded-md border border-border/40 p-2 flex items-center justify-between">
+                <span className="text-muted-foreground">Focus block</span>
+                <span className="text-amber-400">Starts 10m</span>
+              </div>
+            </div>
+            <div className="rounded-md bg-muted/30 p-3 text-xs text-muted-foreground flex items-center gap-2">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              Snooze active — urgent alerts still break through.
             </div>
           </div>
         );

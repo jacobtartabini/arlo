@@ -22,6 +22,9 @@ import SystemSecurity from "./pages/modules/SystemSecurity";
 import Health from "./pages/modules/Health";
 import Creation from "./pages/modules/Creation";
 import Knowledge from "./pages/modules/Knowledge";
+import Automations from "./pages/modules/Automations";
+import AIInsights from "./pages/modules/AIInsights";
+import Notifications from "./pages/modules/Notifications";
 
 const queryClient = new QueryClient();
 
@@ -100,6 +103,21 @@ const App = () => (
                 <Route path="/knowledge" element={
                   <ProtectedRoute>
                     <Knowledge />
+                  </ProtectedRoute>
+                } />
+                <Route path="/automations" element={
+                  <ProtectedRoute>
+                    <Automations />
+                  </ProtectedRoute>
+                } />
+                <Route path="/insights" element={
+                  <ProtectedRoute>
+                    <AIInsights />
+                  </ProtectedRoute>
+                } />
+                <Route path="/notifications" element={
+                  <ProtectedRoute>
+                    <Notifications />
                   </ProtectedRoute>
                 } />
 

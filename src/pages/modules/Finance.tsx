@@ -13,7 +13,11 @@ import {
   Upload,
   Gift,
   Receipt,
-  LineChart
+  LineChart,
+  CalendarDays,
+  CreditCard,
+  CircleDashed,
+  CheckCircle2
 } from "lucide-react";
 import { FloatingChatBar } from "@/components/FloatingChatBar";
 
@@ -41,6 +45,21 @@ const giftCards = [
   { vendor: "Spotify", balance: "$24.00", renews: "May 3" },
   { vendor: "Adobe", balance: "$56.00", renews: "Jun 18" }
 ];
+
+const upcomingBills = [
+  { vendor: "Design Tools", amount: "$42.00", due: "Apr 28", status: "Scheduled" },
+  { vendor: "Workspace Lease", amount: "$1,280.00", due: "May 1", status: "Auto-pay" },
+  { vendor: "Cloud Services", amount: "$310.00", due: "May 3", status: "Review" }
+];
+
+const spendingInsights = [
+  { label: "Essentials", value: 38, color: "var(--primary)" },
+  { label: "Growth", value: 22, color: "var(--chart-1, #34d399)" },
+  { label: "Lifestyle", value: 18, color: "var(--chart-2, #60a5fa)" },
+  { label: "Savings", value: 22, color: "var(--chart-3, #fbbf24)" }
+];
+
+const totalSpending = spendingInsights.reduce((sum, insight) => sum + insight.value, 0);
 
 const cardVariants = {
   hidden: { opacity: 0, y: 20 },
@@ -86,10 +105,15 @@ export default function Finance() {
             </div>
           </div>
         </div>
-        <Button className="glass-intense">
-          <Upload className="w-4 h-4 mr-2" />
-          Sync Accounts
-        </Button>
+        <div className="flex items-center gap-3">
+          <Badge className="glass border-emerald-500/30 text-emerald-400 bg-emerald-500/10 flex items-center gap-1">
+            <CheckCircle2 className="w-3.5 h-3.5" /> Synced
+          </Badge>
+          <Button className="glass-intense">
+            <Upload className="w-4 h-4 mr-2" />
+            Sync Accounts
+          </Button>
+        </div>
       </motion.header>
 
       <main className="relative z-10 p-6 pb-32">
@@ -286,6 +310,106 @@ export default function Finance() {
               </Card>
             </motion.div>
           </div>
+
+          <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={4}>
+            <Card className="glass p-6 space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <CalendarDays className="w-5 h-5 text-primary" />
+                  <div>
+                    <h2 className="text-xl font-semibold text-foreground">Cash Flow Radar</h2>
+                    <p className="text-xs text-muted-foreground">Upcoming bills and month-to-date spending signals.</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="border-primary/30 text-primary">Next due {upcomingBills[0].due}</Badge>
+              </div>
+              <div className="grid gap-6 md:grid-cols-2">
+                <div className="space-y-3 text-sm">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Upcoming bills</p>
+                  {upcomingBills.map((bill) => (
+                    <div
+                      key={bill.vendor}
+                      className="rounded-lg border border-border/40 p-3 flex items-center justify-between"
+                    >
+                      <div>
+                        <p className="text-foreground font-medium">{bill.vendor}</p>
+                        <p className="text-xs text-muted-foreground">Due {bill.due}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-foreground font-semibold">{bill.amount}</p>
+                        <Badge
+                          variant="outline"
+                          className="mt-1 border-primary/30 text-primary flex items-center gap-1"
+                        >
+                          <CreditCard className="w-3 h-3" /> {bill.status}
+                        </Badge>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex flex-col items-center justify-center gap-4">
+                  <div className="relative">
+                    <svg viewBox="0 0 140 140" className="w-40 h-40 -rotate-90">
+                      <circle
+                        cx="70"
+                        cy="70"
+                        r="58"
+                        stroke="hsl(var(--primary) / 0.12)"
+                        strokeWidth="16"
+                        fill="none"
+                      />
+                      {(() => {
+                        let cumulative = 0;
+                        return spendingInsights.map((segment) => {
+                          const circumference = 2 * Math.PI * 58;
+                          const segmentLength = (segment.value / totalSpending) * circumference;
+                          const strokeDasharray = `${segmentLength} ${circumference}`;
+                          const strokeDashoffset = circumference * 0.25 - cumulative;
+                          cumulative += segmentLength;
+                          return (
+                            <circle
+                              key={segment.label}
+                              cx="70"
+                              cy="70"
+                              r="58"
+                              stroke={segment.color}
+                              strokeWidth="16"
+                              strokeDasharray={strokeDasharray}
+                              strokeDashoffset={strokeDashoffset}
+                              strokeLinecap="round"
+                              fill="none"
+                            />
+                          );
+                        });
+                      })()}
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-xs text-muted-foreground">
+                      <p className="text-sm font-semibold text-foreground">Spending insights</p>
+                      <p>MTD burn ${Math.round((totalSpending / 100) * 8.6)}k</p>
+                    </div>
+                  </div>
+                  <div className="grid gap-2 text-xs w-full">
+                    {spendingInsights.map((segment) => (
+                      <div key={segment.label} className="flex items-center justify-between">
+                        <span className="flex items-center gap-2 text-muted-foreground">
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{ backgroundColor: segment.color }}
+                          />
+                          {segment.label}
+                        </span>
+                        <span className="text-foreground font-medium">{segment.value}%</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="rounded-lg border border-dashed border-primary/30 p-3 text-xs text-muted-foreground flex items-center gap-2">
+                    <CircleDashed className="w-4 h-4 text-primary" />
+                    AI notes: Lifestyle is trending 6% under budget — consider redirecting to savings.
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </motion.div>
         </div>
       </main>
 

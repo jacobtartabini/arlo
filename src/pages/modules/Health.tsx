@@ -15,7 +15,10 @@ import {
   Pause,
   SkipForward,
   SkipBack,
-  Sparkles
+  Sparkles,
+  MoonStar,
+  Droplet,
+  CheckCircle2
 } from "lucide-react";
 import { FloatingChatBar } from "@/components/FloatingChatBar";
 
@@ -39,6 +42,12 @@ const recommendations = [
   "Evening Yoga Flow",
   "Focus Playlist",
   "Apple TV – Documentary queue"
+];
+
+const dailyGoals = [
+  { label: "Sleep", value: 7.8, target: 8, unit: "hrs" },
+  { label: "Water", value: 6, target: 8, unit: "glasses" },
+  { label: "Movement", value: 83, target: 100, unit: "%" }
 ];
 
 const cardVariants = {
@@ -190,6 +199,50 @@ export default function Health() {
           </div>
 
           <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={2}>
+            <Card className="glass p-6 space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <MoonStar className="w-5 h-5 text-primary" />
+                  <div>
+                    <h2 className="text-xl font-semibold text-foreground">Daily Wellness Snapshot</h2>
+                    <p className="text-xs text-muted-foreground">Mini trackers keep sleep, hydration, and goals aligned.</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="border-primary/30 text-primary">
+                  Auto-synced wearables
+                </Badge>
+              </div>
+              <div className="grid gap-4 md:grid-cols-3 text-sm">
+                <div className="rounded-lg border border-border/40 p-4 space-y-2">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <MoonStar className="w-4 h-4 text-primary" /> Sleep
+                  </div>
+                  <p className="text-2xl font-semibold text-foreground">7h 48m</p>
+                  <p className="text-xs text-muted-foreground">Target 8h — great recovery score.</p>
+                </div>
+                <div className="rounded-lg border border-border/40 p-4 space-y-2">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Droplet className="w-4 h-4 text-primary" /> Water
+                  </div>
+                  <p className="text-2xl font-semibold text-foreground">6 / 8</p>
+                  <p className="text-xs text-muted-foreground">Refill bottle in 45 minutes to stay on pace.</p>
+                </div>
+                <div className="rounded-lg border border-border/40 p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <CheckCircle2 className="w-4 h-4 text-primary" /> Daily goals
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Movement</span>
+                    <span className="text-foreground font-medium">83% complete</span>
+                  </div>
+                  <Progress value={dailyGoals[2].value} className="h-2" />
+                  <p className="text-xs text-muted-foreground">Add a 12 min walk to close the ring.</p>
+                </div>
+              </div>
+            </Card>
+          </motion.div>
+
+          <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={3}>
             <Card className="glass p-6 space-y-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
