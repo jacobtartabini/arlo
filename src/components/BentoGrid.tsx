@@ -9,129 +9,14 @@ import {
 } from "react";
 import { motion } from "framer-motion";
 import { ModuleTile } from "./ModuleTile";
-import {
-  Wallet,
-  CalendarCheck,
-  Plane,
-  ShieldCheck,
-  HeartPulse,
-  PenTool,
-  Library,
-  Workflow,
-  Sparkles,
-  BellRing,
-  type LucideIcon
-} from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { APP_MODULES, type Module } from "@/lib/app-navigation";
 
 type GestureEventType = Event & {
   scale: number;
 };
 
-export interface Module {
-  id: string;
-  title: string;
-  icon: LucideIcon;
-  route: string;
-  color: string;
-  size: "small" | "medium" | "large";
-  summary?: string;
-}
-
-const modules: Module[] = [
-  {
-    id: "finance",
-    title: "Finance",
-    icon: Wallet,
-    route: "/finance",
-    color: "primary",
-    size: "large",
-    summary: "Spend vs. budget • Net worth update"
-  },
-  {
-    id: "productivity",
-    title: "Productivity",
-    icon: CalendarCheck,
-    route: "/productivity",
-    color: "accent",
-    size: "large",
-    summary: "62% tasks done • Next focus block"
-  },
-  {
-    id: "travel",
-    title: "Travel",
-    icon: Plane,
-    route: "/travel",
-    color: "primary",
-    size: "medium",
-    summary: "Flight DL204 on-time • 72°F"
-  },
-  {
-    id: "system",
-    title: "System & Security",
-    icon: ShieldCheck,
-    route: "/system",
-    color: "accent",
-    size: "medium",
-    summary: "All systems secure • 6 devices"
-  },
-  {
-    id: "health",
-    title: "Health & Lifestyle",
-    icon: HeartPulse,
-    route: "/health",
-    color: "primary",
-    size: "medium",
-    summary: "Calorie burn 82% • Streak 9 days"
-  },
-  {
-    id: "creation",
-    title: "Creation & Design",
-    icon: PenTool,
-    route: "/creation",
-    color: "accent",
-    size: "large",
-    summary: "2 drafts awaiting review"
-  },
-  {
-    id: "knowledge",
-    title: "Knowledge & Archives",
-    icon: Library,
-    route: "/knowledge",
-    color: "primary",
-    size: "medium",
-    summary: "Today's brief • 3 new archives"
-  },
-  {
-    id: "automations",
-    title: "Automations",
-    icon: Workflow,
-    route: "/automations",
-    color: "accent",
-    size: "medium",
-    summary: "3 active • 6.4h saved"
-  },
-  {
-    id: "insights",
-    title: "AI Insights",
-    icon: Sparkles,
-    route: "/insights",
-    color: "primary",
-    size: "medium",
-    summary: "12% uplift • New actions"
-  },
-  {
-    id: "notifications",
-    title: "Notifications",
-    icon: BellRing,
-    route: "/notifications",
-    color: "accent",
-    size: "small",
-    summary: "3 alerts • Snooze active"
-  }
-];
-
-const moduleMap = modules.reduce<Record<string, Module>>((acc, module) => {
+const moduleMap = APP_MODULES.reduce<Record<string, Module>>((acc, module) => {
   acc[module.id] = module;
   return acc;
 }, {});
@@ -418,7 +303,7 @@ export function BentoGrid({ onScaleChange, scale: controlledScale }: BentoGridPr
   const orderedModules = useMemo(() => {
     const preset = moduleOrderPresets[columns];
     if (!preset) {
-      return modules;
+      return APP_MODULES;
     }
 
     const seen = new Set<string>();
@@ -432,7 +317,7 @@ export function BentoGrid({ onScaleChange, scale: controlledScale }: BentoGridPr
       }
     }
 
-    for (const module of modules) {
+    for (const module of APP_MODULES) {
       if (!seen.has(module.id)) {
         arranged.push(module);
       }

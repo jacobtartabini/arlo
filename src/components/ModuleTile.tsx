@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
-import { Module } from "./BentoGrid";
+import { type Module } from "@/lib/app-navigation";
 import {
   ArrowRight,
   ThermometerSun,
