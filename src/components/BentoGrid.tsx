@@ -118,7 +118,11 @@ const modules: Module[] = [
   }
 ];
 
-export function BentoGrid() {
+interface BentoGridProps {
+  onScaleChange?: (value: number) => void;
+}
+
+export function BentoGrid({ onScaleChange }: BentoGridProps) {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [scale, setScale] = useState(1);
@@ -209,6 +213,12 @@ export function BentoGrid() {
     }
   };
 
+  useEffect(() => {
+    if (onScaleChange) {
+      onScaleChange(scale);
+    }
+  }, [scale, onScaleChange]);
+
   return (
     <div
       ref={containerRef}
@@ -265,15 +275,6 @@ export function BentoGrid() {
         </motion.div>
       </div>
 
-      {/* Zoom indicator */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
-        className="fixed bottom-24 right-6 glass rounded-lg px-3 py-2 text-xs text-muted-foreground font-medium"
-      >
-        {Math.round(scale * 100)}%
-      </motion.div>
     </div>
   );
 }
