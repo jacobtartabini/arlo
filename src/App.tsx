@@ -15,9 +15,13 @@ import { ArloProvider } from "./providers/ArloProvider";
 import ConditionalNavBar from "./components/ConditionalNavBar";
 import Chat from "./pages/Chat";
 import CalendarPage from "./pages/Calendar";
-import Habits from "./pages/modules/Habits";
-import Budget from "./pages/modules/Budget";
-import Nutrition from "./pages/modules/Nutrition";
+import Finance from "./pages/modules/Finance";
+import Productivity from "./pages/modules/Productivity";
+import Travel from "./pages/modules/Travel";
+import SystemSecurity from "./pages/modules/SystemSecurity";
+import Health from "./pages/modules/Health";
+import Creation from "./pages/modules/Creation";
+import Knowledge from "./pages/modules/Knowledge";
 
 const queryClient = new QueryClient();
 
@@ -63,19 +67,39 @@ const App = () => (
                 } />
 
                 {/* Module routes */}
-                <Route path="/habits" element={
+                <Route path="/finance" element={
                   <ProtectedRoute>
-                    <Habits />
+                    <Finance />
                   </ProtectedRoute>
                 } />
-                <Route path="/budget" element={
+                <Route path="/productivity" element={
                   <ProtectedRoute>
-                    <Budget />
+                    <Productivity />
                   </ProtectedRoute>
                 } />
-                <Route path="/nutrition" element={
+                <Route path="/travel" element={
                   <ProtectedRoute>
-                    <Nutrition />
+                    <Travel />
+                  </ProtectedRoute>
+                } />
+                <Route path="/system" element={
+                  <ProtectedRoute>
+                    <SystemSecurity />
+                  </ProtectedRoute>
+                } />
+                <Route path="/health" element={
+                  <ProtectedRoute>
+                    <Health />
+                  </ProtectedRoute>
+                } />
+                <Route path="/creation" element={
+                  <ProtectedRoute>
+                    <Creation />
+                  </ProtectedRoute>
+                } />
+                <Route path="/knowledge" element={
+                  <ProtectedRoute>
+                    <Knowledge />
                   </ProtectedRoute>
                 } />
 

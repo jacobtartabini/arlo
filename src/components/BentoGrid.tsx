@@ -10,16 +10,13 @@ import {
 import { motion } from "framer-motion";
 import { ModuleTile } from "./ModuleTile";
 import {
-  Heart,
-  DollarSign,
-  Apple,
-  Zap,
-  Target,
-  TrendingUp,
-  Calendar,
-  BookOpen,
-  Activity,
-  Brain,
+  Wallet,
+  CalendarCheck,
+  Plane,
+  ShieldCheck,
+  HeartPulse,
+  PenTool,
+  Library,
   type LucideIcon
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -40,94 +37,67 @@ export interface Module {
 
 const modules: Module[] = [
   {
-    id: "habits",
-    title: "Habits",
-    icon: Heart,
-    route: "/habits",
+    id: "finance",
+    title: "Finance",
+    icon: Wallet,
+    route: "/finance",
     color: "primary",
-    size: "medium",
-    summary: "5 active habits • 3 day streak"
+    size: "large",
+    summary: "Spend vs. budget • Net worth update"
   },
   {
-    id: "budget",
-    title: "Budget",
-    icon: DollarSign,
-    route: "/budget",
+    id: "productivity",
+    title: "Productivity",
+    icon: CalendarCheck,
+    route: "/productivity",
     color: "accent",
     size: "large",
-    summary: "$2,340 remaining this month"
+    summary: "62% tasks done • Next focus block"
   },
   {
-    id: "nutrition",
-    title: "Nutrition",
-    icon: Apple,
-    route: "/nutrition",
+    id: "travel",
+    title: "Travel",
+    icon: Plane,
+    route: "/travel",
     color: "primary",
     size: "medium",
-    summary: "1,800 / 2,200 calories today"
+    summary: "Flight DL204 on-time • 72°F"
   },
   {
-    id: "automation",
-    title: "Automation",
-    icon: Zap,
-    route: "/automation",
+    id: "system",
+    title: "System & Security",
+    icon: ShieldCheck,
+    route: "/system",
     color: "accent",
-    size: "small",
-    summary: "12 active automations"
+    size: "medium",
+    summary: "All systems secure • 6 devices"
   },
   {
-    id: "goals",
-    title: "Goals",
-    icon: Target,
-    route: "/goals",
+    id: "health",
+    title: "Health & Lifestyle",
+    icon: HeartPulse,
+    route: "/health",
     color: "primary",
     size: "medium",
-    summary: "3 goals in progress"
+    summary: "Calorie burn 82% • Streak 9 days"
   },
   {
-    id: "analytics",
-    title: "Analytics",
-    icon: TrendingUp,
-    route: "/analytics",
+    id: "creation",
+    title: "Creation & Design",
+    icon: PenTool,
+    route: "/creation",
     color: "accent",
     size: "large",
-    summary: "View your insights"
+    summary: "2 drafts awaiting review"
   },
   {
-    id: "calendar",
-    title: "Calendar",
-    icon: Calendar,
-    route: "/calendar",
+    id: "knowledge",
+    title: "Knowledge & Archives",
+    icon: Library,
+    route: "/knowledge",
     color: "primary",
-    size: "small",
-    summary: "3 events today"
-  },
-  {
-    id: "journal",
-    title: "Journal",
-    icon: BookOpen,
-    route: "/journal",
-    color: "accent",
     size: "medium",
-    summary: "Write your thoughts"
-  },
-  {
-    id: "wellness",
-    title: "Wellness",
-    icon: Activity,
-    route: "/wellness",
-    color: "primary",
-    size: "small",
-    summary: "Heart rate: 72 bpm"
-  },
-  {
-    id: "focus",
-    title: "Focus",
-    icon: Brain,
-    route: "/focus",
-    color: "accent",
-    size: "medium",
-    summary: "Deep work mode"
+    summary: "Today's brief • 3 new archives"
   }
 ];
 
@@ -138,40 +108,31 @@ const moduleMap = modules.reduce<Record<string, Module>>((acc, module) => {
 
 const moduleOrderPresets: Record<number, string[]> = {
   3: [
-    "budget",
-    "habits",
-    "analytics",
-    "nutrition",
-    "goals",
-    "journal",
-    "automation",
-    "calendar",
-    "focus",
-    "wellness"
+    "finance",
+    "productivity",
+    "creation",
+    "travel",
+    "system",
+    "health",
+    "knowledge"
   ],
   4: [
-    "budget",
-    "habits",
-    "analytics",
-    "goals",
-    "nutrition",
-    "automation",
-    "journal",
-    "calendar",
-    "focus",
-    "wellness"
+    "finance",
+    "productivity",
+    "creation",
+    "travel",
+    "system",
+    "health",
+    "knowledge"
   ],
   5: [
-    "budget",
-    "habits",
-    "analytics",
-    "nutrition",
-    "goals",
-    "automation",
-    "journal",
-    "calendar",
-    "focus",
-    "wellness"
+    "finance",
+    "productivity",
+    "creation",
+    "travel",
+    "system",
+    "health",
+    "knowledge"
   ]
 };
 
