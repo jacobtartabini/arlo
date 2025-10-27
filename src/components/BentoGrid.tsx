@@ -120,17 +120,35 @@ const modules: Module[] = [
 
 interface BentoGridProps {
   onScaleChange?: (value: number) => void;
+  scale?: number;
 }
 
-export function BentoGrid({ onScaleChange }: BentoGridProps) {
+export function BentoGrid({ onScaleChange, scale: controlledScale }: BentoGridProps) {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
-  const [scale, setScale] = useState(1);
+  const [internalScale, setInternalScale] = useState(controlledScale ?? 1);
   const [parallaxOffset, setParallaxOffset] = useState({ x: 0, y: 0 });
   const [velocity, setVelocity] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const lastMousePos = useRef({ x: 0, y: 0 });
   const navigate = useNavigate();
+
+  const isControlled = controlledScale !== undefined;
+  const scale = isControlled ? controlledScale : internalScale;
+
+  const setScaleValue = (next: number) => {
+    const clamped = Math.min(Math.max(next, 0.5), 2);
+    if (!isControlled) {
+      setInternalScale(clamped);
+    }
+    onScaleChange?.(clamped);
+  };
+
+  useEffect(() => {
+    if (!isControlled && controlledScale !== undefined) {
+      setInternalScale(controlledScale);
+    }
+  }, [controlledScale, isControlled]);
 
   const handleModuleClick = (module: Module) => {
     navigate(module.route);
@@ -140,8 +158,8 @@ export function BentoGrid({ onScaleChange }: BentoGridProps) {
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
       const delta = e.deltaY * -0.001;
-      const newScale = Math.min(Math.max(0.5, scale + delta), 2);
-      setScale(newScale);
+      const newScale = scale + delta;
+      setScaleValue(newScale);
     }
   };
 
@@ -212,12 +230,6 @@ export function BentoGrid({ onScaleChange }: BentoGridProps) {
       requestAnimationFrame(animate);
     }
   };
-
-  useEffect(() => {
-    if (onScaleChange) {
-      onScaleChange(scale);
-    }
-  }, [scale, onScaleChange]);
 
   return (
     <div

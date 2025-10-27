@@ -1,21 +1,81 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/providers/AuthProvider";
 import { useArlo } from "@/providers/ArloProvider";
 import { useNavigate } from "react-router-dom";
 import { BentoGrid } from "@/components/BentoGrid";
 import { FloatingChatBar } from "@/components/FloatingChatBar";
+import { Check, ChevronDown } from "lucide-react";
+
+const PRESET_ZOOM_LEVELS = [50, 75, 100, 125, 150, 175, 200];
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { tailscaleVerified } = useAuth();
   const { isConnected, checkConnection } = useArlo();
-  const [zoomPercent, setZoomPercent] = useState(100);
+  const [gridScale, setGridScale] = useState(1);
+  const [customZoom, setCustomZoom] = useState("100");
+  const [isZoomMenuOpen, setIsZoomMenuOpen] = useState(false);
+  const [isFit, setIsFit] = useState(false);
+
+  const zoomPercent = Math.round(gridScale * 100);
 
   const handleScaleChange = useCallback((value: number) => {
-    setZoomPercent(Math.round(value * 100));
+    const clamped = Math.min(Math.max(value, 0.5), 2);
+    setIsFit(false);
+    setGridScale(clamped);
   }, []);
+
+  const applyZoomPercent = useCallback((percent: number) => {
+    if (Number.isNaN(percent)) {
+      return;
+    }
+    const clampedPercent = Math.min(Math.max(percent, 50), 200);
+    setIsFit(false);
+    setGridScale(clampedPercent / 100);
+  }, []);
+
+  const handlePresetSelect = useCallback(
+    (percent: number) => {
+      applyZoomPercent(percent);
+      setIsZoomMenuOpen(false);
+    },
+    [applyZoomPercent]
+  );
+
+  const handleFitSelect = useCallback(() => {
+    setIsFit(true);
+    setGridScale(1);
+    setIsZoomMenuOpen(false);
+  }, []);
+
+  const handleCustomSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const parsed = parseFloat(customZoom);
+      if (!Number.isFinite(parsed)) {
+        return;
+      }
+      applyZoomPercent(parsed);
+      setIsZoomMenuOpen(false);
+    },
+    [applyZoomPercent, customZoom]
+  );
+
+  useEffect(() => {
+    setCustomZoom(String(zoomPercent));
+  }, [zoomPercent]);
 
 
   useEffect(() => {
@@ -47,7 +107,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-background relative">
       {/* Main Content - Infinite Bento Grid */}
       <main className="h-screen pt-16">
-        <BentoGrid onScaleChange={handleScaleChange} />
+        <BentoGrid onScaleChange={handleScaleChange} scale={gridScale} />
       </main>
 
       {/* Floating Chat Bar */}
@@ -71,7 +131,76 @@ export default function Dashboard() {
           <span className="text-muted-foreground/60" aria-hidden="true">
             •
           </span>
-          <span>{zoomPercent}%</span>
+          <DropdownMenu open={isZoomMenuOpen} onOpenChange={setIsZoomMenuOpen}>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-muted-foreground/80 transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Adjust dashboard zoom"
+              >
+                <span>{isFit ? "Fit" : `${zoomPercent}%`}</span>
+                <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" sideOffset={8} className="w-56">
+              <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">
+                Zoom options
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {PRESET_ZOOM_LEVELS.map((level) => (
+                <DropdownMenuItem
+                  key={level}
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    handlePresetSelect(level);
+                  }}
+                  className="flex items-center justify-between text-sm"
+                >
+                  {level}%
+                  {!isFit && zoomPercent === level ? (
+                    <Check className="h-4 w-4" aria-hidden="true" />
+                  ) : null}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuItem
+                onSelect={(event) => {
+                  event.preventDefault();
+                  handleFitSelect();
+                }}
+                className="flex items-center justify-between text-sm"
+              >
+                Fit to screen
+                {isFit ? <Check className="h-4 w-4" aria-hidden="true" /> : null}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <form onSubmit={handleCustomSubmit} className="grid gap-2 px-2 py-2">
+                <label
+                  htmlFor="dashboard-custom-zoom"
+                  className="text-xs font-medium text-muted-foreground"
+                >
+                  Custom zoom
+                </label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="dashboard-custom-zoom"
+                    value={customZoom}
+                    onChange={(event) =>
+                      setCustomZoom(event.target.value.replace(/[^0-9.]/g, ""))
+                    }
+                    inputMode="decimal"
+                    placeholder="120"
+                    className="h-8"
+                  />
+                  <Button type="submit" size="sm">
+                    Apply
+                  </Button>
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Enter a value between 50% and 200%.
+                </p>
+              </form>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </Badge>
       </motion.div>
     </div>
