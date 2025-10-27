@@ -17,6 +17,9 @@ import {
   HeartPulse,
   PenTool,
   Library,
+  Workflow,
+  Sparkles,
+  BellRing,
   type LucideIcon
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -98,6 +101,33 @@ const modules: Module[] = [
     color: "primary",
     size: "medium",
     summary: "Today's brief • 3 new archives"
+  },
+  {
+    id: "automations",
+    title: "Automations",
+    icon: Workflow,
+    route: "/automations",
+    color: "accent",
+    size: "medium",
+    summary: "3 active • 6.4h saved"
+  },
+  {
+    id: "insights",
+    title: "AI Insights",
+    icon: Sparkles,
+    route: "/insights",
+    color: "primary",
+    size: "medium",
+    summary: "12% uplift • New actions"
+  },
+  {
+    id: "notifications",
+    title: "Notifications",
+    icon: BellRing,
+    route: "/notifications",
+    color: "accent",
+    size: "small",
+    summary: "3 alerts • Snooze active"
   }
 ];
 
@@ -114,7 +144,10 @@ const moduleOrderPresets: Record<number, string[]> = {
     "travel",
     "system",
     "health",
-    "knowledge"
+    "knowledge",
+    "automations",
+    "insights",
+    "notifications"
   ],
   4: [
     "finance",
@@ -123,7 +156,10 @@ const moduleOrderPresets: Record<number, string[]> = {
     "travel",
     "system",
     "health",
-    "knowledge"
+    "knowledge",
+    "automations",
+    "insights",
+    "notifications"
   ],
   5: [
     "finance",
@@ -132,7 +168,10 @@ const moduleOrderPresets: Record<number, string[]> = {
     "travel",
     "system",
     "health",
-    "knowledge"
+    "knowledge",
+    "automations",
+    "insights",
+    "notifications"
   ]
 };
 

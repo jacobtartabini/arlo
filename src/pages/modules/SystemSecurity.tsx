@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,10 @@ import {
   Cpu,
   Activity,
   TimerReset,
-  Wifi
+  Wifi,
+  GaugeCircle,
+  ShieldCheck as ShieldCheckIcon,
+  Loader2
 } from "lucide-react";
 import { FloatingChatBar } from "@/components/FloatingChatBar";
 
@@ -48,10 +51,18 @@ const cardVariants = {
 
 export default function SystemSecurity() {
   const navigate = useNavigate();
+  const [quickFixStatus, setQuickFixStatus] = useState<"idle" | "running" | "done">("idle");
 
   useEffect(() => {
     document.title = "System & Security — Arlo";
   }, []);
+
+  const handleQuickFixes = () => {
+    setQuickFixStatus("running");
+    setTimeout(() => {
+      setQuickFixStatus("done");
+    }, 1200);
+  };
 
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
@@ -166,6 +177,29 @@ export default function SystemSecurity() {
                   <p className="text-xs text-muted-foreground">Live resource usage, uptime, and network status.</p>
                 </div>
               </div>
+              <div className="grid gap-4 sm:grid-cols-3 text-sm">
+                <div className="rounded-lg border border-border/40 p-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-muted-foreground">CPU usage</p>
+                    <p className="text-foreground font-semibold">42%</p>
+                  </div>
+                  <GaugeCircle className="w-5 h-5 text-accent" />
+                </div>
+                <div className="rounded-lg border border-border/40 p-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Memory</p>
+                    <p className="text-foreground font-semibold">68%</p>
+                  </div>
+                  <GaugeCircle className="w-5 h-5 text-accent" />
+                </div>
+                <div className="rounded-lg border border-border/40 p-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Tailscale</p>
+                    <p className="text-foreground font-semibold">Secure tunnel</p>
+                  </div>
+                  <ShieldCheckIcon className="w-5 h-5 text-emerald-400" />
+                </div>
+              </div>
               <div className="grid gap-4 md:grid-cols-2">
                 {metrics.map((metric) => (
                   <div key={metric.label} className="rounded-lg border border-border/40 p-4 space-y-2">
@@ -199,6 +233,29 @@ export default function SystemSecurity() {
                     <p className="text-foreground font-medium">418 Mbps • Stable</p>
                   </div>
                 </div>
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-xs text-muted-foreground">
+                  {quickFixStatus === "done"
+                    ? "Latest run: backend health checks passed 12 seconds ago."
+                    : "Quick fixes restart services, clears cache, and validates tunnels."}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleQuickFixes}
+                  disabled={quickFixStatus === "running"}
+                >
+                  {quickFixStatus === "running" ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Running fixes
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheckIcon className="w-4 h-4 mr-2" /> Quick Fixes
+                    </>
+                  )}
+                </Button>
               </div>
             </Card>
           </motion.div>

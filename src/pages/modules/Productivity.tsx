@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
 import {
   ArrowLeft,
   CalendarCheck,
@@ -15,7 +16,10 @@ import {
   Inbox,
   Sparkles,
   Flame,
-  Clock3
+  Clock3,
+  Target,
+  CalendarDays,
+  ListChecks
 } from "lucide-react";
 import { FloatingChatBar } from "@/components/FloatingChatBar";
 
@@ -45,6 +49,17 @@ const habits = [
   { label: "Read 20 pages", streak: 6 }
 ];
 
+const recentTasks = [
+  { title: "Archive sprint retro", status: "Completed · 2h ago" },
+  { title: "Update onboarding doc", status: "In review · Due tomorrow" },
+  { title: "Sync with AI research", status: "Scheduled · Thu 10:30" }
+];
+
+const upcomingEvents = [
+  { time: "Apr 28 · 09:30", title: "Design critique", location: "Studio" },
+  { time: "Apr 29 · 13:00", title: "Investor sync", location: "Holo call" }
+];
+
 const cardVariants = {
   hidden: { opacity: 0, y: 16 },
   visible: (index: number) => ({
@@ -56,6 +71,7 @@ const cardVariants = {
 
 export default function Productivity() {
   const navigate = useNavigate();
+  const [focusMode, setFocusMode] = useState(true);
 
   useEffect(() => {
     document.title = "Productivity — Arlo";
@@ -97,8 +113,46 @@ export default function Productivity() {
 
       <main className="relative z-10 p-6 pb-32">
         <div className="max-w-6xl mx-auto space-y-6">
+          <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={0}>
+            <Card className="glass p-6 space-y-6 sm:space-y-0 sm:flex sm:items-center sm:justify-between">
+              <div className="flex items-start gap-4">
+                <div className="w-10 h-10 rounded-full bg-accent/15 flex items-center justify-center">
+                  <Target className="w-5 h-5 text-accent" />
+                </div>
+                <div className="space-y-2">
+                  <div>
+                    <h2 className="text-lg font-semibold text-foreground">Focus Mode</h2>
+                    <p className="text-sm text-muted-foreground">
+                      Silence non-essential notifications, tighten calendar holds, and surface only critical work.
+                    </p>
+                  </div>
+                  <div className="grid gap-2 text-xs text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <CalendarDays className="w-3.5 h-3.5" /> Upcoming focus locks sync from the connected calendar API.
+                    </div>
+                    {upcomingEvents.map((event) => (
+                      <div key={event.time} className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
+                        <span className="text-foreground font-medium">{event.title}</span>
+                        <span>• {event.time} — {event.location}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Switch checked={focusMode} onCheckedChange={setFocusMode} />
+                <div className="text-sm text-foreground font-medium">
+                  {focusMode ? "Active" : "Paused"}
+                  <p className="text-xs text-muted-foreground">
+                    {focusMode ? "Notifications muted for 90 minutes." : "Focus automations paused until resumed."}
+                  </p>
+                </div>
+              </div>
+            </Card>
+          </motion.div>
+
           <div className="grid gap-6 xl:grid-cols-3">
-            <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={0} className="xl:col-span-2">
+            <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={1} className="xl:col-span-2">
               <Card className="glass-intense p-6 space-y-6">
                 <div className="flex items-center justify-between">
                   <h2 className="text-xl font-semibold text-foreground">To-Do & Reminders</h2>
@@ -147,7 +201,7 @@ export default function Productivity() {
               </Card>
             </motion.div>
 
-            <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={1}>
+            <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={2}>
               <Card className="glass p-6 space-y-4">
                 <div className="flex items-center gap-3">
                   <PenLine className="w-5 h-5 text-accent" />
@@ -167,8 +221,8 @@ export default function Productivity() {
             </motion.div>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-2">
-            <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={2}>
+          <div className="grid gap-6 lg:grid-cols-3">
+            <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={3} className="lg:col-span-2">
               <Card className="glass p-6 space-y-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -200,7 +254,7 @@ export default function Productivity() {
               </Card>
             </motion.div>
 
-            <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={3}>
+            <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={4}>
               <Card className="glass p-6 space-y-5">
                 <div className="flex items-center gap-3">
                   <Inbox className="w-5 h-5 text-accent" />
@@ -225,10 +279,30 @@ export default function Productivity() {
                 </div>
               </Card>
             </motion.div>
+
+            <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={5}>
+              <Card className="glass p-6 space-y-4">
+                <div className="flex items-center gap-3">
+                  <ListChecks className="w-5 h-5 text-accent" />
+                  <div>
+                    <h2 className="text-lg font-semibold text-foreground">Recent Tasks</h2>
+                    <p className="text-xs text-muted-foreground">Track quick wins and open loops Arlo is watching.</p>
+                  </div>
+                </div>
+                <div className="space-y-3 text-sm">
+                  {recentTasks.map((task) => (
+                    <div key={task.title} className="rounded-lg border border-border/40 p-3">
+                      <p className="text-foreground font-medium">{task.title}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{task.status}</p>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </motion.div>
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2">
-            <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={4}>
+            <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={6}>
               <Card className="glass p-6 space-y-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -275,7 +349,7 @@ export default function Productivity() {
               </Card>
             </motion.div>
 
-            <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={5}>
+            <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={7}>
               <Card className="glass p-6 space-y-4">
                 <div className="flex items-center gap-3">
                   <Clock3 className="w-5 h-5 text-accent" />
