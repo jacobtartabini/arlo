@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/providers/AuthProvider";
@@ -11,6 +11,11 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { tailscaleVerified } = useAuth();
   const { isConnected, checkConnection } = useArlo();
+  const [zoomPercent, setZoomPercent] = useState(100);
+
+  const handleScaleChange = useCallback((value: number) => {
+    setZoomPercent(Math.round(value * 100));
+  }, []);
 
 
   useEffect(() => {
@@ -42,7 +47,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-background relative">
       {/* Main Content - Infinite Bento Grid */}
       <main className="h-screen pt-16">
-        <BentoGrid />
+        <BentoGrid onScaleChange={handleScaleChange} />
       </main>
 
       {/* Floating Chat Bar */}
@@ -55,9 +60,18 @@ export default function Dashboard() {
         transition={{ delay: 0.5 }}
         className="fixed top-6 right-6 z-40"
       >
-        <Badge className="glass px-4 py-2">
-          <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse" />
-          <span className="text-sm font-medium">Arlo Online</span>
+        <Badge
+          variant="secondary"
+          className="flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium bg-muted/80 text-muted-foreground border border-border/60 shadow-sm"
+        >
+          <span className="flex items-center gap-1">
+            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+            <span>Arlo Online</span>
+          </span>
+          <span className="text-muted-foreground/60" aria-hidden="true">
+            •
+          </span>
+          <span>{zoomPercent}%</span>
         </Badge>
       </motion.div>
     </div>
