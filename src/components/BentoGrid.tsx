@@ -140,8 +140,12 @@ export function BentoGrid() {
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.button === 0 && e.target === containerRef.current) {
-      setIsDragging(true);
+    if (e.button === 0) {
+      const target = e.target as HTMLElement;
+      // Allow dragging from background or grid container
+      if (target === containerRef.current || target.classList.contains('spatial-grid') || target.closest('.grid')) {
+        setIsDragging(true);
+      }
     }
   };
 
@@ -174,17 +178,14 @@ export function BentoGrid() {
       onMouseLeave={handleMouseUp}
       style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
     >
-      {/* Parallax background layer */}
+      {/* Animated dot grid background with micro-parallax */}
       <motion.div
         animate={{
-          x: parallaxOffset.x,
-          y: parallaxOffset.y
+          x: parallaxOffset.x * 0.5,
+          y: parallaxOffset.y * 0.5
         }}
         transition={{ type: "spring", stiffness: 100, damping: 20 }}
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background: `radial-gradient(circle at ${50 + parallaxOffset.x * 0.1}% ${50 + parallaxOffset.y * 0.1}%, hsl(var(--primary) / 0.03) 0%, transparent 50%)`
-        }}
+        className="absolute inset-0 pointer-events-none dot-grid-pattern"
       />
 
       {/* Main grid - centered */}

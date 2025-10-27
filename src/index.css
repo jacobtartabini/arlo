@@ -234,41 +234,25 @@ All colors MUST be HSL.
     animation: shake 0.5s ease-in-out;
   }
 
-  /* Animated spatial grid with micro-parallax */
+  /* Animated dot grid pattern with micro-parallax */
   .spatial-grid {
     position: relative;
     background: hsl(var(--background));
   }
 
-  .spatial-grid::before {
-    content: '';
-    position: absolute;
-    inset: 0;
+  .dot-grid-pattern {
     background-image: 
-      radial-gradient(circle at center, hsl(var(--foreground) / 0.03) 1px, transparent 1px);
-    background-size: 32px 32px;
-    animation: grid-drift 60s linear infinite;
-    pointer-events: none;
+      radial-gradient(circle, hsl(var(--foreground) / 0.06) 1px, transparent 1px);
+    background-size: 24px 24px;
+    animation: dot-drift 40s linear infinite;
   }
 
-  .spatial-grid::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(
-      ellipse at center,
-      hsl(var(--primary) / 0.02) 0%,
-      transparent 70%
-    );
-    pointer-events: none;
-  }
-
-  @keyframes grid-drift {
+  @keyframes dot-drift {
     0% {
       background-position: 0 0;
     }
     100% {
-      background-position: 32px 32px;
+      background-position: 24px 24px;
     }
   }
 
