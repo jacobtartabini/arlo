@@ -30,8 +30,7 @@ export function FloatingChatBar() {
       initial={{ y: 100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
-      className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50"
-      style={{ left: '50%' }}
+      className="fixed bottom-6 inset-x-0 z-50 flex justify-center px-4"
     >
       <motion.div
         animate={{

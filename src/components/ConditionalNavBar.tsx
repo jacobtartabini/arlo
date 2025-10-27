@@ -2,13 +2,13 @@ import React from "react";
 import { useLocation } from "react-router-dom";
 import NavBar from "./NavBar";
 
-const unprotectedRoutes = ["/login", "/unauthorized"];
+const hiddenRoutes = ["/login", "/unauthorized", "/", "/dashboard"];
 
 export default function ConditionalNavBar() {
   const location = useLocation();
-  const isUnprotectedRoute = unprotectedRoutes.includes(location.pathname);
+  const shouldHideNav = hiddenRoutes.includes(location.pathname);
 
-  if (isUnprotectedRoute) {
+  if (shouldHideNav) {
     return null;
   }
 
