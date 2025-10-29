@@ -220,6 +220,27 @@ All colors MUST be HSL.
     animation: spin 8s linear infinite;
   }
 
+  .orbit-ring,
+  .orbit-ring-delayed,
+  .orbit-ring-drift {
+    transform-origin: center;
+    will-change: transform, opacity;
+  }
+
+  .orbit-ring {
+    animation: orbit-ring 6s ease-in-out infinite;
+  }
+
+  .orbit-ring-delayed {
+    animation: orbit-ring 6s ease-in-out infinite;
+    animation-delay: -2s;
+  }
+
+  .orbit-ring-drift {
+    animation: orbit-ring 6s ease-in-out infinite;
+    animation-delay: -4s;
+  }
+
   .animate-bounce-subtle {
     animation: bounce-subtle 2s ease-in-out infinite;
   }
@@ -264,10 +285,33 @@ All colors MUST be HSL.
   }
 
   .dot-grid-pattern {
-    background-image: 
+    background-image:
       radial-gradient(circle, hsl(var(--foreground) / 0.06) 1px, transparent 1px);
     background-size: 24px 24px;
     animation: dot-drift 40s linear infinite;
+  }
+
+  @keyframes orbit-ring {
+    0% {
+      transform: scale(0.92) rotate(0deg);
+      opacity: 0.45;
+    }
+    25% {
+      transform: scale(1.02) rotate(90deg);
+      opacity: 0.75;
+    }
+    50% {
+      transform: scale(1.08) rotate(180deg);
+      opacity: 0.9;
+    }
+    75% {
+      transform: scale(1) rotate(270deg);
+      opacity: 0.7;
+    }
+    100% {
+      transform: scale(0.92) rotate(360deg);
+      opacity: 0.45;
+    }
   }
 
   @keyframes dot-drift {
