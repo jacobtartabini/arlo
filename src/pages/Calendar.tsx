@@ -16,11 +16,9 @@ import {
   startOfMonth,
   startOfWeek
 } from "date-fns";
-import { BadgeCheck, Calendar as CalendarIcon, CalendarClock, Check, ChevronLeft, ChevronRight, ExternalLink, Link as LinkIcon, Plus, RefreshCcw, Settings, Share2, Target, Users } from "lucide-react";
+import { Calendar as CalendarIcon, CalendarClock, Check, ChevronLeft, ChevronRight, Link as LinkIcon, Plus, Target } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -33,8 +31,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useToast } from "@/components/ui/use-toast";
@@ -43,12 +39,10 @@ import {
   BOOKING_STORAGE_KEY,
   DEFAULT_BOOKINGS,
   DEFAULT_EVENTS,
-  DEFAULT_PROJECTS,
   DEFAULT_TASKS,
   EVENT_STORAGE_KEY,
   BookingSlot,
   CalendarEvent,
-  Project,
   Task,
   formatSlotLabel,
   getPublicBookingUrl,
@@ -455,20 +449,6 @@ const CalendarPage: React.FC = () => {
     return format(selectedDate, "EEEE, d MMM yyyy");
   }, [selectedDate, view]);
 
-  const connectedCalendars = React.useMemo(
-    () => ["Google", "Apple", "Outlook"].map(name => ({ id: name.toLowerCase(), name })),
-    []
-  );
-
-  const nextBooking = React.useMemo(() => {
-    const now = new Date();
-    return bookings
-      .filter(slot => slot.available)
-      .map(slot => ({ slot, start: parseISO(`${slot.date}T${slot.startTime}:00`) }))
-      .filter(entry => entry.start > now)
-      .sort((a, b) => a.start.getTime() - b.start.getTime())[0]?.slot;
-  }, [bookings]);
-
   const bookingLink = React.useMemo(() => getPublicBookingUrl("jacob"), []);
 
   const handleCopyBookingLink = React.useCallback(() => {
@@ -546,364 +526,359 @@ const CalendarPage: React.FC = () => {
     resetDraft();
   };
 
-  const handleRemoveBlock = (block: CalendarBlock) => {
-    if (block.source === "event") {
-      setEvents(prev => prev.filter(event => event.id !== block.id));
-      toast({ title: "Event removed", description: `${block.title} was removed.` });
-    }
-    if (block.source === "booking") {
-      setBookings(prev => prev.filter(slot => slot.id !== block.id));
-      toast({ title: "Booking removed", description: `${block.title} was removed.` });
-    }
-  };
+  const miniMonthDays = React.useMemo(
+    () =>
+      eachDayOfInterval({
+        start: startOfWeek(startOfMonth(selectedDate), { weekStartsOn: 1 }),
+        end: endOfWeek(endOfMonth(selectedDate), { weekStartsOn: 1 })
+      }),
+    [selectedDate]
+  );
 
-  const plannedProjects = React.useMemo(() => DEFAULT_PROJECTS, []);
+  const weekdayLabels = React.useMemo(() => {
+    const start = startOfWeek(new Date(), { weekStartsOn: 1 });
+    return Array.from({ length: 7 }).map((_, index) => format(addDays(start, index), "EEE"));
+  }, []);
+
+  const upcomingItems = React.useMemo(() => {
+    const now = new Date();
+    const items: {
+      id: string;
+      title: string;
+      subtitle?: string;
+      start: Date;
+      color: string;
+    }[] = [];
+
+    events.forEach(event => {
+      const start = parseISO(`${event.date}T${event.startTime}:00`);
+      if (start < now) return;
+      items.push({
+        id: event.id,
+        title: event.title,
+        subtitle: event.location || event.category,
+        start,
+        color: event.color || "#2563eb"
+      });
+    });
+
+    bookings
+      .filter(slot => !slot.available && slot.bookedBy)
+      .forEach(slot => {
+        const start = parseISO(`${slot.date}T${slot.startTime}:00`);
+        if (start < now) return;
+        items.push({
+          id: slot.id,
+          title: slot.title ?? formatSlotLabel(slot),
+          subtitle: slot.bookedBy ?? undefined,
+          start,
+          color: "#7c3aed"
+        });
+      });
+
+    return items.sort((a, b) => a.start.getTime() - b.start.getTime()).slice(0, 6);
+  }, [bookings, events]);
+
+  const nextAvailableSlot = React.useMemo(() => {
+    const now = new Date();
+    return bookings
+      .filter(slot => slot.available)
+      .map(slot => ({ slot, start: parseISO(`${slot.date}T${slot.startTime}:00`) }))
+      .filter(entry => entry.start > now)
+      .sort((a, b) => a.start.getTime() - b.start.getTime())[0]?.slot;
+  }, [bookings]);
 
   const renderMonthGrid = () => (
-    <div className="grid grid-cols-7 gap-px rounded-xl border bg-muted">
-      {days.map(day => {
-        const dayBlocks = buildBlocks(events, bookings, day);
-        return (
-          <div
-            key={day.toISOString()}
-            className={cn(
-              "flex min-h-[120px] flex-col bg-background p-3",
-              !isSameMonth(day, selectedDate) && "bg-muted/60 text-muted-foreground"
-            )}
-          >
-            <div className="flex items-center justify-between text-xs font-medium">
-              <span
-                className={cn(
-                  "inline-flex h-6 w-6 items-center justify-center rounded-full",
-                  isToday(day) && "bg-primary text-primary-foreground"
-                )}
-              >
-                {format(day, "d")}
-              </span>
-              <span>{dayBlocks.length}</span>
-            </div>
-            <div className="mt-2 space-y-1">
-              {dayBlocks.slice(0, 3).map(block => (
-                <div
-                  key={block.id}
-                  className="flex items-center gap-2 rounded-md bg-muted/60 px-2 py-1 text-xs"
-                  style={{ borderLeft: `3px solid ${block.color}` }}
-                >
-                  <span className="truncate font-medium">{block.title}</span>
-                  <span className="truncate text-[10px] text-muted-foreground">
-                    {minutesToTime(block.startMinutes)}
-                  </span>
-                </div>
-              ))}
-              {dayBlocks.length > 3 && (
-                <Button variant="link" className="h-auto p-0 text-xs">
-                  +{dayBlocks.length - 3} more
-                </Button>
+    <div className="h-full min-h-[640px] overflow-auto">
+      <div className="grid min-h-full grid-cols-7 border-l border-t">
+        {days.map(day => {
+          const dayBlocks = buildBlocks(events, bookings, day);
+          const isSelected = format(day, "yyyy-MM-dd") === format(selectedDate, "yyyy-MM-dd");
+          return (
+            <button
+              key={day.toISOString()}
+              type="button"
+              onClick={() => setSelectedDate(day)}
+              className={cn(
+                "flex min-h-[120px] flex-col border-b border-r px-3 pb-3 pt-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                !isSameMonth(day, selectedDate) && "bg-muted/60 text-muted-foreground",
+                isSelected && "bg-primary/5"
               )}
-            </div>
-          </div>
-        );
-      })}
+            >
+              <div className="flex items-center justify-between text-xs font-medium">
+                <span
+                  className={cn(
+                    "inline-flex h-6 w-6 items-center justify-center rounded-full",
+                    isToday(day) && "bg-primary text-primary-foreground"
+                  )}
+                >
+                  {format(day, "d")}
+                </span>
+                {dayBlocks.length > 0 && (
+                  <span className="text-[10px] text-muted-foreground">{dayBlocks.length}</span>
+                )}
+              </div>
+              <div className="mt-3 space-y-1">
+                {dayBlocks.slice(0, 3).map(block => (
+                  <div
+                    key={block.id}
+                    className="flex items-center gap-2 rounded-md bg-muted/50 px-2 py-1 text-xs"
+                    style={{ borderLeft: `3px solid ${block.color}` }}
+                  >
+                    <span className="truncate font-medium">{block.title}</span>
+                    <span className="truncate text-[10px] text-muted-foreground">
+                      {minutesToTime(block.startMinutes)}
+                    </span>
+                  </div>
+                ))}
+                {dayBlocks.length > 3 && (
+                  <span className="block text-xs text-muted-foreground">+{dayBlocks.length - 3} more</span>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 
   const renderTimeline = () => (
-    <div className="relative overflow-hidden rounded-2xl border bg-background">
-      <div className="absolute inset-y-0 left-16 w-px bg-border" />
-      <div className="flex">
-        <div
-          className="flex w-16 flex-col border-r bg-muted/50 text-right text-xs"
-          style={{ lineHeight: `${HOUR_HEIGHT}px` }}
-        >
+    <div className="relative h-full min-h-[640px] overflow-auto">
+      <div className="flex min-h-full">
+        <div className="sticky left-0 z-10 flex w-16 flex-col border-r bg-card text-right text-[11px] text-muted-foreground">
           {Array.from({ length: (DISPLAY_END_MINUTES - DISPLAY_START_MINUTES) / 60 }).map((_, index) => {
             const minutes = DISPLAY_START_MINUTES + index * 60;
             return (
-              <div key={minutes} className="h-[52px] px-2 py-3 text-muted-foreground">
+              <div key={minutes} className="h-[52px] px-2 pt-2">
                 {minutes % 120 === 0 ? minutesToTime(minutes) : ""}
               </div>
             );
           })}
         </div>
-        <div className="flex-1">
-          <div className={cn("grid", view === "week" ? "grid-cols-7" : "grid-cols-1")}> 
-            {focusBlocks.map(({ day, blocks }) => (
-              <div key={day.toISOString()} className="relative border-l">
-                <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-background/95 px-4 py-3 backdrop-blur">
-                  <div>
-                    <p className="text-xs text-muted-foreground">{format(day, "EEEE")}</p>
-                    <p className={cn("text-lg font-semibold", isToday(day) && "text-primary")}>{format(day, "d MMM")}</p>
-                  </div>
-                  <Badge variant={isToday(day) ? "default" : "secondary"}>
-                    {blocks.filter(block => block.source === "task").length} focus blocks
-                  </Badge>
+        <div className={cn("grid flex-1", view === "week" ? "min-w-[700px] grid-cols-7" : "grid-cols-1")}> 
+          {focusBlocks.map(({ day, blocks }) => (
+            <div key={day.toISOString()} className="relative border-r last:border-r-0">
+              <div className="sticky top-0 z-10 flex h-16 items-end justify-between border-b bg-card/95 px-4 pb-3 backdrop-blur">
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{format(day, "EEE")}</p>
+                  <p className={cn("text-xl font-semibold", isToday(day) && "text-primary")}>{format(day, "d MMM")}</p>
                 </div>
-                <div
-                  className="relative"
-                  style={{ height: `${(HOURS_PER_DAY / 60) * HOUR_HEIGHT}px` }}
-                >
-                  {blocks.map(block => {
-                    const top = minutesToPx(block.startMinutes);
-                    const height = Math.max(40, minutesToPx(block.endMinutes) - top);
-                    return (
-                      <div
-                        key={block.id}
-                        className={cn(
-                          "group absolute left-4 right-4 cursor-pointer rounded-xl border bg-background shadow-sm transition",
-                          block.source === "task" && "border-dashed"
-                        )}
-                        style={{ top, height, borderLeft: `4px solid ${block.color}` }}
-                      >
-                        <div className="flex h-full flex-col justify-between p-3">
-                          <div className="space-y-1">
-                            <p className="text-sm font-semibold leading-tight">{block.title}</p>
-                            {block.subtitle && (
-                              <p className="text-xs text-muted-foreground">{block.subtitle}</p>
-                            )}
-                          </div>
-                          <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>
-                              {minutesToTime(block.startMinutes)} – {minutesToTime(block.endMinutes)}
-                            </span>
-                            {block.source !== "task" && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100"
-                                onClick={() => handleRemoveBlock(block)}
-                              >
-                                <span className="sr-only">Remove block</span>
-                                ×
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                <span className="text-xs text-muted-foreground">
+                  {blocks.filter(block => block.source === "task").length} focus
+                </span>
               </div>
-            ))}
-          </div>
+              <div
+                className="relative"
+                style={{ height: `${(HOURS_PER_DAY / 60) * HOUR_HEIGHT}px` }}
+              >
+                <div className="absolute inset-0">
+                  {Array.from({ length: (HOURS_PER_DAY / 60) + 1 }).map((_, index) => (
+                    <div
+                      key={index}
+                      className="absolute left-0 right-0 border-t border-dashed border-border/70"
+                      style={{ top: `${index * HOUR_HEIGHT}px` }}
+                    />
+                  ))}
+                </div>
+                {blocks.map(block => {
+                  const top = minutesToPx(block.startMinutes);
+                  const height = Math.max(44, minutesToPx(block.endMinutes) - top);
+                  return (
+                    <div
+                      key={block.id}
+                      className={cn(
+                        "absolute left-3 right-3 rounded-xl border border-border/60 bg-card/95 p-3 text-sm shadow-sm backdrop-blur transition",
+                        block.source === "task" && "border-dashed"
+                      )}
+                      style={{ top, height, borderLeft: `4px solid ${block.color}` }}
+                    >
+                      <div className="space-y-1">
+                        <p className="font-medium leading-tight">{block.title}</p>
+                        {block.subtitle && (
+                          <p className="text-xs text-muted-foreground">{block.subtitle}</p>
+                        )}
+                      </div>
+                      <p className="mt-3 text-xs text-muted-foreground">
+                        {minutesToTime(block.startMinutes)} – {minutesToTime(block.endMinutes)}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
   );
 
+  const renderMiniMonth = () => (
+    <div className="rounded-2xl border bg-card p-4 shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-sm font-medium text-foreground">{format(selectedDate, "MMMM yyyy")}</p>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-full"
+            onClick={() => setSelectedDate(prev => addMonths(prev, -1))}
+            aria-label="Previous month"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-full"
+            onClick={() => setSelectedDate(prev => addMonths(prev, 1))}
+            aria-label="Next month"
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+      <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-muted-foreground">
+        {weekdayLabels.map(label => (
+          <span key={label}>{label.slice(0, 2)}</span>
+        ))}
+      </div>
+      <div className="mt-2 grid grid-cols-7 gap-1 text-sm">
+        {miniMonthDays.map(day => {
+          const isCurrentMonth = isSameMonth(day, selectedDate);
+          const isCurrentDay = isToday(day);
+          const isSelectedDay = format(day, "yyyy-MM-dd") === format(selectedDate, "yyyy-MM-dd");
+          return (
+            <button
+              key={day.toISOString()}
+              type="button"
+              onClick={() => setSelectedDate(day)}
+              className={cn(
+                "flex h-8 items-center justify-center rounded-full text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+                !isCurrentMonth && "text-muted-foreground/60",
+                isSelectedDay && "bg-primary text-primary-foreground",
+                !isSelectedDay && isCurrentDay && "border border-primary text-primary",
+                !isSelectedDay && !isCurrentDay && "hover:bg-muted"
+              )}
+            >
+              {format(day, "d")}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   return (
-    <div className="mx-auto flex w-full max-w-[1500px] flex-1 flex-col gap-6 p-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-3">
-          <Badge className="bg-primary/10 text-primary">Unified workspace</Badge>
+    <div className="flex h-full w-full flex-col">
+      <header className="border-b bg-background/80 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-col gap-1">
+              <h1 className="text-2xl font-semibold tracking-tight">Calendar</h1>
+              <p className="text-sm text-muted-foreground">Intentional time-blocking with a calm, focused layout.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <ToggleGroup type="single" value={view} onValueChange={value => value && setView(value as CalendarView)}>
+                {VIEW_OPTIONS.map(option => (
+                  <ToggleGroupItem key={option.id} value={option.id} className="px-3 py-1">
+                    {option.label}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+              <Button onClick={() => setDialogOpen(true)} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Create
+              </Button>
+            </div>
+          </div>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-semibold tracking-tight">Calendar</h1>
+            <div className="flex items-center rounded-full border bg-card">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full"
+                onClick={() => handleNavigate("prev")}
+                aria-label="Previous period"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full"
+                onClick={() => handleNavigate("next")}
+                aria-label="Next period"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
             <Button variant="outline" size="sm" className="gap-2" onClick={() => handleNavigate("today")}>
               <Target className="h-4 w-4" />
               Today
             </Button>
-            <div className="flex items-center rounded-full border">
-              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => handleNavigate("prev")}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Separator orientation="vertical" className="h-8" />
-              <Button variant="ghost" size="icon" className="rounded-full" onClick={() => handleNavigate("next")}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
+            <span className="text-lg font-medium text-foreground">{rangeLabel}</span>
           </div>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            A calm, Motion-inspired view that blends meetings, bookings and prioritized tasks. Your external booking
-            page stays in sync, so confirmed sessions appear instantly.
-          </p>
         </div>
-        <Card className="w-full max-w-sm border-primary/30">
-          <CardHeader className="space-y-1 pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Share2 className="h-4 w-4" />
-              Public booking link
-            </CardTitle>
-            <p className="text-xs text-muted-foreground">Share this link to let anyone reserve time on your calendar.</p>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="rounded-full border px-3 py-2 text-xs">
-              <div className="truncate font-medium">{bookingLink.replace(/^https?:\/\//, "")}</div>
-              <div className="text-[10px] text-muted-foreground">Syncs directly with your /calendar board</div>
-            </div>
-            <div className="flex gap-2">
-              <Button className="flex-1" onClick={handleCopyBookingLink}>
-                <LinkIcon className="mr-2 h-4 w-4" /> Copy link
-              </Button>
-              <Button variant="outline" size="icon" asChild>
-                <a href={bookingLink} target="_blank" rel="noreferrer">
-                  <ExternalLink className="h-4 w-4" />
-                  <span className="sr-only">Open booking link</span>
-                </a>
-              </Button>
-            </div>
-            {nextBooking && (
-              <div className="rounded-lg border bg-muted/50 p-3 text-xs">
+      </header>
+
+      <div className="mx-auto flex w-full max-w-6xl flex-1 gap-6 px-6 pb-6 pt-4 lg:pt-6">
+        <aside className="hidden w-64 flex-col gap-6 lg:flex">
+          <div className="rounded-2xl border bg-card p-4 shadow-sm">
+            <Button className="w-full justify-center gap-2" onClick={() => setDialogOpen(true)}>
+              <Plus className="h-4 w-4" />
+              New event
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mt-2 w-full justify-start gap-2 text-muted-foreground"
+              onClick={handleCopyBookingLink}
+            >
+              <LinkIcon className="h-4 w-4" />
+              Copy booking link
+            </Button>
+            <p className="mt-2 truncate text-[11px] text-muted-foreground">{bookingLink.replace(/^https?:\/\//, "")}</p>
+            {nextAvailableSlot && (
+              <div className="mt-3 rounded-xl bg-muted/60 px-3 py-2 text-xs">
                 <p className="flex items-center gap-2 text-muted-foreground">
                   <CalendarClock className="h-3.5 w-3.5" />
                   Next available slot
                 </p>
-                <p className="mt-1 font-medium">{formatSlotLabel(nextBooking)}</p>
+                <p className="mt-1 font-medium text-foreground">{formatSlotLabel(nextAvailableSlot)}</p>
               </div>
             )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border bg-muted/40 p-4">
-            <div className="flex items-center gap-3">
-              <div className="rounded-full bg-primary/10 p-2 text-primary">
-                <CalendarIcon className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-xs uppercase text-muted-foreground">Week of</p>
-                <p className="text-base font-semibold">{rangeLabel}</p>
-              </div>
-            </div>
-            <ToggleGroup type="single" value={view} onValueChange={value => value && setView(value as CalendarView)}>
-              {VIEW_OPTIONS.map(option => (
-                <ToggleGroupItem key={option.id} value={option.id} className="px-3 py-1">
-                  {option.label}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-            <Button onClick={() => setDialogOpen(true)} className="gap-2">
-              <Plus className="h-4 w-4" />
-              New
-            </Button>
           </div>
 
+          {renderMiniMonth()}
+
+          <div className="rounded-2xl border bg-card p-4 shadow-sm">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <CalendarIcon className="h-4 w-4" />
+              Upcoming
+            </div>
+            <ScrollArea className="mt-3 max-h-[240px] pr-2">
+              <div className="space-y-3">
+                {upcomingItems.length ? (
+                  upcomingItems.map(item => (
+                    <div key={item.id} className="rounded-lg border border-border/60 p-3 text-xs">
+                      <p className="text-sm font-medium" style={{ color: item.color }}>
+                        {item.title}
+                      </p>
+                      {item.subtitle && <p className="mt-1 text-muted-foreground">{item.subtitle}</p>}
+                      <p className="mt-1 text-muted-foreground">{format(item.start, "EEE, MMM d · p")}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-muted-foreground">Nothing scheduled yet.</p>
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+        </aside>
+
+        <main className="flex-1 overflow-hidden rounded-3xl border bg-card shadow-sm">
           {view === "month" ? renderMonthGrid() : renderTimeline()}
-        </div>
-
-        <div className="space-y-4">
-          <Card className="border-primary/20">
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <RefreshCcw className="h-4 w-4" />
-                Motion-style plan
-              </CardTitle>
-              <p className="text-xs text-muted-foreground">Auto-arranged tasks layered with your meetings for deep work.</p>
-            </CardHeader>
-            <CardContent>
-              <ScrollArea className="h-[260px] pr-3">
-                <div className="space-y-3">
-                  {focusBlocks.map(({ day, blocks }) => (
-                    <div key={day.toISOString()} className="rounded-lg border bg-muted/40 p-3">
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>{format(day, "EEEE, MMM d")}</span>
-                        <span>{blocks.length} items</span>
-                      </div>
-                      <div className="mt-2 space-y-2">
-                        {blocks.map(block => (
-                          <div key={block.id} className="flex items-start gap-3">
-                            <div className="mt-1 h-2 w-2 rounded-full" style={{ backgroundColor: block.color }} />
-                            <div>
-                              <p className="text-sm font-medium leading-tight">{block.title}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {minutesToTime(block.startMinutes)} – {minutesToTime(block.endMinutes)}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Users className="h-4 w-4" />
-                Connected calendars
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {connectedCalendars.map(calendar => (
-                <div key={calendar.id} className="flex items-center justify-between rounded-xl border p-3">
-                  <div className="flex items-center gap-3">
-                    <div className="rounded-full bg-muted p-2">
-                      <BadgeCheck className="h-4 w-4 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{calendar.name} Calendar</p>
-                      <p className="text-xs text-muted-foreground">Sync active · two-way availability</p>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="sm">
-                    Manage
-                  </Button>
-                </div>
-              ))}
-              <Button variant="outline" className="w-full">
-                <Settings className="mr-2 h-4 w-4" />
-                Calendar settings
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <Tabs defaultValue="tasks" className="w-full">
-              <CardHeader className="pb-0">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-base">Workspace streams</CardTitle>
-                  <TabsList className="grid grid-cols-2">
-                    <TabsTrigger value="tasks">Tasks</TabsTrigger>
-                    <TabsTrigger value="projects">Projects</TabsTrigger>
-                  </TabsList>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <TabsContent value="tasks" className="space-y-3">
-                  {DEFAULT_TASKS.map(task => (
-                    <div key={task.id} className="rounded-xl border p-3">
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium">{task.title}</p>
-                        <Badge style={{ backgroundColor: PRIORITY_COLOR[task.priority], color: "#0f172a" }}>
-                          {PRIORITY_LABEL[task.priority]}
-                        </Badge>
-                      </div>
-                      <p className="mt-1 text-xs text-muted-foreground">{task.description}</p>
-                    </div>
-                  ))}
-                </TabsContent>
-                <TabsContent value="projects" className="space-y-3">
-                  {plannedProjects.map(project => {
-                    const start = format(parseISO(project.startDate), "MMM d");
-                    const end = format(parseISO(project.endDate), "MMM d, yyyy");
-                    return (
-                      <div key={project.id} className="rounded-xl border p-3">
-                        <p className="text-sm font-semibold">{project.name}</p>
-                        <p className="text-xs text-muted-foreground">{project.description}</p>
-                        <div className="mt-2 flex items-center justify-between text-xs">
-                          <span>{start} – {end}</span>
-                          <Badge variant="outline">{project.progress}%</Badge>
-                        </div>
-                        {project.milestones?.length ? (
-                          <div className="mt-3 space-y-1">
-                            {project.milestones.slice(0, 2).map(milestone => (
-                              <div key={milestone.id} className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                                <span>{milestone.title}</span>
-                              </div>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </TabsContent>
-              </CardContent>
-            </Tabs>
-          </Card>
-        </div>
+        </main>
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setDialogOpen}>
