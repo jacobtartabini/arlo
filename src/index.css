@@ -223,37 +223,40 @@ All colors MUST be HSL.
   .orbit-ring,
   .orbit-ring-delayed,
   .orbit-ring-drift {
-    --orbit-duration: 7s;
+    --orbit-duration: 6.5s;
     --orbit-delay: 0s;
-    --orbit-scale-min: 0.94;
-    --orbit-scale-mid: 1.02;
-    --orbit-scale-max: 1.08;
+    --orbit-scale-min: 0.9;
+    --orbit-scale-mid: 1.05;
+    --orbit-scale-max: 1.18;
+    --orbit-spin: 0deg;
     transform-origin: center;
     will-change: transform, opacity;
-    animation: orbit-harmonic var(--orbit-duration) cubic-bezier(0.6, 0, 0.4, 1) infinite;
+    animation: orbit-synergy var(--orbit-duration) cubic-bezier(0.55, 0, 0.45, 1) infinite;
     animation-delay: var(--orbit-delay);
   }
 
   .orbit-ring {
-    --orbit-scale-min: 0.94;
-    --orbit-scale-mid: 1.03;
-    --orbit-scale-max: 1.08;
+    --orbit-delay: 0s;
+    --orbit-scale-min: 0.9;
+    --orbit-scale-mid: 1.06;
+    --orbit-scale-max: 1.18;
+    --orbit-spin: 2deg;
   }
 
   .orbit-ring-delayed {
-    --orbit-duration: 7.5s;
-    --orbit-delay: -0.5s;
-    --orbit-scale-min: 0.96;
-    --orbit-scale-mid: 1.05;
-    --orbit-scale-max: 1.12;
+    --orbit-delay: -0.7s;
+    --orbit-scale-min: 0.92;
+    --orbit-scale-mid: 1.08;
+    --orbit-scale-max: 1.22;
+    --orbit-spin: 10deg;
   }
 
   .orbit-ring-drift {
-    --orbit-duration: 8s;
-    --orbit-delay: -1s;
-    --orbit-scale-min: 0.98;
-    --orbit-scale-mid: 1.06;
-    --orbit-scale-max: 1.14;
+    --orbit-delay: -1.4s;
+    --orbit-scale-min: 0.94;
+    --orbit-scale-mid: 1.1;
+    --orbit-scale-max: 1.26;
+    --orbit-spin: -6deg;
   }
 
   .animate-bounce-subtle {
@@ -306,26 +309,26 @@ All colors MUST be HSL.
     animation: dot-drift 40s linear infinite;
   }
 
-  @keyframes orbit-harmonic {
+  @keyframes orbit-synergy {
     0% {
-      transform: rotate(0deg) scale(var(--orbit-scale-min));
-      opacity: 0.35;
+      transform: rotate(var(--orbit-spin)) scale(var(--orbit-scale-min));
+      opacity: 0.3;
     }
     20% {
-      transform: rotate(72deg) scale(var(--orbit-scale-mid));
+      transform: rotate(calc(var(--orbit-spin) + 18deg)) scale(var(--orbit-scale-mid));
       opacity: 0.55;
     }
-    50% {
-      transform: rotate(180deg) scale(var(--orbit-scale-max));
-      opacity: 0.85;
+    48% {
+      transform: rotate(calc(var(--orbit-spin) + 52deg)) scale(var(--orbit-scale-max));
+      opacity: 0.9;
     }
-    80% {
-      transform: rotate(288deg) scale(var(--orbit-scale-mid));
-      opacity: 0.55;
+    75% {
+      transform: rotate(calc(var(--orbit-spin) + 24deg)) scale(var(--orbit-scale-mid));
+      opacity: 0.65;
     }
     100% {
-      transform: rotate(360deg) scale(var(--orbit-scale-min));
-      opacity: 0.35;
+      transform: rotate(calc(var(--orbit-spin) + 72deg)) scale(var(--orbit-scale-min));
+      opacity: 0.3;
     }
   }
 

@@ -101,13 +101,13 @@ const TailscaleAuth: React.FC = () => {
         <div className="flex justify-center mb-8 animate-fade-in-up">
           <div className="relative group w-36 h-36 flex items-center justify-center">
             <div
-              className="absolute inset-1 rounded-full border border-gray-300/50 orbit-ring z-0"
+              className="absolute inset-2 rounded-full border border-gray-300/50 orbit-ring z-0"
             />
             <div
-              className="absolute inset-[1.25rem] rounded-full border border-gray-400/30 orbit-ring-delayed z-0"
+              className="absolute inset-5 rounded-full border border-gray-400/30 orbit-ring-delayed z-0"
             />
             <div
-              className="absolute inset-[1.75rem] rounded-full border border-gray-500/20 orbit-ring-drift z-0"
+              className="absolute inset-8 rounded-full border border-gray-500/20 orbit-ring-drift z-0"
             />
             <Shield
               className="relative z-10 w-20 h-20 text-gray-800 animate-breathe transition-all duration-500 group-hover:text-gray-600"
