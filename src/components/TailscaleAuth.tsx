@@ -101,16 +101,13 @@ const TailscaleAuth: React.FC = () => {
         <div className="flex justify-center mb-8 animate-fade-in-up">
           <div className="relative group w-36 h-36 flex items-center justify-center">
             <div
-              className="absolute inset-1 rounded-full border border-gray-300/50 animate-spin-slow z-0"
-              style={{ animationDuration: '4s', animationIterationCount: 'infinite' }}
+              className="absolute inset-1 rounded-full border border-gray-300/50 orbit-ring z-0"
             />
             <div
-              className="absolute inset-4 rounded-full border border-gray-400/30 animate-pulse z-0"
-              style={{ animationDuration: '4s', animationIterationCount: 'infinite' }}
+              className="absolute inset-[1.25rem] rounded-full border border-gray-400/30 orbit-ring-delayed z-0"
             />
             <div
-              className="absolute inset-7 rounded-full border border-gray-500/20 animate-ping z-0"
-              style={{ animationDuration: '4s', animationIterationCount: 'infinite' }}
+              className="absolute inset-[1.75rem] rounded-full border border-gray-500/20 orbit-ring-drift z-0"
             />
             <Shield
               className="relative z-10 w-20 h-20 text-gray-800 animate-breathe transition-all duration-500 group-hover:text-gray-600"
@@ -122,7 +119,7 @@ const TailscaleAuth: React.FC = () => {
 
         {/* App Title with staggered letter animation */}
         <div className="overflow-hidden animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
-          <h1 className="text-6xl font-light text-gray-900 tracking-wide hover:tracking-widest transition-all duration-700 cursor-default">
+          <h1 className="text-6xl font-semibold text-gray-900 tracking-wide hover:tracking-widest transition-all duration-700 cursor-default">
             <span className="inline-block animate-bounce-subtle" style={{ animationDelay: '0s' }}>A</span>
             <span className="inline-block animate-bounce-subtle" style={{ animationDelay: '0.1s' }}>r</span>
             <span className="inline-block animate-bounce-subtle" style={{ animationDelay: '0.2s' }}>l</span>
