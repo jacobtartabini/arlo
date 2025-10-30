@@ -104,7 +104,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background relative">
+    <div className="min-h-screen bg-background relative overflow-hidden">
       {/* Main Content - Infinite Bento Grid */}
       <main className="h-screen pt-16">
         <BentoGrid onScaleChange={handleScaleChange} scale={gridScale} />
@@ -112,6 +112,14 @@ export default function Dashboard() {
 
       {/* Floating Chat Bar */}
       <FloatingChatBar />
+
+      {/* Edge Fade Overlay */}
+      <div className="pointer-events-none fixed inset-0 z-30">
+        <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-background via-background/80 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-background via-background/80 to-transparent" />
+        <div className="absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-background via-background/80 to-transparent" />
+        <div className="absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-background via-background/80 to-transparent" />
+      </div>
 
       {/* Arlo Status Badge */}
       <motion.div
