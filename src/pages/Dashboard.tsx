@@ -106,7 +106,7 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
       {/* Main Content - Infinite Bento Grid */}
-      <main className="h-screen pt-16">
+      <main className="h-screen">
         <BentoGrid onScaleChange={handleScaleChange} scale={gridScale} />
       </main>
 
