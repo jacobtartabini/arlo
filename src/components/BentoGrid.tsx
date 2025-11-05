@@ -63,6 +63,7 @@ const moduleOrderPresets: Record<number, string[]> = {
 interface BentoGridProps {
   onScaleChange?: (value: number) => void;
   scale?: number;
+  recenterSignal?: number;
 }
 
 type LayoutConfig = {
@@ -152,7 +153,7 @@ const getModuleSpan = (size: Module["size"], columns: number): ModuleSpan => {
   }
 };
 
-export function BentoGrid({ onScaleChange, scale: controlledScale }: BentoGridProps) {
+export function BentoGrid({ onScaleChange, scale: controlledScale, recenterSignal }: BentoGridProps) {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [internalScale, setInternalScale] = useState(controlledScale ?? 1);
@@ -175,6 +176,8 @@ export function BentoGrid({ onScaleChange, scale: controlledScale }: BentoGridPr
 
   const isControlled = controlledScale !== undefined;
   const userScale = isControlled ? controlledScale : internalScale;
+
+  const hasInitializedRecenter = useRef(false);
 
   const setScaleValue = useCallback(
     (next: number) => {
@@ -255,6 +258,30 @@ export function BentoGrid({ onScaleChange, scale: controlledScale }: BentoGridPr
     positionRef.current = { x: 0, y: 0 };
     setParallaxOffset({ x: 0, y: 0 });
   }, [layoutConfig.baseTile, layoutConfig.columns, layoutConfig.gap, layoutConfig.padding]);
+
+  useEffect(() => {
+    if (recenterSignal === undefined) {
+      return;
+    }
+
+    if (!hasInitializedRecenter.current) {
+      hasInitializedRecenter.current = true;
+      return;
+    }
+
+    activePointers.current.clear();
+    panPointerId.current = null;
+    pinchStartDistance.current = null;
+    isPinchingRef.current = false;
+    setIsDragging(false);
+    document.body.style.userSelect = "";
+
+    setPosition({ x: 0, y: 0 });
+    positionRef.current = { x: 0, y: 0 };
+    velocityRef.current = { x: 0, y: 0 };
+    setParallaxOffset({ x: 0, y: 0 });
+    setScaleValue(1);
+  }, [recenterSignal, setScaleValue]);
 
   useEffect(() => {
     const container = containerRef.current;
