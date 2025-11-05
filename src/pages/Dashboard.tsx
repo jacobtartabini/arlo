@@ -7,7 +7,7 @@ import {
   type FormEvent,
 } from "react";
 import { motion } from "framer-motion";
-import { Badge } from "@/components/ui/badge";
+import { badgeVariants } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -37,6 +37,7 @@ export default function Dashboard() {
   const [isZoomMenuOpen, setIsZoomMenuOpen] = useState(false);
   const [isFit, setIsFit] = useState(false);
   const [isChipInteracting, setIsChipInteracting] = useState(false);
+  const [recenterSignal, setRecenterSignal] = useState(0);
 
   const zoomPercent = Math.round(gridScale * 100);
   const isChipExpanded = isChipInteracting || isZoomMenuOpen;
@@ -119,6 +120,12 @@ export default function Dashboard() {
     []
   );
 
+  const handleRecenter = useCallback(() => {
+    setIsFit(false);
+    setGridScale(1);
+    setRecenterSignal((prev) => prev + 1);
+  }, []);
+
 
   useEffect(() => {
     document.title = "Arlo Dashboard — Your Personal Operating System";
@@ -149,7 +156,11 @@ export default function Dashboard() {
     <div className="min-h-screen bg-background relative overflow-hidden">
       {/* Main Content - Infinite Bento Grid */}
       <main className="h-screen">
-        <BentoGrid onScaleChange={handleScaleChange} scale={gridScale} />
+        <BentoGrid
+          onScaleChange={handleScaleChange}
+          scale={gridScale}
+          recenterSignal={recenterSignal}
+        />
       </main>
 
       {/* Floating Chat Bar */}
@@ -179,10 +190,12 @@ export default function Dashboard() {
         role="group"
         tabIndex={0}
       >
-        <Badge
-          variant="secondary"
+        <motion.div
+          layout
+          transition={{ type: "spring", stiffness: 400, damping: 30 }}
           className={cn(
-            "flex items-center rounded-full text-xs font-medium border border-border/60 bg-muted/80 text-muted-foreground shadow-sm backdrop-blur transition-all duration-300 overflow-hidden",
+            badgeVariants({ variant: "secondary" }),
+            "rounded-full border border-border/60 bg-muted/80 text-muted-foreground shadow-sm backdrop-blur transition-colors duration-300 ease-out overflow-hidden",
             isChipExpanded ? "gap-3 px-3 py-1" : "gap-1.5 px-2 py-1"
           )}
         >
@@ -215,6 +228,7 @@ export default function Dashboard() {
                     type="button"
                     className="flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground/80 transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     aria-label="Open scanner"
+                    onClick={handleRecenter}
                   >
                     <Scan className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
@@ -280,7 +294,7 @@ export default function Dashboard() {
               </DropdownMenu>
             </div>
           ) : null}
-        </Badge>
+        </motion.div>
 
       </motion.div>
     </div>
