@@ -2,6 +2,19 @@ import { format } from "date-fns";
 
 export type CalendarCategory = "personal" | "work" | "school" | "meeting" | "project";
 
+export type RecurrenceFrequency = "daily" | "weekly" | "monthly" | "yearly";
+
+export type RecurrenceEndRule =
+  | { type: "never" }
+  | { type: "onDate"; date: string }
+  | { type: "after"; count: number };
+
+export type EventRecurrence = {
+  frequency: RecurrenceFrequency;
+  interval?: number;
+  end?: RecurrenceEndRule;
+};
+
 export interface CalendarEvent {
   id: string;
   title: string;
@@ -9,9 +22,13 @@ export interface CalendarEvent {
   startTime: string;
   endTime: string;
   date: string;
+  endDate?: string;
   category: CalendarCategory;
   color: string;
   attendees?: string[];
+  location?: string;
+  allDay?: boolean;
+  recurrence?: EventRecurrence;
 }
 
 export type TaskCategory = "personal" | "work" | "school";
@@ -67,9 +84,16 @@ export const DEFAULT_EVENTS: CalendarEvent[] = [
     startTime: "09:30",
     endTime: "10:30",
     date: "2024-01-15",
+    endDate: "2024-01-15",
     category: "work",
     color: "#3b82f6",
     attendees: ["alex@arlo.ai", "casey@arlo.ai"],
+    location: "Huddle Room A",
+    recurrence: {
+      frequency: "weekly",
+      interval: 1,
+      end: { type: "onDate", date: "2024-05-31" }
+    }
   },
   {
     id: "2",
@@ -78,8 +102,10 @@ export const DEFAULT_EVENTS: CalendarEvent[] = [
     startTime: "13:00",
     endTime: "14:00",
     date: "2024-01-16",
+    endDate: "2024-01-16",
     category: "work",
     color: "#8b5cf6",
+    location: "Boardroom"
   },
   {
     id: "3",
@@ -87,8 +113,39 @@ export const DEFAULT_EVENTS: CalendarEvent[] = [
     startTime: "18:00",
     endTime: "19:00",
     date: "2024-01-16",
+    endDate: "2024-01-16",
     category: "personal",
     color: "#22c55e",
+    allDay: false
+  },
+  {
+    id: "4",
+    title: "Strategy Offsite",
+    description: "Quarterly leadership alignment",
+    startTime: "00:00",
+    endTime: "23:59",
+    date: "2024-02-05",
+    endDate: "2024-02-07",
+    category: "work",
+    color: "#f97316",
+    allDay: true,
+    location: "Napa Valley Retreat"
+  },
+  {
+    id: "5",
+    title: "Monthly Product Review",
+    description: "Cross-functional roadmap review",
+    startTime: "10:00",
+    endTime: "11:30",
+    date: "2024-01-10",
+    endDate: "2024-01-10",
+    category: "work",
+    color: "#0ea5e9",
+    recurrence: {
+      frequency: "monthly",
+      interval: 1,
+      end: { type: "never" }
+    }
   },
 ];
 

@@ -6,9 +6,13 @@ import {
   addMonths,
   addWeeks,
   eachDayOfInterval,
+  differenceInCalendarDays,
+  endOfDay,
   endOfMonth,
   endOfWeek,
   format,
+  isAfter,
+  isSameDay,
   parseISO,
   setMonth,
   setYear,
@@ -20,6 +24,7 @@ import {
   Calendar as CalendarIcon,
   CalendarClock,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   FileText,
@@ -27,16 +32,20 @@ import {
   MapPin,
   Palette,
   Plus,
+  RefreshCcw,
   UserPlus
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import {
@@ -64,18 +73,29 @@ import {
   SelectedBlockState,
   VIEW_OPTIONS
 } from "./calendar/types";
-import { buildBlocks, formatTimeRange, minutesToTime } from "./calendar/utils";
+import { buildBlocks, formatTimeRange, getUpcomingEventOccurrences, minutesToTime } from "./calendar/utils";
+
+const initialDraftDate = format(new Date(), "yyyy-MM-dd");
 
 const DEFAULT_DRAFT: DraftState = {
   kind: "event",
   title: "",
   description: "",
-  date: format(new Date(), "yyyy-MM-dd"),
+  date: initialDraftDate,
+  endDate: initialDraftDate,
   startTime: "10:00",
   endTime: "11:00",
+  allDay: false,
   location: "",
   color: "#2563eb",
-  attendees: ""
+  attendees: "",
+  recurrenceFrequency: "none",
+  recurrenceInterval: 1,
+  recurrenceEnd: {
+    type: "never",
+    date: initialDraftDate,
+    count: "10"
+  }
 };
 
 const CalendarPage: React.FC = () => {
@@ -86,6 +106,7 @@ const CalendarPage: React.FC = () => {
   const [bookings, setBookings] = useStoredState(BOOKING_STORAGE_KEY, DEFAULT_BOOKINGS);
   const [draft, setDraft] = React.useState<DraftState>(DEFAULT_DRAFT);
   const [isDialogOpen, setDialogOpen] = React.useState(false);
+  const [showAdvanced, setShowAdvanced] = React.useState(false);
   const [selectedBlock, setSelectedBlock] = React.useState<SelectedBlockState | null>(null);
   const [editingContext, setEditingContext] = React.useState<{ kind: DraftKind; id: string } | null>(null);
 
@@ -96,16 +117,120 @@ const CalendarPage: React.FC = () => {
 
   const scheduleSummary = React.useMemo(() => {
     try {
-      const start = parseISO(`${draft.date}T${draft.startTime || "00:00"}:00`);
-      const end = parseISO(`${draft.date}T${draft.endTime || "00:00"}:00`);
+      const startTime = draft.allDay ? "00:00" : draft.startTime || "00:00";
+      const endTime = draft.allDay ? "23:59" : draft.endTime || "00:00";
+      const start = parseISO(`${draft.date}T${startTime}:00`);
+      const endDateValue = draft.endDate || draft.date;
+      const end = parseISO(`${endDateValue}T${endTime}:00`);
       if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
         return null;
       }
-      return `${format(start, "EEEE, MMMM d")} · ${format(start, "h:mm a")} – ${format(end, "h:mm a")}`;
+
+      const sameDay = isSameDay(start, end);
+      const baseLabel = sameDay
+        ? `${format(start, "EEEE, MMMM d")}`
+        : `${format(start, "EEE, MMM d")} – ${format(end, "EEE, MMM d")}`;
+
+      const timeLabel = draft.allDay
+        ? "All day"
+        : sameDay
+          ? `${format(start, "p")} – ${format(end, "p")}`
+          : `${format(start, "p")} – ${format(end, "p")}`;
+
+      let summary = `${baseLabel} · ${timeLabel}`;
+
+      if (draft.kind === "event" && draft.recurrenceFrequency !== "none") {
+        const interval = Math.max(1, draft.recurrenceInterval || 1);
+        const frequencyLabel =
+          draft.recurrenceFrequency === "daily"
+            ? interval === 1
+              ? "daily"
+              : `every ${interval} days`
+            : draft.recurrenceFrequency === "weekly"
+              ? interval === 1
+                ? "weekly"
+                : `every ${interval} weeks`
+              : draft.recurrenceFrequency === "monthly"
+                ? interval === 1
+                  ? "monthly"
+                  : `every ${interval} months`
+                : interval === 1
+                  ? "yearly"
+                  : `every ${interval} years`;
+
+        let endLabel = "";
+        if (draft.recurrenceEnd.type === "onDate" && draft.recurrenceEnd.date) {
+          const endRuleDate = parseISO(`${draft.recurrenceEnd.date}T00:00:00`);
+          if (!Number.isNaN(endRuleDate.getTime())) {
+            endLabel = ` until ${format(endRuleDate, "MMM d, yyyy")}`;
+          }
+        } else if (draft.recurrenceEnd.type === "after" && draft.recurrenceEnd.count) {
+          endLabel = ` for ${draft.recurrenceEnd.count} times`;
+        }
+
+        summary = `${summary} · Repeats ${frequencyLabel}${endLabel}`;
+      }
+
+      return summary;
     } catch (error) {
       return null;
     }
-  }, [draft.date, draft.startTime, draft.endTime]);
+  }, [
+    draft.allDay,
+    draft.date,
+    draft.endDate,
+    draft.endTime,
+    draft.kind,
+    draft.recurrenceEnd.count,
+    draft.recurrenceEnd.date,
+    draft.recurrenceEnd.type,
+    draft.recurrenceFrequency,
+    draft.recurrenceInterval,
+    draft.startTime
+  ]);
+
+  const recurrenceDescription = React.useMemo(() => {
+    if (draft.kind !== "event" || draft.recurrenceFrequency === "none") {
+      return "Does not repeat.";
+    }
+
+    const interval = Math.max(1, draft.recurrenceInterval || 1);
+    const baseLabel =
+      draft.recurrenceFrequency === "daily"
+        ? interval === 1
+          ? "Repeats daily"
+          : `Repeats every ${interval} days`
+        : draft.recurrenceFrequency === "weekly"
+          ? interval === 1
+            ? "Repeats weekly"
+            : `Repeats every ${interval} weeks`
+          : draft.recurrenceFrequency === "monthly"
+            ? interval === 1
+              ? "Repeats monthly"
+              : `Repeats every ${interval} months`
+            : interval === 1
+              ? "Repeats yearly"
+              : `Repeats every ${interval} years`;
+
+    let suffix = "";
+    if (draft.recurrenceEnd.type === "onDate" && draft.recurrenceEnd.date) {
+      const endDate = parseISO(`${draft.recurrenceEnd.date}T00:00:00`);
+      if (!Number.isNaN(endDate.getTime())) {
+        suffix = ` until ${format(endDate, "MMM d, yyyy")}`;
+      }
+    } else if (draft.recurrenceEnd.type === "after" && draft.recurrenceEnd.count) {
+      suffix = ` for ${draft.recurrenceEnd.count} times`;
+    }
+
+    return `${baseLabel}${suffix}`;
+  }, [
+    draft.kind,
+    draft.recurrenceEnd.count,
+    draft.recurrenceEnd.date,
+    draft.recurrenceEnd.type,
+    draft.recurrenceFrequency,
+    draft.recurrenceInterval
+  ]);
 
   React.useEffect(() => {
     if (!isDialogOpen) {
@@ -120,10 +245,17 @@ const CalendarPage: React.FC = () => {
   const openCreateDialog = React.useCallback(
     (overrides?: Partial<DraftState>) => {
       setEditingContext(null);
+      const baseDate = overrides?.date ?? format(selectedDate, "yyyy-MM-dd");
+      const baseEndDate = overrides?.endDate ?? baseDate;
+      setShowAdvanced(false);
       setDraft(prev => ({
         ...DEFAULT_DRAFT,
-        date: format(selectedDate, "yyyy-MM-dd"),
+        date: baseDate,
+        endDate: baseEndDate,
         color: prev.color,
+        recurrenceEnd: overrides?.recurrenceEnd
+          ? { ...DEFAULT_DRAFT.recurrenceEnd, ...overrides.recurrenceEnd }
+          : { ...DEFAULT_DRAFT.recurrenceEnd, date: baseEndDate },
         ...overrides
       }));
       setDialogOpen(true);
@@ -262,14 +394,79 @@ const CalendarPage: React.FC = () => {
   };
 
   const handleDraftChange = <K extends keyof DraftState>(key: K, value: DraftState[K]) => {
-    setDraft(prev => ({ ...prev, [key]: value }));
+    setDraft(prev => {
+      const next = { ...prev, [key]: value } as DraftState;
+
+      if (key === "date" && typeof value === "string") {
+        if (next.endDate < value) {
+          next.endDate = value;
+        }
+        if (next.recurrenceEnd.date < value) {
+          next.recurrenceEnd = { ...next.recurrenceEnd, date: value };
+        }
+      }
+
+      if (key === "endDate" && typeof value === "string") {
+        if (value < next.date) {
+          next.endDate = next.date;
+        }
+        if (next.recurrenceEnd.type === "onDate" && next.recurrenceEnd.date < next.date) {
+          next.recurrenceEnd = { ...next.recurrenceEnd, date: next.date };
+        }
+      }
+
+      if (key === "allDay" && value === true) {
+        next.startTime = "00:00";
+        next.endTime = "23:59";
+      }
+
+      if (key === "kind" && value === "booking") {
+        next.recurrenceFrequency = "none";
+        next.allDay = false;
+        next.endDate = next.date;
+        next.recurrenceEnd = {
+          ...next.recurrenceEnd,
+          type: "never",
+          date: next.date,
+          count: DEFAULT_DRAFT.recurrenceEnd.count
+        };
+      }
+
+      if (key === "recurrenceFrequency") {
+        if (value === "none") {
+          next.recurrenceEnd = {
+            ...next.recurrenceEnd,
+            type: "never",
+            date: next.endDate,
+            count: DEFAULT_DRAFT.recurrenceEnd.count
+          };
+        } else if (next.recurrenceEnd.type === "onDate" && next.recurrenceEnd.date < next.date) {
+          next.recurrenceEnd = { ...next.recurrenceEnd, date: next.endDate };
+        }
+      }
+
+      return next;
+    });
+  };
+
+  const handleRecurrenceEndChange = (patch: Partial<DraftState["recurrenceEnd"]>) => {
+    setDraft(prev => ({
+      ...prev,
+      recurrenceEnd: { ...prev.recurrenceEnd, ...patch }
+    }));
   };
 
   const resetDraft = React.useCallback(() => {
+    const dateValue = format(selectedDate, "yyyy-MM-dd");
     setDraft(prev => ({
       ...DEFAULT_DRAFT,
-      date: format(selectedDate, "yyyy-MM-dd"),
-      color: prev.color
+      date: dateValue,
+      endDate: dateValue,
+      color: prev.color,
+      recurrenceEnd: {
+        ...DEFAULT_DRAFT.recurrenceEnd,
+        date: dateValue
+      }
     }));
   }, [selectedDate]);
 
@@ -280,10 +477,47 @@ const CalendarPage: React.FC = () => {
     }
 
     if (draft.kind === "event") {
+      if (!draft.allDay && (!draft.startTime || !draft.endTime)) {
+        toast({ title: "Add a time", description: "Please select a start and end time." });
+        return;
+      }
+
+      const startTime = draft.allDay ? "00:00" : draft.startTime || "00:00";
+      const endTime = draft.allDay ? "23:59" : draft.endTime || "00:00";
+      const startDate = draft.date;
+      const endDate = draft.endDate && draft.endDate >= draft.date ? draft.endDate : draft.date;
+      const start = parseISO(`${startDate}T${startTime}:00`);
+      const end = parseISO(`${endDate}T${endTime}:00`);
+
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+        toast({ title: "Invalid time", description: "Please provide a valid start and end time." });
+        return;
+      }
+
+      if (isAfter(start, end)) {
+        toast({ title: "Check the timing", description: "The event end must be after it starts." });
+        return;
+      }
+
       const attendees = draft.attendees
         .split(",")
         .map(entry => entry.trim())
         .filter(Boolean);
+
+      const recurrence = draft.recurrenceFrequency === "none"
+        ? undefined
+        : {
+            frequency: draft.recurrenceFrequency,
+            interval: Math.max(1, draft.recurrenceInterval || 1),
+            end:
+              draft.recurrenceEnd.type === "onDate" && draft.recurrenceEnd.date
+                ? { type: "onDate", date: draft.recurrenceEnd.date as string }
+                : draft.recurrenceEnd.type === "after" && Number(draft.recurrenceEnd.count) > 0
+                  ? { type: "after", count: Number(draft.recurrenceEnd.count) }
+                  : draft.recurrenceEnd.type === "never"
+                    ? { type: "never" }
+                    : undefined
+          };
 
       if (editingContext?.kind === "event") {
         const existing = events.find(event => event.id === editingContext.id);
@@ -294,12 +528,17 @@ const CalendarPage: React.FC = () => {
                   ...event,
                   title: draft.title,
                   description: draft.description || undefined,
-                  date: draft.date,
-                  startTime: draft.startTime,
-                  endTime: draft.endTime,
+                  date: startDate,
+                  endDate,
+                  startTime,
+                  endTime,
                   location: draft.location || undefined,
                   attendees,
-                  color: draft.color
+                  color: draft.color,
+                  allDay: draft.allDay,
+                  recurrence,
+                  // preserve recurrence when undefined to clear it
+                  ...(recurrence ? {} : { recurrence: undefined })
                 }
               : event
           )
@@ -313,13 +552,16 @@ const CalendarPage: React.FC = () => {
           id: `event-${Date.now()}`,
           title: draft.title,
           description: draft.description || undefined,
-          date: draft.date,
-          startTime: draft.startTime,
-          endTime: draft.endTime,
+          date: startDate,
+          endDate,
+          startTime,
+          endTime,
           location: draft.location || undefined,
           attendees,
           color: draft.color,
-          category: "custom"
+          category: "custom",
+          allDay: draft.allDay,
+          recurrence
         };
         setEvents(prev => [...prev, newEvent]);
         toast({ title: "Event added", description: `${draft.title} was added to your calendar.` });
@@ -416,17 +658,16 @@ const CalendarPage: React.FC = () => {
 
   const upcomingItems = React.useMemo(() => {
     const now = new Date();
-    const items: { id: string; title: string; subtitle?: string; start: Date; color: string }[] = [];
+    const items: { id: string; title: string; subtitle?: string; start: Date; color: string; allDay?: boolean }[] = [];
 
-    events.forEach(event => {
-      const start = parseISO(`${event.date}T${event.startTime}:00`);
-      if (start < now) return;
+    getUpcomingEventOccurrences(events, now, 6).forEach(({ event, start }) => {
       items.push({
-        id: event.id,
+        id: `${event.id}-${start.toISOString()}`,
         title: event.title,
         subtitle: event.location || event.category,
         start,
-        color: event.color || "#2563eb"
+        color: event.color || "#2563eb",
+        allDay: Boolean(event.allDay)
       });
     });
 
@@ -461,8 +702,10 @@ const CalendarPage: React.FC = () => {
       openCreateDialog({
         kind: "event",
         date: format(day, "yyyy-MM-dd"),
+        endDate: format(day, "yyyy-MM-dd"),
         startTime: minutesToTime(startMinutes),
-        endTime: minutesToTime(endMinutes)
+        endTime: minutesToTime(endMinutes),
+        allDay: false
       });
     },
     [openCreateDialog]
@@ -483,18 +726,45 @@ const CalendarPage: React.FC = () => {
         const event = events.find(item => item.id === block.id);
         if (!event) return;
         setEditingContext({ kind: "event", id: block.id });
+        const endDate = event.endDate ?? event.date;
+        const recurrence = event.recurrence;
+        const nextRecurrenceEnd: DraftState["recurrenceEnd"] = recurrence?.end
+          ? recurrence.end.type === "onDate"
+            ? { type: "onDate", date: recurrence.end.date, count: DEFAULT_DRAFT.recurrenceEnd.count }
+            : recurrence.end.type === "after"
+              ? {
+                  type: "after",
+                  date: endDate,
+                  count: String(recurrence.end.count ?? "")
+                }
+              : { type: "never", date: endDate, count: DEFAULT_DRAFT.recurrenceEnd.count }
+          : { ...DEFAULT_DRAFT.recurrenceEnd, date: endDate };
+
         setDraft(prev => ({
           ...DEFAULT_DRAFT,
           kind: "event",
           title: event.title,
           description: event.description ?? "",
           date: event.date,
+          endDate,
           startTime: event.startTime,
           endTime: event.endTime,
-          location: (event as { location?: string }).location ?? "",
+          allDay: Boolean(event.allDay),
+          location: event.location ?? "",
           color: event.color ?? prev.color,
-          attendees: event.attendees?.join(", ") ?? ""
+          attendees: event.attendees?.join(", ") ?? "",
+          recurrenceFrequency: recurrence?.frequency ?? "none",
+          recurrenceInterval: recurrence?.interval ?? 1,
+          recurrenceEnd: nextRecurrenceEnd
         }));
+        setShowAdvanced(
+          Boolean(
+            event.description ||
+              event.location ||
+              (event.attendees && event.attendees.length > 0) ||
+              event.recurrence
+          )
+        );
       } else if (block.source === "booking") {
         const slot = bookings.find(item => item.id === block.id);
         if (!slot) return;
@@ -506,12 +776,18 @@ const CalendarPage: React.FC = () => {
           title: slot.title ?? "",
           description: slotDescription,
           date: slot.date,
+          endDate: slot.date,
           startTime: slot.startTime,
           endTime: slot.endTime,
+          allDay: false,
           location: "",
           color: block.color ?? prev.color,
-          attendees: ""
+          attendees: "",
+          recurrenceFrequency: "none",
+          recurrenceInterval: 1,
+          recurrenceEnd: { ...DEFAULT_DRAFT.recurrenceEnd, type: "never", date: slot.date }
         }));
+        setShowAdvanced(Boolean(slotDescription));
       }
 
       setDialogOpen(true);
@@ -525,14 +801,41 @@ const CalendarPage: React.FC = () => {
       const dateString = format(day, "yyyy-MM-dd");
       const startTime = minutesToTime(startMinutes);
       const endTime = minutesToTime(endMinutes);
-      const whenLabel = `${format(day, "EEE, MMM d")} · ${formatTimeRange(startMinutes, endMinutes)}`;
+      const whenLabel = `${format(day, "EEE, MMM d")} · ${block.allDay ? "All day" : formatTimeRange(startMinutes, endMinutes)}`;
 
       if (block.source === "event") {
+        const event = events.find(item => item.id === block.id);
+        if (!event) {
+          setSelectedBlock(null);
+          return;
+        }
+
+        if (event.recurrence) {
+          toast({
+            title: "Recurring events",
+            description: "Drag to reschedule is not yet supported for repeating events."
+          });
+          setSelectedBlock(null);
+          return;
+        }
+
+        const originalStart = parseISO(`${event.date}T00:00:00`);
+        const newStart = startOfDay(day);
+        const dayShift = differenceInCalendarDays(newStart, originalStart);
+        const endDate = event.endDate ?? event.date;
+        const newEndDate = format(addDays(parseISO(`${endDate}T00:00:00`), dayShift), "yyyy-MM-dd");
+
         setEvents(prev =>
-          prev.map(event =>
-            event.id === block.id
-              ? { ...event, date: dateString, startTime, endTime }
-              : event
+          prev.map(item =>
+            item.id === block.id
+              ? {
+                  ...item,
+                  date: dateString,
+                  endDate: newEndDate,
+                  startTime: item.allDay ? "00:00" : startTime,
+                  endTime: item.allDay ? "23:59" : endTime
+                }
+              : item
           )
         );
         toast({ title: "Event rescheduled", description: `${block.title} moved to ${whenLabel}.` });
@@ -549,7 +852,7 @@ const CalendarPage: React.FC = () => {
 
       setSelectedBlock(null);
     },
-    [setBookings, setEvents, toast]
+    [events, setBookings, setEvents, toast]
   );
 
   return (
@@ -707,7 +1010,11 @@ const CalendarPage: React.FC = () => {
                           {item.title}
                         </p>
                         {item.subtitle && <p className="mt-1 text-muted-foreground">{item.subtitle}</p>}
-                        <p className="mt-1 text-muted-foreground">{format(item.start, "EEE, MMM d · p")}</p>
+                        <p className="mt-1 text-muted-foreground">
+                          {item.allDay
+                            ? `${format(item.start, "EEE, MMM d")} · All day`
+                            : format(item.start, "EEE, MMM d · p")}
+                        </p>
                       </div>
                     ))
                   ) : (
@@ -727,13 +1034,14 @@ const CalendarPage: React.FC = () => {
           if (!open) {
             resetDraft();
             setEditingContext(null);
+            setShowAdvanced(false);
           }
         }}
       >
         <DialogContent className="flex w-[calc(100vw-2rem)] max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-border/60 bg-background p-0 shadow-xl sm:max-w-[520px]">
           <ScrollArea className="flex-1">
             <div className="space-y-6 px-6 py-5">
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <Tabs
                   value={draft.kind}
                   onValueChange={value => handleDraftChange("kind", value as DraftKind)}
@@ -761,127 +1069,303 @@ const CalendarPage: React.FC = () => {
                   className="h-auto border-none bg-transparent px-0 text-2xl font-semibold leading-tight shadow-none focus-visible:border-transparent focus-visible:ring-0"
                 />
               </div>
-              <div className="space-y-1 rounded-2xl border border-border/60 bg-background/80 p-3 shadow-sm shadow-black/5">
-                <div className="flex items-start gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-muted/60">
+              <div className="space-y-4 rounded-2xl border border-border/60 bg-background/80 p-4 shadow-sm shadow-black/5">
+                <div className="flex items-start gap-3 rounded-xl border border-transparent px-3 py-3 transition-colors hover:border-border/60">
                   <CalendarClock className="mt-1 h-4 w-4 text-muted-foreground" />
-                  <div className="flex-1 space-y-2">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-                      <span className="font-medium text-foreground">Schedule</span>
-                      {scheduleSummary && <span className="truncate">{scheduleSummary}</span>}
+                  <div className="flex-1 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-foreground">Schedule</p>
+                        {scheduleSummary && (
+                          <p className="text-xs text-muted-foreground">{scheduleSummary}</p>
+                        )}
+                      </div>
+                      {draft.kind === "event" && (
+                        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                          <Switch
+                            checked={draft.allDay}
+                            onCheckedChange={checked => handleDraftChange("allDay", checked)}
+                          />
+                          <span>All day</span>
+                        </div>
+                      )}
                     </div>
-                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-                      <Input
-                        type="date"
-                        value={draft.date}
-                        onChange={event => handleDraftChange("date", event.target.value)}
-                        className="h-9 border border-transparent bg-muted/50 px-3 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20"
-                      />
-                      <div className="grid grid-cols-2 gap-2">
-                        <Input
-                          type="time"
-                          value={draft.startTime}
-                          onChange={event => handleDraftChange("startTime", event.target.value)}
-                          className="h-9 border border-transparent bg-muted/50 px-3 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20"
-                        />
-                        <Input
-                          type="time"
-                          value={draft.endTime}
-                          onChange={event => handleDraftChange("endTime", event.target.value)}
-                          className="h-9 border border-transparent bg-muted/50 px-3 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20"
-                        />
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="grid gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Start date
+                          </Label>
+                          <Input
+                            type="date"
+                            value={draft.date}
+                            onChange={event => handleDraftChange("date", event.target.value)}
+                            className="h-9 border border-transparent bg-muted/50 px-3 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20"
+                          />
+                        </div>
+                        {!draft.allDay && (
+                          <div className="space-y-1">
+                            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              Start time
+                            </Label>
+                            <Input
+                              type="time"
+                              value={draft.startTime}
+                              onChange={event => handleDraftChange("startTime", event.target.value)}
+                              className="h-9 border border-transparent bg-muted/50 px-3 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20"
+                            />
+                          </div>
+                        )}
+                      </div>
+                      <div className="grid gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            End date
+                          </Label>
+                          <Input
+                            type="date"
+                            value={draft.endDate}
+                            onChange={event => handleDraftChange("endDate", event.target.value)}
+                            disabled={draft.kind === "booking"}
+                            className={cn(
+                              "h-9 border border-transparent bg-muted/50 px-3 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20",
+                              draft.kind === "booking" && "cursor-not-allowed opacity-70"
+                            )}
+                          />
+                        </div>
+                        {!draft.allDay && (
+                          <div className="space-y-1">
+                            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              End time
+                            </Label>
+                            <Input
+                              type="time"
+                              value={draft.endTime}
+                              onChange={event => handleDraftChange("endTime", event.target.value)}
+                              className="h-9 border border-transparent bg-muted/50 px-3 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20"
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
                     <p className="text-xs text-muted-foreground">Time zone · {timezone}</p>
                   </div>
                 </div>
                 {draft.kind === "event" && (
-                  <div className="flex items-start gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-muted/60">
-                    <UserPlus className="mt-1 h-4 w-4 text-muted-foreground" />
-                    <div className="flex-1 space-y-1">
-                      <p className="text-sm font-medium text-foreground">Guests</p>
-                      <Input
-                        value={draft.attendees}
-                        onChange={event => handleDraftChange("attendees", event.target.value)}
-                        placeholder="Add guests"
-                        className="h-9 border border-transparent bg-muted/50 px-3 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20"
-                      />
-                      <p className="text-xs text-muted-foreground">Separate email addresses with commas.</p>
-                    </div>
-                  </div>
-                )}
-                <div className="flex items-start gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-muted/60">
-                  <Palette className="mt-1 h-4 w-4 text-muted-foreground" />
-                  <div className="flex-1 space-y-1">
-                    <p className="text-sm font-medium text-foreground">Color</p>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {COLOR_PRESETS.map(color => (
-                        <button
-                          key={color}
-                          type="button"
-                          onClick={() => handleDraftChange("color", color)}
-                          className={cn(
-                            "h-8 w-8 rounded-full border border-transparent transition-all",
-                            draft.color === color
-                              ? "ring-2 ring-offset-2 ring-offset-background ring-ring"
-                              : "hover:ring-2 hover:ring-ring/40"
+                  <div className="flex items-start gap-3 rounded-xl border border-transparent px-3 py-3 transition-colors hover:border-border/60">
+                    <RefreshCcw className="mt-1 h-4 w-4 text-muted-foreground" />
+                    <div className="flex-1 space-y-3">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium text-foreground">Recurrence</p>
+                        <p className="text-xs text-muted-foreground">{recurrenceDescription}</p>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Frequency
+                          </Label>
+                          <Select
+                            value={draft.recurrenceFrequency}
+                            onValueChange={value =>
+                              handleDraftChange("recurrenceFrequency", value as DraftState["recurrenceFrequency"])
+                            }
+                          >
+                            <SelectTrigger className="h-9 justify-between text-sm">
+                              <SelectValue placeholder="Does not repeat" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Does not repeat</SelectItem>
+                              <SelectItem value="daily">Daily</SelectItem>
+                              <SelectItem value="weekly">Weekly</SelectItem>
+                              <SelectItem value="monthly">Monthly</SelectItem>
+                              <SelectItem value="yearly">Yearly</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {draft.recurrenceFrequency !== "none" && (
+                          <div className="space-y-1">
+                            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              Repeat every
+                            </Label>
+                            <Input
+                              type="number"
+                              min={1}
+                              value={draft.recurrenceInterval}
+                              onChange={event =>
+                                handleDraftChange(
+                                  "recurrenceInterval",
+                                  Math.max(1, Number(event.target.value) || 1)
+                                )
+                              }
+                              className="h-9 border border-transparent bg-muted/50 px-3 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20"
+                            />
+                          </div>
+                        )}
+                      </div>
+                      {draft.recurrenceFrequency !== "none" && (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="space-y-1">
+                            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              Ends
+                            </Label>
+                            <Select
+                              value={draft.recurrenceEnd.type}
+                              onValueChange={value => {
+                                if (value === "never") {
+                                  handleRecurrenceEndChange({
+                                    type: "never",
+                                    date: draft.endDate,
+                                    count: DEFAULT_DRAFT.recurrenceEnd.count
+                                  });
+                                } else if (value === "onDate") {
+                                  handleRecurrenceEndChange({
+                                    type: "onDate",
+                                    date: draft.endDate,
+                                    count: DEFAULT_DRAFT.recurrenceEnd.count
+                                  });
+                                } else {
+                                  handleRecurrenceEndChange({ type: "after", count: draft.recurrenceEnd.count || "10" });
+                                }
+                              }}
+                            >
+                              <SelectTrigger className="h-9 justify-between text-sm">
+                                <SelectValue placeholder="Never" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="never">Never</SelectItem>
+                                <SelectItem value="onDate">On date</SelectItem>
+                                <SelectItem value="after">After</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {draft.recurrenceEnd.type === "onDate" && (
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                End date
+                              </Label>
+                              <Input
+                                type="date"
+                                value={draft.recurrenceEnd.date}
+                                min={draft.date}
+                                onChange={event => handleRecurrenceEndChange({ date: event.target.value })}
+                                className="h-9 border border-transparent bg-muted/50 px-3 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20"
+                              />
+                            </div>
                           )}
-                          style={{ backgroundColor: color }}
-                          aria-label={`Use ${color} for this ${draft.kind}`}
-                        />
-                      ))}
-                      <label className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-dashed border-border/70 text-[10px] text-muted-foreground transition-colors hover:border-foreground/60">
-                        <span className="sr-only">Choose a custom color</span>
-                        <input
-                          type="color"
-                          value={draft.color}
-                          onChange={event => handleDraftChange("color", event.target.value)}
-                          className="sr-only"
-                        />
-                        +
-                      </label>
-                    </div>
-                  </div>
-                </div>
-                {draft.kind === "event" && (
-                  <div className="flex items-start gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-muted/60">
-                    <MapPin className="mt-1 h-4 w-4 text-muted-foreground" />
-                    <div className="flex-1 space-y-1">
-                      <p className="text-sm font-medium text-foreground">Location</p>
-                      <Input
-                        value={draft.location}
-                        onChange={event => handleDraftChange("location", event.target.value)}
-                        placeholder="Add location"
-                        className="h-9 border border-transparent bg-muted/50 px-3 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20"
-                      />
+                          {draft.recurrenceEnd.type === "after" && (
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                Occurrences
+                              </Label>
+                              <Input
+                                type="number"
+                                min={1}
+                                value={draft.recurrenceEnd.count}
+                                onChange={event => handleRecurrenceEndChange({ count: event.target.value })}
+                                className="h-9 border border-transparent bg-muted/50 px-3 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
-                <div className="flex items-start gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-muted/60">
-                  <FileText className="mt-1 h-4 w-4 text-muted-foreground" />
-                  <div className="flex-1 space-y-1">
-                    <p className="text-sm font-medium text-foreground">
-                      {draft.kind === "event" ? "Description or attachments" : "Notes"}
-                    </p>
-                    <Textarea
-                      value={draft.description}
-                      onChange={event => handleDraftChange("description", event.target.value)}
-                      placeholder={draft.kind === "event" ? "Add a description" : "Add internal notes"}
-                      rows={3}
-                      className="min-h-[60px] border border-transparent bg-muted/50 px-3 py-2 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20"
-                    />
-                  </div>
-                </div>
+                <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
+                  <CollapsibleTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      type="button"
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm font-medium text-primary transition hover:text-primary"
+                    >
+                      <span>{showAdvanced ? "Hide advanced options" : "More options"}</span>
+                      <ChevronDown className={cn("h-4 w-4 transition-transform", showAdvanced && "rotate-180")} />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="space-y-3 pt-3">
+                    {draft.kind === "event" && (
+                      <div className="flex items-start gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-muted/60">
+                        <UserPlus className="mt-1 h-4 w-4 text-muted-foreground" />
+                        <div className="flex-1 space-y-1">
+                          <p className="text-sm font-medium text-foreground">Guests</p>
+                          <Input
+                            value={draft.attendees}
+                            onChange={event => handleDraftChange("attendees", event.target.value)}
+                            placeholder="Add guests"
+                            className="h-9 border border-transparent bg-muted/50 px-3 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20"
+                          />
+                          <p className="text-xs text-muted-foreground">Separate email addresses with commas.</p>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex items-start gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-muted/60">
+                      <Palette className="mt-1 h-4 w-4 text-muted-foreground" />
+                      <div className="flex-1 space-y-1">
+                        <p className="text-sm font-medium text-foreground">Color</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {COLOR_PRESETS.map(color => (
+                            <button
+                              key={color}
+                              type="button"
+                              onClick={() => handleDraftChange("color", color)}
+                              className={cn(
+                                "h-8 w-8 rounded-full border border-transparent transition-all",
+                                draft.color === color
+                                  ? "ring-2 ring-offset-2 ring-offset-background ring-ring"
+                                  : "hover:ring-2 hover:ring-ring/40"
+                              )}
+                              style={{ backgroundColor: color }}
+                              aria-label={`Use ${color} for this ${draft.kind}`}
+                            />
+                          ))}
+                          <label className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-dashed border-border/70 text-[10px] text-muted-foreground transition-colors hover:border-foreground/60">
+                            <span className="sr-only">Choose a custom color</span>
+                            <input
+                              type="color"
+                              value={draft.color}
+                              onChange={event => handleDraftChange("color", event.target.value)}
+                              className="sr-only"
+                            />
+                            +
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                    {draft.kind === "event" && (
+                      <div className="flex items-start gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-muted/60">
+                        <MapPin className="mt-1 h-4 w-4 text-muted-foreground" />
+                        <div className="flex-1 space-y-1">
+                          <p className="text-sm font-medium text-foreground">Location</p>
+                          <Input
+                            value={draft.location}
+                            onChange={event => handleDraftChange("location", event.target.value)}
+                            placeholder="Add location"
+                            className="h-9 border border-transparent bg-muted/50 px-3 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20"
+                          />
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex items-start gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-muted/60">
+                      <FileText className="mt-1 h-4 w-4 text-muted-foreground" />
+                      <div className="flex-1 space-y-1">
+                        <p className="text-sm font-medium text-foreground">
+                          {draft.kind === "event" ? "Description or attachments" : "Notes"}
+                        </p>
+                        <Textarea
+                          value={draft.description}
+                          onChange={event => handleDraftChange("description", event.target.value)}
+                          placeholder={draft.kind === "event" ? "Add a description" : "Add internal notes"}
+                          rows={3}
+                          className="min-h-[60px] border border-transparent bg-muted/50 px-3 py-2 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20"
+                        />
+                      </div>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
               </div>
             </div>
           </ScrollArea>
-          <DialogFooter className="flex flex-col gap-2 border-t border-border/60 bg-muted/40 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <Button
-              variant="ghost"
-              type="button"
-              className="justify-start px-0 text-sm text-muted-foreground hover:text-foreground"
-            >
-              More options
-            </Button>
+          <DialogFooter className="flex flex-col gap-2 border-t border-border/60 bg-muted/40 px-6 py-4 sm:flex-row sm:items-center sm:justify-end">
             <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
               <Button variant="ghost" type="button" onClick={() => setDialogOpen(false)}>
                 Cancel

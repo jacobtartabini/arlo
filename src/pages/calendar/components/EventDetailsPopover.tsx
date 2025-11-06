@@ -1,6 +1,6 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { format, parseISO } from "date-fns";
+import { endOfDay, format, isSameDay, parseISO } from "date-fns";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -124,8 +124,47 @@ export const EventDetailsPopover: React.FC<EventDetailsPopoverProps> = ({ block,
   }, [onClose, target]);
 
   const eventDate = React.useMemo(() => parseISO(`${block.date}T00:00:00`), [block.date]);
-  const formattedDate = React.useMemo(() => format(eventDate, "EEEE, MMM d yyyy"), [eventDate]);
-  const timeRange = block.allDay ? "All day" : formatTimeRange(block.startMinutes, block.endMinutes);
+  const occurrenceStart = React.useMemo(() => {
+    const value = typeof block.meta?.occurrenceStart === "string" ? parseISO(block.meta.occurrenceStart as string) : null;
+    if (value && !Number.isNaN(value.getTime())) {
+      return value;
+    }
+    return eventDate;
+  }, [block.meta?.occurrenceStart, eventDate]);
+
+  const occurrenceEnd = React.useMemo(() => {
+    const value = typeof block.meta?.occurrenceEnd === "string" ? parseISO(block.meta.occurrenceEnd as string) : null;
+    if (value && !Number.isNaN(value.getTime())) {
+      return value;
+    }
+    return block.allDay ? endOfDay(eventDate) : eventDate;
+  }, [block.allDay, block.meta?.occurrenceEnd, eventDate]);
+
+  const formattedDate = React.useMemo(() => {
+    if (!occurrenceStart || !occurrenceEnd) {
+      return format(eventDate, "EEEE, MMM d yyyy");
+    }
+
+    return isSameDay(occurrenceStart, occurrenceEnd)
+      ? format(occurrenceStart, "EEEE, MMM d yyyy")
+      : `${format(occurrenceStart, "EEE, MMM d")} – ${format(occurrenceEnd, "EEE, MMM d yyyy")}`;
+  }, [eventDate, occurrenceEnd, occurrenceStart]);
+
+  const timeRange = React.useMemo(() => {
+    if (!occurrenceStart || !occurrenceEnd) {
+      return block.allDay ? "All day" : formatTimeRange(block.startMinutes, block.endMinutes);
+    }
+
+    if (block.allDay) {
+      return isSameDay(occurrenceStart, occurrenceEnd)
+        ? "All day"
+        : `${format(occurrenceStart, "MMM d")} – ${format(occurrenceEnd, "MMM d")} · All day`;
+    }
+
+    return isSameDay(occurrenceStart, occurrenceEnd)
+      ? `${format(occurrenceStart, "p")} – ${format(occurrenceEnd, "p")}`
+      : `${format(occurrenceStart, "MMM d · p")} – ${format(occurrenceEnd, "MMM d · p")}`;
+  }, [block.allDay, block.endMinutes, block.startMinutes, occurrenceEnd, occurrenceStart]);
   const attendees = block.source === "event" && Array.isArray(block.meta?.attendees)
     ? (block.meta?.attendees as string[])
     : [];
