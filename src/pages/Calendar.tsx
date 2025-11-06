@@ -1349,8 +1349,9 @@ const CalendarPage: React.FC = () => {
           }
         }}
       >
-        <DialogContent className="sm:max-w-[520px] overflow-hidden rounded-2xl border border-border/60 bg-background p-0 shadow-xl">
-          <div className="space-y-6 px-6 py-5">
+        <DialogContent className="flex w-[calc(100vw-2rem)] max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-border/60 bg-background p-0 shadow-xl sm:max-w-[520px]">
+          <ScrollArea className="flex-1">
+            <div className="space-y-6 px-6 py-5">
             <div className="space-y-4">
               <Tabs
                 value={draft.kind}
@@ -1490,7 +1491,8 @@ const CalendarPage: React.FC = () => {
                 </div>
               </div>
             </div>
-          </div>
+            </div>
+          </ScrollArea>
           <DialogFooter className="flex flex-col gap-2 border-t border-border/60 bg-muted/40 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
             <Button
               variant="ghost"
@@ -1628,24 +1630,20 @@ const EventDetailsPopover: React.FC<EventDetailsPopoverProps> = ({ block, target
   const description = block.source === "event" && block.meta?.description
     ? String(block.meta.description)
     : undefined;
-  const accentRgb = hexToRgb(block.color ?? "#2563eb");
-  const accentBackground = accentRgb
-    ? `linear-gradient(135deg, rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.88), rgba(15, 23, 42, 0.95))`
-    : "linear-gradient(135deg, rgba(59, 130, 246, 0.88), rgba(15, 23, 42, 0.95))";
 
   const inviteUrl = slot ? getPublicBookingUrl(slot) : undefined;
 
   return createPortal(
     (
       <>
-        <div className="fixed inset-0 z-[199] bg-black/10 backdrop-blur-[1px]" onClick={onClose} />
+        <div className="fixed inset-0 z-[199] bg-black/5 backdrop-blur-[1px]" onClick={onClose} />
         <div
           ref={containerRef}
           role="dialog"
           aria-modal="true"
           className={cn(
-            "fixed z-[200] max-w-full rounded-3xl border border-white/10 bg-slate-950 text-white shadow-2xl transition-transform",
-            "ring-1 ring-white/10",
+            "fixed z-[200] max-w-full overflow-hidden rounded-3xl border border-border bg-popover text-foreground shadow-2xl transition-transform",
+            "ring-1 ring-border/40",
             "sm:rounded-[28px]"
           )}
           style={{
@@ -1655,109 +1653,99 @@ const EventDetailsPopover: React.FC<EventDetailsPopoverProps> = ({ block, target
             transformOrigin: position.origin
           }}
         >
-          <div
-            className="relative overflow-hidden rounded-t-3xl sm:rounded-t-[28px]"
-            style={{ backgroundImage: accentBackground }}
-          >
-            <div
-              className="absolute inset-0 opacity-30"
-              style={{ backgroundImage: "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.35), transparent 60%)" }}
-            />
-            <div className="relative flex items-start justify-between gap-3 px-5 py-4">
+          <div className="h-1 w-full" style={{ backgroundColor: block.color ?? "#2563eb" }} />
+          <div className="flex max-h-[calc(100vh-3rem)] flex-col overflow-auto">
+            <div className="flex items-start justify-between gap-3 px-5 pb-4 pt-5">
               <div className="space-y-1">
                 <Badge
                   variant="secondary"
-                  className="border-white/20 bg-white/15 text-[11px] font-semibold uppercase tracking-wide text-white"
+                  className="bg-muted text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
                 >
                   {blockTypeLabels[block.source]}
                 </Badge>
-                <p className="text-lg font-semibold leading-tight sm:text-xl">{block.title}</p>
+                <p className="text-lg font-semibold leading-tight text-foreground sm:text-xl">{block.title}</p>
               </div>
               <button
                 type="button"
                 onClick={onClose}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/10 text-white transition hover:bg-black/30"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition hover:text-foreground"
                 aria-label="Close event details"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
-          </div>
-          <div className="space-y-5 px-5 pb-5 pt-4 text-sm text-slate-100">
-            <div className="flex flex-col gap-3">
-              <div className="flex items-start gap-3">
-                <Clock className="mt-0.5 h-4 w-4 text-white/70" />
-                <div>
-                  <p className="font-medium text-white">{timeRange}</p>
-                  <p className="text-xs uppercase tracking-wide text-white/60">{formattedDate}</p>
-                </div>
-              </div>
-              {block.subtitle && (
+            <div className="space-y-5 px-5 pb-5 text-sm text-muted-foreground">
+              <div className="flex flex-col gap-3">
                 <div className="flex items-start gap-3">
-                  <Info className="mt-0.5 h-4 w-4 text-white/70" />
-                  <p className="text-sm text-white/80">{block.subtitle}</p>
+                  <Clock className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium text-foreground">{timeRange}</p>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground/80">{formattedDate}</p>
+                  </div>
+                </div>
+                {block.subtitle && (
+                  <div className="flex items-start gap-3">
+                    <Info className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                    <p className="text-sm">{block.subtitle}</p>
+                  </div>
+                )}
+                {block.source === "event" && block.meta?.location && (
+                  <div className="flex items-start gap-3">
+                    <MapPin className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                    <p className="text-sm">{String(block.meta.location)}</p>
+                  </div>
+                )}
+              </div>
+
+              {description && (
+                <div className="rounded-2xl border border-border/80 bg-muted/60 p-4 text-sm text-muted-foreground">
+                  {description}
                 </div>
               )}
-              {block.source === "event" && block.meta?.location && (
-                <div className="flex items-start gap-3">
-                  <MapPin className="mt-0.5 h-4 w-4 text-white/70" />
-                  <p className="text-sm text-white/80">{String(block.meta.location)}</p>
+
+              {attendees.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground/80">
+                    <UserRound className="h-3.5 w-3.5" />
+                    Attendees
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {attendees.map(person => (
+                      <span
+                        key={person}
+                        className="inline-flex items-center rounded-full border border-border/80 bg-background px-3 py-1 text-xs text-foreground"
+                      >
+                        {person}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {slot && (
+                <div className="space-y-3 rounded-2xl border border-border/80 bg-muted/60 p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground/80">Booking details</p>
+                  <p className="text-sm font-medium text-foreground">
+                    {slot.available ? "Open for booking" : slot.bookedBy ? `Booked by ${slot.bookedBy}` : "Unavailable"}
+                  </p>
+                  {slot.description && <p className="text-sm">{slot.description}</p>}
+                  {inviteUrl && (
+                    <Button variant="outline" className="w-full justify-center gap-2" asChild>
+                      <a href={inviteUrl} target="_blank" rel="noreferrer">
+                        <LinkIcon className="h-4 w-4" />
+                        View public link
+                      </a>
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {block.source === "task" && (
+                <div className="rounded-2xl border border-border/80 bg-muted/60 p-4 text-sm">
+                  Focus session scheduled to keep the day on track.
                 </div>
               )}
             </div>
-
-            {description && (
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/80">
-                {description}
-              </div>
-            )}
-
-            {attendees.length > 0 && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-white/60">
-                  <UserRound className="h-3.5 w-3.5" />
-                  Attendees
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {attendees.map(person => (
-                    <span
-                      key={person}
-                      className="inline-flex items-center rounded-full bg-white/10 px-3 py-1 text-xs text-white/80"
-                    >
-                      {person}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {slot && (
-              <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-                <p className="text-xs uppercase tracking-wide text-white/60">Booking details</p>
-                <p className="text-sm font-medium text-white">
-                  {slot.available ? "Open for booking" : slot.bookedBy ? `Booked by ${slot.bookedBy}` : "Unavailable"}
-                </p>
-                {slot.description && <p className="text-sm text-white/75">{slot.description}</p>}
-                {inviteUrl && (
-                  <Button
-                    variant="secondary"
-                    className="w-full justify-center gap-2 bg-white text-slate-900 hover:bg-white/90"
-                    asChild
-                  >
-                    <a href={inviteUrl} target="_blank" rel="noreferrer">
-                      <LinkIcon className="h-4 w-4" />
-                      View public link
-                    </a>
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {block.source === "task" && (
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/80">
-                Focus session scheduled to keep the day on track.
-              </div>
-            )}
           </div>
         </div>
       </>
