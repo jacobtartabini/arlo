@@ -18,7 +18,7 @@ import {
   startOfMonth,
   startOfWeek
 } from "date-fns";
-import { Calendar as CalendarIcon, CalendarClock, Check, ChevronLeft, ChevronRight, Link as LinkIcon, Plus, Target } from "lucide-react";
+import { Calendar as CalendarIcon, CalendarClock, Check, ChevronLeft, ChevronRight, Link as LinkIcon, Plus } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -808,7 +808,7 @@ const CalendarPage: React.FC = () => {
             );
           })}
         </div>
-        <div className={cn("grid flex-1", view === "week" ? "min-w-[820px] grid-cols-7" : "grid-cols-1")}>
+        <div className={cn("grid min-w-full flex-1", view === "week" ? "grid-cols-7" : "grid-cols-1")}>
           {focusBlocks.map(({ day, blocks }) => {
             const dayKey = format(day, "yyyy-MM-dd");
             const layout = computeBlockLayout(blocks);
@@ -925,7 +925,7 @@ const CalendarPage: React.FC = () => {
                     {blocks.map(block => {
                       const layoutInfo = layout.get(block.id);
                       const top = minutesToPx(block.startMinutes);
-                      const height = Math.max(44, minutesToPx(block.endMinutes) - top);
+                      const height = Math.max(40, minutesToPx(block.endMinutes) - top);
                       const widthPercent = layoutInfo ? 100 / layoutInfo.columns : 100;
                       const leftPercent = layoutInfo ? layoutInfo.lane * widthPercent : 0;
 
@@ -938,7 +938,7 @@ const CalendarPage: React.FC = () => {
                           onClick={() => setSelectedBlock(block)}
                           title={`${block.title} · ${formatTimeRange(block.startMinutes, block.endMinutes)}`}
                           className={cn(
-                            "absolute flex h-full flex-col rounded-xl border border-border/60 bg-card/95 p-3 text-left text-sm shadow-sm backdrop-blur transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                            "absolute flex h-full flex-col overflow-hidden rounded-xl border border-border/60 bg-card/95 p-2.5 text-left text-sm shadow-sm backdrop-blur transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                             block.source === "task" && "border-dashed"
                           )}
                           style={{
@@ -949,15 +949,15 @@ const CalendarPage: React.FC = () => {
                             borderLeft: `4px solid ${block.color}`
                           }}
                         >
-                          <div className="space-y-1">
-                            <p className="font-medium leading-tight">{block.title}</p>
+                          <div className="flex flex-col gap-1 overflow-hidden">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              {formatTimeRange(block.startMinutes, block.endMinutes)}
+                            </p>
+                            <p className="truncate text-sm font-semibold leading-snug">{block.title}</p>
                             {block.subtitle && (
-                              <p className="text-xs text-muted-foreground">{block.subtitle}</p>
+                              <p className="truncate text-[11px] text-muted-foreground">{block.subtitle}</p>
                             )}
                           </div>
-                          <p className="mt-3 text-xs text-muted-foreground">
-                            {formatTimeRange(block.startMinutes, block.endMinutes)}
-                          </p>
                         </button>
                       );
                     })}
@@ -1055,13 +1055,10 @@ const CalendarPage: React.FC = () => {
   return (
     <div className="flex h-full w-full flex-col">
       <header className="border-b bg-background/80 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6">
+        <div className="flex w-full flex-col gap-6 px-4 py-6 sm:px-6 lg:px-10">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex flex-col gap-2">
-              <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-2xl font-semibold tracking-tight">Calendar</h1>
-                {activeViewLabel && <Badge variant="secondary" className="uppercase tracking-wide">{activeViewLabel}</Badge>}
-              </div>
+              <h1 className="text-2xl font-semibold tracking-tight">Calendar</h1>
               <p className="text-sm text-muted-foreground">Intentional time-blocking with a calm, focused layout.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -1105,10 +1102,7 @@ const CalendarPage: React.FC = () => {
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
-              <Button variant="outline" size="sm" className="gap-2" onClick={() => handleNavigate("today")}>
-                <Target className="h-4 w-4" />
-                Today
-              </Button>
+              <Button variant="outline" size="sm" onClick={() => handleNavigate("today")}>Today</Button>
               <div className="flex flex-col">
                 <span className="text-xs uppercase tracking-wide text-muted-foreground">Selected range</span>
                 <span className="text-lg font-semibold text-foreground">{rangeLabel}</span>
@@ -1128,7 +1122,7 @@ const CalendarPage: React.FC = () => {
         </div>
       </header>
 
-      <div className="mx-auto flex w-full max-w-6xl flex-1 gap-6 px-6 pb-6 pt-4 lg:pt-6">
+      <div className="flex w-full flex-1 gap-6 px-4 pb-6 pt-4 sm:px-6 lg:px-10 lg:pt-6">
         <aside className="hidden w-64 flex-col gap-6 lg:flex">
           <div className="rounded-2xl border bg-card p-4 shadow-sm">
             <Button className="w-full justify-center gap-2" onClick={() => openCreateDialog()}>
@@ -1183,7 +1177,7 @@ const CalendarPage: React.FC = () => {
           </div>
         </aside>
 
-        <main className="flex-1 overflow-hidden rounded-3xl border bg-card shadow-sm">
+        <main className="flex-1 min-w-0 overflow-hidden rounded-3xl border bg-card shadow-sm">
           {view === "month" ? renderMonthGrid() : renderTimeline()}
         </main>
       </div>
