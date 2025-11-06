@@ -1,12 +1,14 @@
 import * as React from "react";
-import { useParams, Link as RouterLink } from "react-router-dom";
-import { isAfter } from "date-fns";
+import { Link as RouterLink, useParams } from "react-router-dom";
+import { format, isAfter } from "date-fns";
 import { BadgeCheck, Calendar as CalendarIcon, CheckCircle2, Clock, Mail, User } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CalendarScheduler } from "@/components/ui/calendar-scheduler";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   BOOKING_STORAGE_KEY,
@@ -18,7 +20,7 @@ import {
   getStoredBookings,
   getStoredEvents,
   setStoredBookings,
-  setStoredEvents
+  setStoredEvents,
 } from "@/lib/calendar-data";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +38,10 @@ function getDurationMinutes(slot: BookingSlot) {
   return Math.max(0, Math.round((end - start) / 60000));
 }
 
+function getSlotTimeRange(slot: BookingSlot) {
+  return `${format(getSlotStart(slot), "h:mm a")} – ${format(getSlotEnd(slot), "h:mm a")}`;
+}
+
 const DEFAULT_HANDLE = "jacob";
 
 const PublicBookingPage = () => {
@@ -48,7 +54,7 @@ const PublicBookingPage = () => {
         .filter(Boolean)
         .map(word => word.charAt(0).toUpperCase() + word.slice(1))
         .join(" ") || "Jacob Tartabini",
-    [handle]
+    [handle],
   );
 
   const [bookings, setBookings] = React.useState<BookingSlot[]>(() => getStoredBookings());
@@ -56,6 +62,8 @@ const PublicBookingPage = () => {
   const [formState, setFormState] = React.useState({ name: "", email: "", note: "" });
   const [confirmedSlot, setConfirmedSlot] = React.useState<BookingSlot | null>(null);
   const [status, setStatus] = React.useState<"idle" | "success">("idle");
+  const [selectedDate, setSelectedDate] = React.useState<Date | undefined>();
+  const [selectedTime, setSelectedTime] = React.useState<string | undefined>();
 
   const bookingLink = React.useMemo(() => getPublicBookingUrl(handle), [handle]);
   const timeZone = React.useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
@@ -67,17 +75,59 @@ const PublicBookingPage = () => {
       .sort((a, b) => getSlotStart(a).getTime() - getSlotStart(b).getTime());
   }, [bookings]);
 
+  const availableSlotsByDate = React.useMemo(() => {
+    const grouped = new Map<string, BookingSlot[]>();
+    for (const slot of availableSlots) {
+      const slotsForDate = grouped.get(slot.date) ?? [];
+      slotsForDate.push(slot);
+      grouped.set(slot.date, slotsForDate);
+    }
+    for (const slots of grouped.values()) {
+      slots.sort((a, b) => getSlotStart(a).getTime() - getSlotStart(b).getTime());
+    }
+    return grouped;
+  }, [availableSlots]);
+
+  const firstAvailableDate = React.useMemo(() => {
+    if (!availableSlots.length) return undefined;
+    const first = availableSlots[0];
+    return new Date(`${first.date}T00:00:00`);
+  }, [availableSlots]);
+
+  const slotsForSelectedDate = React.useMemo(() => {
+    if (!selectedDate) return [];
+    const key = format(selectedDate, "yyyy-MM-dd");
+    return availableSlotsByDate.get(key) ?? [];
+  }, [availableSlotsByDate, selectedDate]);
+
+  const timeOptions = React.useMemo(
+    () => slotsForSelectedDate.map(slot => ({ id: slot.id, label: getSlotTimeRange(slot) })),
+    [slotsForSelectedDate],
+  );
+
+  const timeSlots = React.useMemo(() => timeOptions.map(option => option.label), [timeOptions]);
+
+  const previewSlot = React.useMemo(() => {
+    if (!selectedDate || !selectedTime) return null;
+    const key = format(selectedDate, "yyyy-MM-dd");
+    const slots = availableSlotsByDate.get(key) ?? [];
+    return slots.find(slot => getSlotTimeRange(slot) === selectedTime) ?? null;
+  }, [availableSlotsByDate, selectedDate, selectedTime]);
+
   const selectedSlot = React.useMemo(
     () => bookings.find(slot => slot.id === selectedSlotId && slot.available) ?? null,
-    [bookings, selectedSlotId]
+    [bookings, selectedSlotId],
   );
+
+  const selectionSummary = selectedSlot ?? previewSlot;
 
   const canSubmit = Boolean(selectedSlot && formState.name.trim() && formState.email.trim());
 
-  const resetForm = () => {
+  const resetForm = React.useCallback(() => {
     setFormState({ name: "", email: "", note: "" });
     setSelectedSlotId(null);
-  };
+    setSelectedTime(undefined);
+  }, []);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -92,9 +142,9 @@ const PublicBookingPage = () => {
             ...slot,
             available: false,
             bookedBy: formState.email.trim() || formState.name.trim() || "guest",
-            title: bookingTitle
+            title: bookingTitle,
           }
-        : slot
+        : slot,
     );
 
     const newEvent: CalendarEvent = {
@@ -106,7 +156,7 @@ const PublicBookingPage = () => {
       endTime: selectedSlot.endTime,
       category: "meeting",
       color: "#2563eb",
-      attendees: formState.email.trim() ? [formState.email.trim()] : undefined
+      attendees: formState.email.trim() ? [formState.email.trim()] : undefined,
     };
 
     const existingEvents = getStoredEvents();
@@ -124,7 +174,39 @@ const PublicBookingPage = () => {
     setConfirmedSlot(null);
     resetForm();
     setBookings(getStoredBookings());
+    setSelectedDate(firstAvailableDate);
   };
+
+  const handleSchedulerDateChange = (value?: Date) => {
+    setSelectedDate(value ?? undefined);
+    setSelectedTime(undefined);
+    setSelectedSlotId(null);
+  };
+
+  const handleSchedulerTimeChange = (value?: string) => {
+    setSelectedTime(value ?? undefined);
+    if (!value) {
+      setSelectedSlotId(null);
+    }
+  };
+
+  const handleSchedulerConfirm = React.useCallback(
+    (value: { date?: Date; time?: string }) => {
+      if (!value.date || !value.time) {
+        setSelectedSlotId(null);
+        return;
+      }
+      const key = format(value.date, "yyyy-MM-dd");
+      const slots = availableSlotsByDate.get(key) ?? [];
+      const match = slots.find(slot => getSlotTimeRange(slot) === value.time);
+      if (match) {
+        setSelectedDate(value.date);
+        setSelectedTime(value.time);
+        setSelectedSlotId(match.id);
+      }
+    },
+    [availableSlotsByDate],
+  );
 
   React.useEffect(() => {
     setBookings(getStoredBookings());
@@ -140,6 +222,50 @@ const PublicBookingPage = () => {
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
+
+  React.useEffect(() => {
+    if (!availableSlots.length) {
+      setSelectedSlotId(null);
+      setSelectedDate(undefined);
+      setSelectedTime(undefined);
+      return;
+    }
+
+    if (!selectedDate && firstAvailableDate) {
+      setSelectedDate(firstAvailableDate);
+      return;
+    }
+
+    if (selectedDate) {
+      const key = format(selectedDate, "yyyy-MM-dd");
+      if (!availableSlotsByDate.has(key) && firstAvailableDate) {
+        if (selectedDate.getTime() !== firstAvailableDate.getTime()) {
+          setSelectedDate(firstAvailableDate);
+        }
+        setSelectedSlotId(null);
+        setSelectedTime(undefined);
+      }
+    }
+  }, [availableSlots.length, availableSlotsByDate, firstAvailableDate, selectedDate]);
+
+  React.useEffect(() => {
+    if (selectedSlotId) {
+      const slot = bookings.find(item => item.id === selectedSlotId && item.available);
+      if (!slot) {
+        setSelectedSlotId(null);
+      }
+    }
+  }, [bookings, selectedSlotId]);
+
+  const disabledDays = React.useMemo(() => {
+    if (!availableSlotsByDate.size) {
+      return undefined;
+    }
+    return (date: Date) => {
+      const key = format(date, "yyyy-MM-dd");
+      return !availableSlotsByDate.has(key);
+    };
+  }, [availableSlotsByDate]);
 
   if (status === "success" && confirmedSlot) {
     return (
@@ -188,7 +314,7 @@ const PublicBookingPage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-muted/40">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-10 px-4 py-16">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-4 py-16">
         <header className="space-y-4 text-center">
           <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
             <CalendarIcon className="h-4 w-4" />
@@ -202,118 +328,160 @@ const PublicBookingPage = () => {
           </p>
         </header>
 
-        <div className="grid gap-6 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-          <Card className="border bg-background/60 backdrop-blur">
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between text-base">
-                <span>Available slots</span>
-                <Badge variant="outline" className="gap-1 text-xs">
-                  <BadgeCheck className="h-3.5 w-3.5" />
-                  Live sync
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="rounded-lg border bg-muted/10 p-3 text-xs text-muted-foreground">
-                All times shown in {timeZone}. Slots refresh automatically when Arlo updates the private calendar.
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)]">
+          <div className="flex flex-col gap-6">
+            <Card className="overflow-hidden border bg-background/60 backdrop-blur">
+              <div className="relative h-36 w-full overflow-hidden">
+                <img
+                  src="https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=1200&q=80"
+                  alt="Team workspace"
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                />
               </div>
-              {availableSlots.length ? (
-                <div className="space-y-2">
-                  {availableSlots.map(slot => {
-                    const isSelected = slot.id === selectedSlotId;
-                    return (
-                      <button
-                        key={slot.id}
-                        type="button"
-                        onClick={() => setSelectedSlotId(slot.id)}
-                        className={cn(
-                          "w-full rounded-xl border px-4 py-3 text-left transition",
-                          isSelected
-                            ? "border-primary bg-primary/10 text-primary-foreground"
-                            : "border-transparent bg-background hover:border-primary/40"
-                        )}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-medium text-foreground">{formatSlotLabel(slot)}</p>
-                            <p className="text-xs text-muted-foreground">{getDurationMinutes(slot)} minute meeting</p>
-                          </div>
-                          <Badge variant={isSelected ? "default" : "outline"} className="text-xs">
-                            Select
-                          </Badge>
-                        </div>
-                      </button>
-                    );
-                  })}
+              <CardHeader className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-14 w-14 overflow-hidden rounded-2xl border">
+                    <img
+                      src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=256&q=80"
+                      alt={`${displayName} portrait`}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Hosted by</p>
+                    <p className="text-lg font-semibold text-foreground">{displayName}</p>
+                    <p className="text-xs text-muted-foreground">Founder &amp; AI Strategy at Arlo</p>
+                  </div>
                 </div>
-              ) : (
-                <div className="rounded-xl border border-dashed bg-muted/10 p-6 text-center text-sm text-muted-foreground">
-                  All public availability has been claimed. Check back soon or contact {displayName.split(" ")[0]} directly.
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className="border-primary/40 bg-primary/10 text-xs text-primary">
+                    Product leadership
+                  </Badge>
+                  <Badge variant="outline" className="text-xs text-muted-foreground">
+                    Virtual or in-person
+                  </Badge>
+                  <Badge variant="outline" className="text-xs text-muted-foreground">
+                    {timeZone}
+                  </Badge>
                 </div>
-              )}
-            </CardContent>
-          </Card>
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  “I love meeting founders, builders, and operators who are exploring command center workflows. Bring your ideas, prototypes, or just curiosity—we’ll shape something remarkable together.”
+                </p>
+                <div className="flex flex-col gap-2 text-sm text-muted-foreground">
+                  <p>
+                    Share this page:{" "}
+                    <a className="font-medium text-primary underline" href={bookingLink}>
+                      {bookingLink}
+                    </a>
+                  </p>
+                  <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <BadgeCheck className="h-3.5 w-3.5" />
+                    Live updates reflect Arlo’s internal calendar.
+                  </p>
+                </div>
+              </CardHeader>
+            </Card>
 
-          <Card className="border bg-background/60 backdrop-blur">
-            <CardHeader>
-              <CardTitle className="text-base">Share your details</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {selectedSlot ? (
-                <form className="space-y-5" onSubmit={handleSubmit}>
-                  <div className="rounded-lg border bg-muted/10 p-4">
-                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Selected slot</p>
-                    <p className="mt-2 text-sm font-medium text-foreground">{formatSlotLabel(selectedSlot)}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{timeZone} timezone · {getDurationMinutes(selectedSlot)} minutes</p>
+            <Card className="border bg-background/60 backdrop-blur">
+              <CardHeader>
+                <CardTitle className="text-base">Share your details</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {selectionSummary ? (
+                  <form className="space-y-6" onSubmit={handleSubmit}>
+                    <div
+                      className={cn(
+                        "rounded-xl border bg-muted/10 p-4",
+                        selectedSlot ? "border-primary/30" : "border-dashed border-muted-foreground/30",
+                      )}
+                    >
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        {selectedSlot ? "Confirmed slot" : "Selected slot"}
+                      </p>
+                      <p className="mt-2 text-sm font-medium text-foreground">{formatSlotLabel(selectionSummary)}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {timeZone} timezone · {getDurationMinutes(selectionSummary)} minutes
+                      </p>
+                      {!selectedSlot && (
+                        <p className="mt-3 text-xs text-muted-foreground">
+                          Press <span className="font-medium text-foreground">Confirm</span> on the scheduler to lock this time before submitting.
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="booking-name" className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        <User className="h-3.5 w-3.5" />
+                        Your name
+                      </Label>
+                      <Input
+                        id="booking-name"
+                        placeholder="Jane Smith"
+                        value={formState.name}
+                        onChange={event => setFormState(prev => ({ ...prev, name: event.target.value }))}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="booking-email" className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        <Mail className="h-3.5 w-3.5" />
+                        Email for invites
+                      </Label>
+                      <Input
+                        id="booking-email"
+                        type="email"
+                        placeholder="jane@example.com"
+                        value={formState.email}
+                        onChange={event => setFormState(prev => ({ ...prev, email: event.target.value }))}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="booking-note" className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        <Clock className="h-3.5 w-3.5" />
+                        Context (optional)
+                      </Label>
+                      <Textarea
+                        id="booking-note"
+                        rows={4}
+                        placeholder="Share goals for the meeting or links we should review."
+                        value={formState.note}
+                        onChange={event => setFormState(prev => ({ ...prev, note: event.target.value }))}
+                      />
+                    </div>
+                    <Button type="submit" className="w-full" disabled={!canSubmit}>
+                      Reserve this time
+                    </Button>
+                  </form>
+                ) : (
+                  <div className="rounded-xl border border-dashed bg-muted/10 p-6 text-center text-sm text-muted-foreground">
+                    Select an available date and time from the scheduler to continue.
                   </div>
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      <User className="h-3.5 w-3.5" />
-                      Your name
-                    </label>
-                    <Input
-                      placeholder="Jane Smith"
-                      value={formState.name}
-                      onChange={event => setFormState(prev => ({ ...prev, name: event.target.value }))}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      <Mail className="h-3.5 w-3.5" />
-                      Email for invites
-                    </label>
-                    <Input
-                      type="email"
-                      placeholder="jane@example.com"
-                      value={formState.email}
-                      onChange={event => setFormState(prev => ({ ...prev, email: event.target.value }))}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                      <Clock className="h-3.5 w-3.5" />
-                      Context (optional)
-                    </label>
-                    <Textarea
-                      rows={4}
-                      placeholder="Share goals for the meeting or links we should review."
-                      value={formState.note}
-                      onChange={event => setFormState(prev => ({ ...prev, note: event.target.value }))}
-                    />
-                  </div>
-                  <Button type="submit" className="w-full" disabled={!canSubmit}>
-                    Reserve this time
-                  </Button>
-                </form>
-              ) : (
-                <div className="rounded-xl border border-dashed bg-muted/10 p-6 text-center text-sm text-muted-foreground">
-                  Select an available slot to continue. Your booking isn’t confirmed until you finish the form.
-                </div>
+                )}
+              </CardContent>
+              {selectionSummary && (
+                <CardFooter className="flex flex-col gap-2 text-xs text-muted-foreground">
+                  <p>
+                    Need a different time? Reset the scheduler to explore other dates, and once confirmed we’ll automatically update availability for everyone else.
+                  </p>
+                </CardFooter>
               )}
-            </CardContent>
-          </Card>
+            </Card>
+          </div>
+
+          <div className="flex justify-center">
+            <CalendarScheduler
+              className="mx-auto"
+              selectedDate={selectedDate}
+              selectedTime={selectedTime}
+              timeSlots={timeSlots}
+              disabled={disabledDays}
+              onDateChange={handleSchedulerDateChange}
+              onTimeChange={handleSchedulerTimeChange}
+              onConfirm={handleSchedulerConfirm}
+            />
+          </div>
         </div>
       </div>
     </div>
