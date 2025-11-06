@@ -12,6 +12,8 @@ import {
   isSameMonth,
   isToday,
   parseISO,
+  setMonth,
+  setYear,
   startOfDay,
   startOfMonth,
   startOfWeek
@@ -33,7 +35,6 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import {
@@ -654,6 +655,39 @@ const CalendarPage: React.FC = () => {
     [selectedDate]
   );
 
+  const monthOptions = React.useMemo(
+    () =>
+      Array.from({ length: 12 }).map((_, index) => ({
+        value: String(index),
+        label: format(new Date(2020, index, 1), "MMMM")
+      })),
+    []
+  );
+
+  const yearOptions = React.useMemo(() => {
+    const currentYear = selectedDate.getFullYear();
+    return Array.from({ length: 11 }).map((_, index) => {
+      const year = currentYear - 5 + index;
+      return { value: String(year), label: String(year) };
+    });
+  }, [selectedDate]);
+
+  const handleMonthSelect = React.useCallback(
+    (value: string) => {
+      const monthIndex = Number(value);
+      setSelectedDate(prev => setMonth(prev, monthIndex));
+    },
+    [setSelectedDate]
+  );
+
+  const handleYearSelect = React.useCallback(
+    (value: string) => {
+      const year = Number(value);
+      setSelectedDate(prev => setYear(prev, year));
+    },
+    [setSelectedDate]
+  );
+
   const weekdayLabels = React.useMemo(() => {
     const start = startOfWeek(new Date(), { weekStartsOn: 1 });
     return Array.from({ length: 7 }).map((_, index) => format(addDays(start, index), "EEE"));
@@ -844,14 +878,11 @@ const CalendarPage: React.FC = () => {
             return (
               <div key={day.toISOString()} className="relative border-r last:border-r-0">
                 <div className="sticky top-0 z-10 flex h-20 flex-col justify-center border-b bg-card/95 px-4 py-3 backdrop-blur">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-start">
                     <div>
                       <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{format(day, "EEE")}</p>
                       <p className={cn("text-xl font-semibold", isToday(day) && "text-primary")}>{format(day, "d MMM")}</p>
                     </div>
-                    <span className="text-xs text-muted-foreground">
-                      {blocks.filter(block => block.source === "task").length} focus
-                    </span>
                   </div>
                 </div>
                 <div
@@ -942,8 +973,33 @@ const CalendarPage: React.FC = () => {
 
   const renderMiniMonth = () => (
     <div className="rounded-2xl border bg-card p-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-sm font-medium text-foreground">{format(selectedDate, "MMMM yyyy")}</p>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-1 items-center gap-2">
+          <Select value={String(selectedDate.getMonth())} onValueChange={handleMonthSelect}>
+            <SelectTrigger className="w-[140px] justify-between text-left">
+              <SelectValue placeholder="Month" />
+            </SelectTrigger>
+            <SelectContent>
+              {monthOptions.map(option => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={String(selectedDate.getFullYear())} onValueChange={handleYearSelect}>
+            <SelectTrigger className="w-[110px] justify-between text-left">
+              <SelectValue placeholder="Year" />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map(option => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"
@@ -1009,13 +1065,18 @@ const CalendarPage: React.FC = () => {
               <p className="text-sm text-muted-foreground">Intentional time-blocking with a calm, focused layout.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <ToggleGroup type="single" value={view} onValueChange={value => value && setView(value as CalendarView)}>
-                {VIEW_OPTIONS.map(option => (
-                  <ToggleGroupItem key={option.id} value={option.id} className="px-3 py-1">
-                    {option.label}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
+              <Select value={view} onValueChange={value => value && setView(value as CalendarView)}>
+                <SelectTrigger className="w-[120px] justify-between">
+                  <SelectValue placeholder="View" />
+                </SelectTrigger>
+                <SelectContent>
+                  {VIEW_OPTIONS.map(option => (
+                    <SelectItem key={option.id} value={option.id}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Button onClick={() => openCreateDialog()} className="gap-2">
                 <Plus className="h-4 w-4" />
                 New item
