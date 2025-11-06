@@ -45,7 +45,9 @@ type SelectionState = {
   endMinutes: number;
 };
 
+const DAY_HEADER_HEIGHT = 80;
 const TIMELINE_HEIGHT = (HOURS_PER_DAY / 60) * HOUR_HEIGHT;
+const TOTAL_TIMELINE_HEIGHT = TIMELINE_HEIGHT + DAY_HEADER_HEIGHT;
 
 export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
   view,
@@ -140,8 +142,16 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
   return (
     <div className="relative h-full min-h-[640px] overflow-x-auto overflow-y-auto">
       <div className="flex min-h-full">
-        <div className="sticky left-0 z-10 flex-none w-20 border-r bg-card text-right text-[11px] text-muted-foreground">
-          <div className="relative" style={{ height: `${TIMELINE_HEIGHT}px` }}>
+        <div
+          className="sticky left-0 z-10 flex w-20 flex-col border-r bg-card text-right text-[11px] text-muted-foreground"
+          style={{ height: `${TOTAL_TIMELINE_HEIGHT}px` }}
+        >
+          <div
+            className="h-20 border-b border-border/60 bg-card"
+            aria-hidden="true"
+            style={{ height: `${DAY_HEADER_HEIGHT}px` }}
+          />
+          <div className="relative flex-1" style={{ height: `${TIMELINE_HEIGHT}px` }}>
             {Array.from({ length: (HOURS_PER_DAY / 60) + 1 }).map((_, index) => {
               const minutes = DISPLAY_START_MINUTES + index * 60;
               if (minutes % 120 !== 0) {

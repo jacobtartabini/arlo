@@ -133,14 +133,14 @@ const CalendarPage: React.FC = () => {
 
   const visibleRange = React.useMemo(() => {
     if (view === "month") {
-      const start = startOfWeek(startOfMonth(selectedDate), { weekStartsOn: 1 });
-      const end = endOfWeek(endOfMonth(selectedDate), { weekStartsOn: 1 });
+      const start = startOfWeek(startOfMonth(selectedDate), { weekStartsOn: 0 });
+      const end = endOfWeek(endOfMonth(selectedDate), { weekStartsOn: 0 });
       return { start, end };
     }
 
     if (view === "week") {
-      const start = startOfWeek(selectedDate, { weekStartsOn: 1 });
-      const end = endOfWeek(selectedDate, { weekStartsOn: 1 });
+      const start = startOfWeek(selectedDate, { weekStartsOn: 0 });
+      const end = endOfWeek(selectedDate, { weekStartsOn: 0 });
       return { start, end };
     }
 
@@ -158,10 +158,10 @@ const CalendarPage: React.FC = () => {
     }
 
     const rangeStart = view === "week"
-      ? startOfWeek(selectedDate, { weekStartsOn: 1 })
+      ? startOfWeek(selectedDate, { weekStartsOn: 0 })
       : startOfDay(selectedDate);
     const rangeEnd = view === "week"
-      ? endOfWeek(selectedDate, { weekStartsOn: 1 })
+      ? endOfWeek(selectedDate, { weekStartsOn: 0 })
       : startOfDay(selectedDate);
 
     const bucket = new Map<string, Task[]>();
@@ -232,8 +232,8 @@ const CalendarPage: React.FC = () => {
     }
 
     if (view === "week") {
-      const start = startOfWeek(selectedDate, { weekStartsOn: 1 });
-      const end = endOfWeek(selectedDate, { weekStartsOn: 1 });
+      const start = startOfWeek(selectedDate, { weekStartsOn: 0 });
+      const end = endOfWeek(selectedDate, { weekStartsOn: 0 });
       return `${format(start, "d MMM")} – ${format(end, "d MMM yyyy")}`;
     }
 
@@ -328,8 +328,8 @@ const CalendarPage: React.FC = () => {
   const miniMonthDays = React.useMemo(
     () =>
       eachDayOfInterval({
-        start: startOfWeek(startOfMonth(selectedDate), { weekStartsOn: 1 }),
-        end: endOfWeek(endOfMonth(selectedDate), { weekStartsOn: 1 })
+        start: startOfWeek(startOfMonth(selectedDate), { weekStartsOn: 0 }),
+        end: endOfWeek(endOfMonth(selectedDate), { weekStartsOn: 0 })
       }),
     [selectedDate]
   );
@@ -368,7 +368,7 @@ const CalendarPage: React.FC = () => {
   );
 
   const weekdayLabels = React.useMemo(() => {
-    const start = startOfWeek(new Date(), { weekStartsOn: 1 });
+    const start = startOfWeek(new Date(), { weekStartsOn: 0 });
     return Array.from({ length: 7 }).map((_, index) => format(addDays(start, index), "EE"));
   }, []);
 
