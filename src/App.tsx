@@ -12,6 +12,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import { ThemeProvider } from "./providers/ThemeProvider";
 import { AuthProvider } from "./providers/AuthProvider";
 import { ArloProvider } from "./providers/ArloProvider";
+import { ChatHistoryProvider } from "./providers/ChatHistoryProvider";
 import ConditionalNavBar from "./components/ConditionalNavBar";
 import Chat from "./pages/Chat";
 import CalendarPage from "./pages/Calendar";
@@ -34,12 +35,13 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider defaultTheme="dark" storageKey="arlo-ui-theme">
       <AuthProvider>
-        <ArloProvider>
-          <TooltipProvider>
-            <Toaster />
-            <Sonner />
-            <BrowserRouter>
-              <GlobalSearch />
+        <ChatHistoryProvider>
+          <ArloProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Sonner />
+              <BrowserRouter>
+                <GlobalSearch />
               <ConditionalNavBar />
               <Routes>
                 {/* Public routes */}
@@ -134,7 +136,8 @@ const App = () => (
               </Routes>
             </BrowserRouter>
           </TooltipProvider>
-        </ArloProvider>
+          </ArloProvider>
+        </ChatHistoryProvider>
       </AuthProvider>
     </ThemeProvider>
   </QueryClientProvider>
