@@ -17,11 +17,11 @@ import {
   clampMinutes,
   computeBlockLayout,
   formatDisplayTimeRange,
+  formatHourLabel,
   formatTimeRange,
   getContrastTextColor,
   hexToRgb,
   minutesToPx,
-  minutesToTime,
   pxToMinutes
 } from "../utils";
 
@@ -44,6 +44,8 @@ type SelectionState = {
   startMinutes: number;
   endMinutes: number;
 };
+
+const TIMELINE_HEIGHT = (HOURS_PER_DAY / 60) * HOUR_HEIGHT;
 
 export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
   view,
@@ -138,15 +140,31 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
   return (
     <div className="relative h-full min-h-[640px] overflow-x-auto overflow-y-auto">
       <div className="flex min-h-full">
-        <div className="sticky left-0 z-10 flex w-16 flex-col border-r bg-card text-right text-[11px] text-muted-foreground">
-          {Array.from({ length: (HOURS_PER_DAY / 60) + 1 }).map((_, index) => {
-            const minutes = DISPLAY_START_MINUTES + index * 60;
-            return (
-              <div key={minutes} className="h-[52px] px-2 pt-2">
-                {minutes % 120 === 0 ? minutesToTime(minutes) : ""}
-              </div>
-            );
-          })}
+        <div className="sticky left-0 z-10 flex-none w-20 border-r bg-card text-right text-[11px] text-muted-foreground">
+          <div className="relative" style={{ height: `${TIMELINE_HEIGHT}px` }}>
+            {Array.from({ length: (HOURS_PER_DAY / 60) + 1 }).map((_, index) => {
+              const minutes = DISPLAY_START_MINUTES + index * 60;
+              if (minutes % 120 !== 0) {
+                return null;
+              }
+
+              const top = minutesToPx(minutes);
+              const isFirstMarker = minutes === DISPLAY_START_MINUTES;
+
+              return (
+                <div
+                  key={minutes}
+                  className={cn(
+                    "absolute right-3 font-medium",
+                    isFirstMarker ? "translate-y-1" : "-translate-y-1/2"
+                  )}
+                  style={{ top: `${top}px` }}
+                >
+                  {formatHourLabel(minutes)}
+                </div>
+              );
+            })}
+          </div>
         </div>
         <div
           className={cn(

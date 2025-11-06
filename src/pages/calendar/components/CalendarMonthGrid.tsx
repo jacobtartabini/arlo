@@ -4,7 +4,7 @@ import { format, isSameMonth, isToday } from "date-fns";
 import { cn } from "@/lib/utils";
 
 import type { BookingSlot, CalendarEvent } from "@/lib/calendar-data";
-import { buildBlocks, minutesToTime } from "../utils";
+import { buildBlocks, formatDisplayTime } from "../utils";
 
 export type CalendarMonthGridProps = {
   days: Date[];
@@ -59,7 +59,7 @@ export const CalendarMonthGrid: React.FC<CalendarMonthGridProps> = ({
                 >
                   <span className="truncate font-medium">{block.title}</span>
                   <span className="truncate text-[10px] text-muted-foreground">
-                    {minutesToTime(block.startMinutes)}
+                    {formatDisplayTime(block.startMinutes)}
                   </span>
                 </div>
               ))}
