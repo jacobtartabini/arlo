@@ -45,10 +45,10 @@ import {
   DialogTitle
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import {
@@ -77,6 +77,7 @@ const HOUR_HEIGHT = 52;
 const MINUTE_STEP = 30;
 const STEPS_PER_HOUR = 60 / MINUTE_STEP;
 const DEFAULT_SELECTION_DURATION = 60;
+const COLOR_PRESETS = ["#2563eb", "#7c3aed", "#22c55e", "#f97316", "#ec4899", "#14b8a6"] as const;
 
 const VIEW_OPTIONS = [
   { id: "day", label: "Day" },
@@ -506,6 +507,22 @@ const CalendarPage: React.FC = () => {
     startMinutes: number;
     endMinutes: number;
   } | null>(null);
+  const timezone = React.useMemo(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone,
+    []
+  );
+  const scheduleSummary = React.useMemo(() => {
+    try {
+      const start = parseISO(`${draft.date}T${draft.startTime || "00:00"}:00`);
+      const end = parseISO(`${draft.date}T${draft.endTime || "00:00"}:00`);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+        return null;
+      }
+      return `${format(start, "EEEE, MMMM d")} · ${format(start, "h:mm a")} – ${format(end, "h:mm a")}`;
+    } catch (error) {
+      return null;
+    }
+  }, [draft.date, draft.startTime, draft.endTime]);
 
   React.useEffect(() => {
     if (!isDialogOpen) {
@@ -1334,100 +1351,385 @@ const CalendarPage: React.FC = () => {
           }
         }}
       >
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Create new item</DialogTitle>
-            <DialogDescription>Publish an event or open a public booking slot.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <Select
-              value={draft.kind}
-              onValueChange={value => handleDraftChange("kind", value as DraftKind)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="event">Event</SelectItem>
-                <SelectItem value="booking">Public booking slot</SelectItem>
-              </SelectContent>
-            </Select>
-            <div className="space-y-2">
-              <Label htmlFor="title">Title</Label>
+        <DialogContent className="sm:max-w-[520px] overflow-hidden rounded-2xl border border-border/60 bg-background p-0 shadow-xl">
+          <div className="space-y-6 px-6 py-5">
+            <div className="space-y-4">
+              <Tabs
+                value={draft.kind}
+                onValueChange={value => handleDraftChange("kind", value as DraftKind)}
+                className="w-full"
+              >
+                <TabsList className="grid w-full grid-cols-2 rounded-full bg-muted/60 p-1 text-xs font-medium">
+                  <TabsTrigger
+                    value="event"
+                    className="rounded-full data-[state=active]:bg-background data-[state=active]:text-foreground"
+                  >
+                    Event
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="booking"
+                    className="rounded-full data-[state=active]:bg-background data-[state=active]:text-foreground"
+                  >
+                    Booking slot
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
               <Input
-                id="title"
                 value={draft.title}
                 onChange={event => handleDraftChange("title", event.target.value)}
+                placeholder="Add title"
+                className="h-auto border-none bg-transparent px-0 text-2xl font-semibold leading-tight shadow-none focus-visible:border-transparent focus-visible:ring-0"
               />
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="date">Date</Label>
-                <Input
-                  id="date"
-                  type="date"
-                  value={draft.date}
-                  onChange={event => handleDraftChange("date", event.target.value)}
-                />
+            <div className="space-y-1 rounded-2xl border border-border/60 bg-background/80 p-3 shadow-sm shadow-black/5">
+              <div className="flex items-start gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-muted/60">
+                <CalendarClock className="mt-1 h-4 w-4 text-muted-foreground" />
+                <div className="flex-1 space-y-2">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+                    <span className="font-medium text-foreground">Schedule</span>
+                    {scheduleSummary && <span className="truncate">{scheduleSummary}</span>}
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                    <Input
+                      type="date"
+                      value={draft.date}
+                      onChange={event => handleDraftChange("date", event.target.value)}
+                      className="h-9 border border-transparent bg-muted/50 px-3 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20"
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        type="time"
+                        value={draft.startTime}
+                        onChange={event => handleDraftChange("startTime", event.target.value)}
+                        className="h-9 border border-transparent bg-muted/50 px-3 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20"
+                      />
+                      <Input
+                        type="time"
+                        value={draft.endTime}
+                        onChange={event => handleDraftChange("endTime", event.target.value)}
+                        className="h-9 border border-transparent bg-muted/50 px-3 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Time zone · {timezone}</p>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="color">Color</Label>
-                <Input
-                  id="color"
-                  type="color"
-                  value={draft.color}
-                  onChange={event => handleDraftChange("color", event.target.value)}
-                />
+              {draft.kind === "event" && (
+                <div className="flex items-start gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-muted/60">
+                  <UserPlus className="mt-1 h-4 w-4 text-muted-foreground" />
+                  <div className="flex-1 space-y-1">
+                    <p className="text-sm font-medium text-foreground">Guests</p>
+                    <Input
+                      value={draft.attendees}
+                      onChange={event => handleDraftChange("attendees", event.target.value)}
+                      placeholder="Add guests"
+                      className="h-9 border border-transparent bg-muted/50 px-3 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20"
+                    />
+                    <p className="text-xs text-muted-foreground">Separate email addresses with commas.</p>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-start gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-muted/60">
+                <Palette className="mt-1 h-4 w-4 text-muted-foreground" />
+                <div className="flex-1 space-y-1">
+                  <p className="text-sm font-medium text-foreground">Color</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {COLOR_PRESETS.map(color => (
+                      <button
+                        key={color}
+                        type="button"
+                        onClick={() => handleDraftChange("color", color)}
+                        className={cn(
+                          "h-8 w-8 rounded-full border border-transparent transition-all",
+                          draft.color === color
+                            ? "ring-2 ring-offset-2 ring-offset-background ring-ring"
+                            : "hover:ring-2 hover:ring-ring/40"
+                        )}
+                        style={{ backgroundColor: color }}
+                        aria-label={`Use ${color} for this ${draft.kind}`}
+                      />
+                    ))}
+                    <label className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-dashed border-border/70 text-[10px] text-muted-foreground transition-colors hover:border-foreground/60">
+                      <span className="sr-only">Choose a custom color</span>
+                      <input
+                        type="color"
+                        value={draft.color}
+                        onChange={event => handleDraftChange("color", event.target.value)}
+                        className="sr-only"
+                      />
+                      +
+                    </label>
+                  </div>
+                </div>
+              </div>
+              {draft.kind === "event" && (
+                <div className="flex items-start gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-muted/60">
+                  <MapPin className="mt-1 h-4 w-4 text-muted-foreground" />
+                  <div className="flex-1 space-y-1">
+                    <p className="text-sm font-medium text-foreground">Location</p>
+                    <Input
+                      value={draft.location}
+                      onChange={event => handleDraftChange("location", event.target.value)}
+                      placeholder="Add location"
+                      className="h-9 border border-transparent bg-muted/50 px-3 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20"
+                    />
+                  </div>
+                </div>
+              )}
+              <div className="flex items-start gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-muted/60">
+                <FileText className="mt-1 h-4 w-4 text-muted-foreground" />
+                <div className="flex-1 space-y-1">
+                  <p className="text-sm font-medium text-foreground">
+                    {draft.kind === "event" ? "Description or attachments" : "Notes"}
+                  </p>
+                  <Textarea
+                    value={draft.description}
+                    onChange={event => handleDraftChange("description", event.target.value)}
+                    placeholder={draft.kind === "event" ? "Add a description" : "Add internal notes"}
+                    rows={3}
+                    className="min-h-[60px] border border-transparent bg-muted/50 px-3 py-2 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20"
+                  />
+                </div>
               </div>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="start">Start</Label>
-                <Input
-                  id="start"
-                  type="time"
-                  value={draft.startTime}
-                  onChange={event => handleDraftChange("startTime", event.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="end">End</Label>
-                <Input
-                  id="end"
-                  type="time"
-                  value={draft.endTime}
-                  onChange={event => handleDraftChange("endTime", event.target.value)}
-                />
-              </div>
+          </div>
+          <DialogFooter className="flex flex-col gap-2 border-t border-border/60 bg-muted/40 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <Button
+              variant="ghost"
+              type="button"
+              className="justify-start px-0 text-sm text-muted-foreground hover:text-foreground"
+            >
+              More options
+            </Button>
+            <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
+              <Button variant="ghost" type="button" onClick={() => setDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="button" onClick={handleCreate}>
+                <Check className="mr-2 h-4 w-4" /> Save
+              </Button>
             </div>
-            {draft.kind === "event" && (
-              <div className="space-y-2">
-                <Label htmlFor="attendees">Attendees</Label>
-                <Input
-                  id="attendees"
-                  placeholder="Comma separated emails"
-                  value={draft.attendees}
-                  onChange={event => handleDraftChange("attendees", event.target.value)}
-                />
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {selectedBlock && (
+        <EventDetailsPopover
+          block={selectedBlock.block}
+          target={selectedBlock.target}
+          onClose={() => setSelectedBlock(null)}
+        />
+      )}
+    </div>
+  );
+};
+
+type EventDetailsPopoverProps = {
+  block: CalendarBlock;
+  target: HTMLElement;
+  onClose: () => void;
+};
+
+const blockTypeLabels: Record<CalendarBlock["source"], string> = {
+  event: "Event",
+  booking: "Booking",
+  task: "Task"
+};
+
+const EventDetailsPopover: React.FC<EventDetailsPopoverProps> = ({ block, target, onClose }) => {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [position, setPosition] = React.useState({
+    top: 0,
+    left: 0,
+    width: 320,
+    origin: "center top" as "center top" | "center bottom" | "center center"
+  });
+
+  const updatePosition = React.useCallback(() => {
+    if (typeof window === "undefined") return;
+    const rect = target.getBoundingClientRect();
+    const margin = 16;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const width = Math.min(360, viewportWidth - margin * 2);
+    const cardHeight = containerRef.current?.offsetHeight ?? 0;
+
+    let top = rect.bottom + window.scrollY + margin;
+    let origin: "center top" | "center bottom" | "center center" = "center top";
+
+    if (cardHeight && top + cardHeight > window.scrollY + viewportHeight - margin) {
+      top = rect.top + window.scrollY - cardHeight - margin;
+      origin = "center bottom";
+    }
+
+    if (top < window.scrollY + margin) {
+      top = window.scrollY + margin;
+      origin = "center center";
+    }
+
+    let left = rect.left + window.scrollX + rect.width / 2 - width / 2;
+    const minLeft = window.scrollX + margin;
+    const maxLeft = window.scrollX + viewportWidth - width - margin;
+    left = Math.max(minLeft, Math.min(left, maxLeft));
+
+    setPosition({ top, left, width, origin });
+  }, [target]);
+
+  React.useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
+    updatePosition();
+    const handle = () => updatePosition();
+    window.addEventListener("resize", handle);
+    window.addEventListener("scroll", handle, true);
+    const targetObserver = new ResizeObserver(handle);
+    targetObserver.observe(target);
+    let cardObserver: ResizeObserver | null = null;
+    if (containerRef.current) {
+      cardObserver = new ResizeObserver(handle);
+      cardObserver.observe(containerRef.current);
+    }
+
+    const raf = requestAnimationFrame(updatePosition);
+
+    return () => {
+      window.removeEventListener("resize", handle);
+      window.removeEventListener("scroll", handle, true);
+      targetObserver.disconnect();
+      cardObserver?.disconnect();
+      cancelAnimationFrame(raf);
+    };
+  }, [target, updatePosition]);
+
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  React.useEffect(() => {
+    if (typeof MutationObserver === "undefined") return;
+    const observer = new MutationObserver(() => {
+      if (!document.body.contains(target)) {
+        onClose();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [onClose, target]);
+
+  const eventDate = React.useMemo(() => parseISO(`${block.date}T00:00:00`), [block.date]);
+  const formattedDate = React.useMemo(() => format(eventDate, "EEEE, MMM d yyyy"), [eventDate]);
+  const timeRange = block.allDay ? "All day" : formatTimeRange(block.startMinutes, block.endMinutes);
+  const attendees = block.source === "event" && Array.isArray(block.meta?.attendees)
+    ? (block.meta?.attendees as string[])
+    : [];
+  const slot = block.source === "booking" ? (block.meta as BookingSlot | undefined) : undefined;
+  const description = block.source === "event" && block.meta?.description
+    ? String(block.meta.description)
+    : undefined;
+  const accentRgb = hexToRgb(block.color ?? "#2563eb");
+  const accentBackground = accentRgb
+    ? `linear-gradient(135deg, rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.88), rgba(15, 23, 42, 0.95))`
+    : "linear-gradient(135deg, rgba(59, 130, 246, 0.88), rgba(15, 23, 42, 0.95))";
+
+  const inviteUrl = slot ? getPublicBookingUrl(slot) : undefined;
+
+  return createPortal(
+    (
+      <>
+        <div className="fixed inset-0 z-[199] bg-black/10 backdrop-blur-[1px]" onClick={onClose} />
+        <div
+          ref={containerRef}
+          role="dialog"
+          aria-modal="true"
+          className={cn(
+            "fixed z-[200] max-w-full rounded-3xl border border-white/10 bg-slate-950 text-white shadow-2xl transition-transform",
+            "ring-1 ring-white/10",
+            "sm:rounded-[28px]"
+          )}
+          style={{
+            top: position.top,
+            left: position.left,
+            width: position.width,
+            transformOrigin: position.origin
+          }}
+        >
+          <div
+            className="relative overflow-hidden rounded-t-3xl sm:rounded-t-[28px]"
+            style={{ backgroundImage: accentBackground }}
+          >
+            <div
+              className="absolute inset-0 opacity-30"
+              style={{ backgroundImage: "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.35), transparent 60%)" }}
+            />
+            <div className="relative flex items-start justify-between gap-3 px-5 py-4">
+              <div className="space-y-1">
+                <Badge
+                  variant="secondary"
+                  className="border-white/20 bg-white/15 text-[11px] font-semibold uppercase tracking-wide text-white"
+                >
+                  {blockTypeLabels[block.source]}
+                </Badge>
+                <p className="text-lg font-semibold leading-tight sm:text-xl">{block.title}</p>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/10 text-white transition hover:bg-black/30"
+                aria-label="Close event details"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+          <div className="space-y-5 px-5 pb-5 pt-4 text-sm text-slate-100">
+            <div className="flex flex-col gap-3">
+              <div className="flex items-start gap-3">
+                <Clock className="mt-0.5 h-4 w-4 text-white/70" />
+                <div>
+                  <p className="font-medium text-white">{timeRange}</p>
+                  <p className="text-xs uppercase tracking-wide text-white/60">{formattedDate}</p>
+                </div>
+              </div>
+              {block.subtitle && (
+                <div className="flex items-start gap-3">
+                  <Info className="mt-0.5 h-4 w-4 text-white/70" />
+                  <p className="text-sm text-white/80">{block.subtitle}</p>
+                </div>
+              )}
+              {block.source === "event" && block.meta?.location && (
+                <div className="flex items-start gap-3">
+                  <MapPin className="mt-0.5 h-4 w-4 text-white/70" />
+                  <p className="text-sm text-white/80">{String(block.meta.location)}</p>
+                </div>
+              )}
+            </div>
+
+            {description && (
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/80">
+                {description}
               </div>
             )}
-            <div className="space-y-2">
-              <Label htmlFor="description">Notes</Label>
-              <Textarea
-                id="description"
-                rows={3}
-                value={draft.description}
-                onChange={event => handleDraftChange("description", event.target.value)}
-              />
-            </div>
-            {draft.kind === "event" && (
+
+            {attendees.length > 0 && (
               <div className="space-y-2">
-                <Label htmlFor="location">Location</Label>
-                <Input
-                  id="location"
-                  value={draft.location}
-                  onChange={event => handleDraftChange("location", event.target.value)}
-                />
+                <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-white/60">
+                  <UserRound className="h-3.5 w-3.5" />
+                  Attendees
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {attendees.map(person => (
+                    <span
+                      key={person}
+                      className="inline-flex items-center rounded-full bg-white/10 px-3 py-1 text-xs text-white/80"
+                    >
+                      {person}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
           </div>
