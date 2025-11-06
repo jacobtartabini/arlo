@@ -384,6 +384,59 @@ function formatTimeRange(startMinutes: number, endMinutes: number) {
   return `${minutesToTime(startMinutes)} – ${minutesToTime(endMinutes)}`;
 }
 
+function hexToRgb(color: string) {
+  let hex = color.replace("#", "");
+  if (hex.length === 3) {
+    hex = hex
+      .split("")
+      .map(char => char + char)
+      .join("");
+  }
+
+  if (hex.length !== 6) {
+    return null;
+  }
+
+  const bigint = Number.parseInt(hex, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+
+  return { r, g, b };
+}
+
+function getContrastTextColor(color: string) {
+  const rgb = hexToRgb(color);
+  if (!rgb) {
+    return "#0f172a";
+  }
+
+  const srgb = [rgb.r, rgb.g, rgb.b].map(value => {
+    const channel = value / 255;
+    return channel <= 0.03928 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
+  });
+
+  const luminance = 0.2126 * srgb[0] + 0.7152 * srgb[1] + 0.0722 * srgb[2];
+  return luminance > 0.55 ? "#0f172a" : "#ffffff";
+}
+
+function formatDisplayTime(minutes: number) {
+  const date = new Date();
+  date.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+  return format(date, "h:mm a").toLowerCase();
+}
+
+function formatDisplayTimeRange(startMinutes: number, endMinutes: number) {
+  const start = formatDisplayTime(startMinutes).split(" ");
+  const end = formatDisplayTime(endMinutes).split(" ");
+
+  if (start[1] && end[1] && start[1] === end[1]) {
+    return `${start[0]} – ${end[0]}${end[1]}`;
+  }
+
+  return `${start.join("")} – ${end.join("")}`;
+}
+
 function useStoredState<T>(key: string, defaults: T): [T, React.Dispatch<React.SetStateAction<T>>] {
   const [state, setState] = React.useState<T>(() => {
     if (key === EVENT_STORAGE_KEY) {
@@ -942,6 +995,21 @@ const CalendarPage: React.FC = () => {
                       const height = Math.max(36, minutesToPx(block.endMinutes) - top);
                       const widthPercent = layoutInfo ? 100 / layoutInfo.columns : 100;
                       const leftPercent = layoutInfo ? layoutInfo.lane * widthPercent : 0;
+                      const isTask = block.source === "task";
+                      const rgb = hexToRgb(block.color);
+                      const baseTextColor = isTask ? "#0f172a" : getContrastTextColor(block.color);
+                      const subtleTextColor = isTask
+                        ? "rgba(15, 23, 42, 0.65)"
+                        : baseTextColor === "#ffffff"
+                          ? "rgba(255, 255, 255, 0.8)"
+                          : "rgba(15, 23, 42, 0.7)";
+                      const backgroundColor = isTask && rgb
+                        ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.16)`
+                        : block.color;
+                      const borderColor = isTask && rgb
+                        ? `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.5)`
+                        : "transparent";
+                      const timeLabel = block.allDay ? "All day" : formatDisplayTimeRange(block.startMinutes, block.endMinutes);
 
                       return (
                         <button
@@ -952,26 +1020,31 @@ const CalendarPage: React.FC = () => {
                           onClick={() => setSelectedBlock(block)}
                           title={`${block.title} · ${formatTimeRange(block.startMinutes, block.endMinutes)}`}
                           className={cn(
-                            "absolute flex h-full flex-col overflow-hidden rounded-xl border border-border/60 bg-card/95 p-2 text-left text-sm shadow-sm backdrop-blur transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                            block.source === "task" && "border-dashed"
+                            "absolute flex h-full flex-col justify-between overflow-hidden rounded-2xl p-3 text-left text-sm shadow-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                            isTask && "border border-dashed"
                           )}
                           style={{
                             top,
                             height,
                             left: `calc(${leftPercent}% + 0.25rem)`,
                             width: `calc(${widthPercent}% - 0.5rem)`,
-                            borderLeft: `4px solid ${block.color}`
+                            backgroundColor,
+                            color: baseTextColor,
+                            borderColor,
+                            boxShadow: isTask
+                              ? "0 10px 20px -15px rgba(15, 23, 42, 0.5)"
+                              : "0 18px 40px -24px rgba(15, 23, 42, 0.65)"
                           }}
                         >
                           <div className="flex flex-col gap-1 overflow-hidden">
-                            <p className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                              <span>{minutesToTime(block.startMinutes)}</span>
-                              <span aria-hidden className="text-muted-foreground/70">•</span>
-                              <span>{minutesToTime(block.endMinutes)}</span>
-                            </p>
                             <p className="truncate text-sm font-semibold leading-snug">{block.title}</p>
+                            <p className="text-xs font-medium" style={{ color: subtleTextColor }}>
+                              {timeLabel}
+                            </p>
                             {block.subtitle && (
-                              <p className="truncate text-[11px] text-muted-foreground">{block.subtitle}</p>
+                              <p className="truncate text-xs" style={{ color: subtleTextColor }}>
+                                {block.subtitle}
+                              </p>
                             )}
                           </div>
                         </button>
