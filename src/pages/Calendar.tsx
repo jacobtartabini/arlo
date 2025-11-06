@@ -18,7 +18,16 @@ import {
   startOfMonth,
   startOfWeek
 } from "date-fns";
-import { Calendar as CalendarIcon, CalendarClock, Check, ChevronLeft, ChevronRight, Link as LinkIcon, Plus } from "lucide-react";
+import {
+  Calendar as CalendarIcon,
+  CalendarClock,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Info,
+  Link as LinkIcon,
+  Plus
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -796,7 +805,7 @@ const CalendarPage: React.FC = () => {
   );
 
   const renderTimeline = () => (
-    <div className="relative h-full min-h-[640px] overflow-auto">
+    <div className="relative h-full min-h-[640px] overflow-x-auto overflow-y-auto">
       <div className="flex min-h-full">
         <div className="sticky left-0 z-10 flex w-16 flex-col border-r bg-card text-right text-[11px] text-muted-foreground">
           {Array.from({ length: (HOURS_PER_DAY / 60) + 1 }).map((_, index) => {
@@ -808,7 +817,12 @@ const CalendarPage: React.FC = () => {
             );
           })}
         </div>
-        <div className={cn("grid min-w-full flex-1", view === "week" ? "grid-cols-7" : "grid-cols-1")}>
+        <div
+          className={cn(
+            "grid flex-1",
+            view === "week" ? "min-w-[960px] grid-cols-7" : "min-w-[360px] grid-cols-1"
+          )}
+        >
           {focusBlocks.map(({ day, blocks }) => {
             const dayKey = format(day, "yyyy-MM-dd");
             const layout = computeBlockLayout(blocks);
@@ -915,7 +929,7 @@ const CalendarPage: React.FC = () => {
                       const height = Math.max(32, minutesToPx(selectionForDay.endMinutes) - top);
                       return (
                         <div
-                          className="pointer-events-none absolute left-0 right-0 rounded-xl border border-primary/60 bg-primary/10 p-2 text-xs font-medium text-primary shadow-sm"
+                          className="pointer-events-none absolute left-1 right-1 rounded-lg border border-primary/60 bg-primary/10 px-2 py-1.5 text-[11px] font-medium text-primary shadow-sm"
                           style={{ top, height }}
                         >
                           {formatTimeRange(selectionForDay.startMinutes, selectionForDay.endMinutes)}
@@ -925,7 +939,7 @@ const CalendarPage: React.FC = () => {
                     {blocks.map(block => {
                       const layoutInfo = layout.get(block.id);
                       const top = minutesToPx(block.startMinutes);
-                      const height = Math.max(40, minutesToPx(block.endMinutes) - top);
+                      const height = Math.max(36, minutesToPx(block.endMinutes) - top);
                       const widthPercent = layoutInfo ? 100 / layoutInfo.columns : 100;
                       const leftPercent = layoutInfo ? layoutInfo.lane * widthPercent : 0;
 
@@ -938,7 +952,7 @@ const CalendarPage: React.FC = () => {
                           onClick={() => setSelectedBlock(block)}
                           title={`${block.title} · ${formatTimeRange(block.startMinutes, block.endMinutes)}`}
                           className={cn(
-                            "absolute flex h-full flex-col overflow-hidden rounded-xl border border-border/60 bg-card/95 p-2.5 text-left text-sm shadow-sm backdrop-blur transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                            "absolute flex h-full flex-col overflow-hidden rounded-xl border border-border/60 bg-card/95 p-2 text-left text-sm shadow-sm backdrop-blur transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                             block.source === "task" && "border-dashed"
                           )}
                           style={{
@@ -950,8 +964,10 @@ const CalendarPage: React.FC = () => {
                           }}
                         >
                           <div className="flex flex-col gap-1 overflow-hidden">
-                            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                              {formatTimeRange(block.startMinutes, block.endMinutes)}
+                            <p className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                              <span>{minutesToTime(block.startMinutes)}</span>
+                              <span aria-hidden className="text-muted-foreground/70">•</span>
+                              <span>{minutesToTime(block.endMinutes)}</span>
                             </p>
                             <p className="truncate text-sm font-semibold leading-snug">{block.title}</p>
                             {block.subtitle && (
@@ -1054,132 +1070,170 @@ const CalendarPage: React.FC = () => {
 
   return (
     <div className="flex h-full w-full flex-col">
-      <header className="border-b bg-background/80 backdrop-blur">
-        <div className="flex w-full flex-col gap-6 px-4 py-6 sm:px-6 lg:px-10">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="flex flex-col gap-2">
-              <h1 className="text-2xl font-semibold tracking-tight">Calendar</h1>
-              <p className="text-sm text-muted-foreground">Intentional time-blocking with a calm, focused layout.</p>
+      <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur">
+        <div className="flex w-full flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-6 lg:px-10">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <CalendarIcon className="h-5 w-5" />
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Select value={view} onValueChange={value => value && setView(value as CalendarView)}>
-                <SelectTrigger className="w-[120px] justify-between">
-                  <SelectValue placeholder="View" />
-                </SelectTrigger>
-                <SelectContent>
-                  {VIEW_OPTIONS.map(option => (
-                    <SelectItem key={option.id} value={option.id}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button onClick={() => openCreateDialog()} className="gap-2">
-                <Plus className="h-4 w-4" />
-                New item
-              </Button>
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight">Calendar</h1>
+              <p className="text-sm text-muted-foreground">Plan your time with clarity and keep every view aligned.</p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center rounded-full border bg-card px-1 py-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-full"
-                  onClick={() => handleNavigate("prev")}
-                  aria-label="Previous period"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-full"
-                  onClick={() => handleNavigate("next")}
-                  aria-label="Next period"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-              <Button variant="outline" size="sm" onClick={() => handleNavigate("today")}>Today</Button>
-              <div className="flex flex-col">
-                <span className="text-xs uppercase tracking-wide text-muted-foreground">Selected range</span>
-                <span className="text-lg font-semibold text-foreground">{rangeLabel}</span>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <CalendarClock className="h-4 w-4" />
-                <span>{totalFocusBlocks} focus sessions scheduled</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Plus className="h-3.5 w-3.5" />
-                <span>Drag across the timeline to add new events</span>
-              </div>
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={() => openCreateDialog()} className="gap-2">
+              <Plus className="h-4 w-4" />
+              New item
+            </Button>
           </div>
         </div>
       </header>
 
-      <div className="flex w-full flex-1 gap-6 px-4 pb-6 pt-4 sm:px-6 lg:px-10 lg:pt-6">
-        <aside className="hidden w-64 flex-col gap-6 lg:flex">
-          <div className="rounded-2xl border bg-card p-4 shadow-sm">
-            <Button className="w-full justify-center gap-2" onClick={() => openCreateDialog()}>
-              <Plus className="h-4 w-4" />
-              New event
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="mt-2 w-full justify-start gap-2 text-muted-foreground"
-              onClick={handleCopyBookingLink}
-            >
-              <LinkIcon className="h-4 w-4" />
-              Copy booking link
-            </Button>
-            <p className="mt-2 truncate text-[11px] text-muted-foreground">{bookingLink.replace(/^https?:\/\//, "")}</p>
-            {nextAvailableSlot && (
-              <div className="mt-3 rounded-xl bg-muted/60 px-3 py-2 text-xs">
-                <p className="flex items-center gap-2 text-muted-foreground">
-                  <CalendarClock className="h-3.5 w-3.5" />
-                  Next available slot
-                </p>
-                <p className="mt-1 font-medium text-foreground">{formatSlotLabel(nextAvailableSlot)}</p>
+      <div className="flex min-h-0 flex-1 flex-col gap-6 px-4 pb-6 pt-4 sm:px-6 lg:px-10 lg:pt-6">
+        <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[260px,minmax(0,1fr)] 2xl:grid-cols-[260px,minmax(0,1fr),320px]">
+          <aside className="hidden min-h-0 flex-col gap-6 lg:flex">
+            <div className="rounded-2xl border bg-card p-4 shadow-sm">
+              <Button className="w-full justify-center gap-2" onClick={() => openCreateDialog()}>
+                <Plus className="h-4 w-4" />
+                New event
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-2 w-full justify-start gap-2 text-muted-foreground"
+                onClick={handleCopyBookingLink}
+              >
+                <LinkIcon className="h-4 w-4" />
+                Copy booking link
+              </Button>
+              <p className="mt-2 truncate text-[11px] text-muted-foreground">{bookingLink.replace(/^https?:\/\//, "")}</p>
+              {nextAvailableSlot && (
+                <div className="mt-3 rounded-xl bg-muted/60 px-3 py-2 text-xs">
+                  <p className="flex items-center gap-2 text-muted-foreground">
+                    <CalendarClock className="h-3.5 w-3.5" />
+                    Next available slot
+                  </p>
+                  <p className="mt-1 font-medium text-foreground">{formatSlotLabel(nextAvailableSlot)}</p>
+                </div>
+              )}
+            </div>
+
+            {renderMiniMonth()}
+          </aside>
+
+          <div className="flex min-w-0 flex-1 flex-col gap-4">
+            <div className="rounded-2xl border bg-card px-4 py-4 shadow-sm sm:px-6">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center rounded-full border bg-background px-1 py-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="rounded-full"
+                      onClick={() => handleNavigate("prev")}
+                      aria-label="Previous period"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="rounded-full"
+                      onClick={() => handleNavigate("next")}
+                      aria-label="Next period"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => handleNavigate("today")}>
+                    Today
+                  </Button>
+                  <div className="flex flex-col">
+                    <span className="text-xs uppercase tracking-wide text-muted-foreground">Selected range</span>
+                    <span className="text-lg font-semibold text-foreground">{rangeLabel}</span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select value={view} onValueChange={value => value && setView(value as CalendarView)}>
+                    <SelectTrigger className="w-[120px] justify-between">
+                      <SelectValue placeholder="View" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {VIEW_OPTIONS.map(option => (
+                        <SelectItem key={option.id} value={option.id}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-            )}
+            </div>
+
+            <main className="flex-1 min-w-0 overflow-hidden rounded-3xl border bg-card shadow-sm">
+              {view === "month" ? renderMonthGrid() : renderTimeline()}
+            </main>
           </div>
 
-          {renderMiniMonth()}
-
-          <div className="rounded-2xl border bg-card p-4 shadow-sm">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <CalendarIcon className="h-4 w-4" />
-              Upcoming
-            </div>
-            <ScrollArea className="mt-3 max-h-[240px] pr-2">
-              <div className="space-y-3">
-                {upcomingItems.length ? (
-                  upcomingItems.map(item => (
-                    <div key={item.id} className="rounded-lg border border-border/60 p-3 text-xs">
-                      <p className="text-sm font-medium" style={{ color: item.color }}>
-                        {item.title}
-                      </p>
-                      {item.subtitle && <p className="mt-1 text-muted-foreground">{item.subtitle}</p>}
-                      <p className="mt-1 text-muted-foreground">{format(item.start, "EEE, MMM d · p")}</p>
+          <aside className="hidden min-h-0 flex-col gap-6 2xl:flex">
+            <div className="rounded-2xl border bg-card p-5 shadow-sm">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <Info className="h-4 w-4" />
+                Planning insights
+              </div>
+              <div className="mt-4 space-y-4 text-sm text-muted-foreground">
+                <div className="flex items-start gap-3">
+                  <CalendarClock className="mt-0.5 h-4 w-4" />
+                  <div>
+                    <p className="font-medium text-foreground">{totalFocusBlocks} focus sessions</p>
+                    <p>Scheduled across the selected range.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Plus className="mt-0.5 h-4 w-4" />
+                  <div>
+                    <p className="font-medium text-foreground">Quick create</p>
+                    <p>Drag across any open space to block time instantly.</p>
+                  </div>
+                </div>
+                {nextAvailableSlot && (
+                  <div className="flex items-start gap-3">
+                    <CalendarIcon className="mt-0.5 h-4 w-4" />
+                    <div>
+                      <p className="font-medium text-foreground">Next public slot</p>
+                      <p>{formatSlotLabel(nextAvailableSlot)}</p>
                     </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-muted-foreground">Nothing scheduled yet.</p>
+                  </div>
                 )}
               </div>
-            </ScrollArea>
-          </div>
-        </aside>
+            </div>
 
-        <main className="flex-1 min-w-0 overflow-hidden rounded-3xl border bg-card shadow-sm">
-          {view === "month" ? renderMonthGrid() : renderTimeline()}
-        </main>
+            <div className="rounded-2xl border bg-card p-5 shadow-sm">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <CalendarIcon className="h-4 w-4" />
+                Upcoming schedule
+              </div>
+              <ScrollArea className="mt-3 max-h-[320px] pr-2">
+                <div className="space-y-3">
+                  {upcomingItems.length ? (
+                    upcomingItems.map(item => (
+                      <div key={item.id} className="rounded-lg border border-border/60 p-3 text-xs">
+                        <p className="text-sm font-medium" style={{ color: item.color }}>
+                          {item.title}
+                        </p>
+                        {item.subtitle && <p className="mt-1 text-muted-foreground">{item.subtitle}</p>}
+                        <p className="mt-1 text-muted-foreground">{format(item.start, "EEE, MMM d · p")}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Nothing scheduled yet.</p>
+                  )}
+                </div>
+              </ScrollArea>
+            </div>
+          </aside>
+        </div>
       </div>
 
       <Dialog
