@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import {
   addDays,
   addMonths,
@@ -24,6 +25,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Clock,
   Info,
   Link as LinkIcon,
   MapPin,
@@ -114,6 +116,11 @@ type DraftState = {
   location: string;
   color: string;
   attendees: string;
+};
+
+type SelectedBlockState = {
+  block: CalendarBlock;
+  target: HTMLElement;
 };
 
 const priorityOrder: Record<Task["priority"], number> = {
@@ -485,7 +492,7 @@ const CalendarPage: React.FC = () => {
   const [bookings, setBookings] = useStoredState<BookingSlot[]>(BOOKING_STORAGE_KEY, DEFAULT_BOOKINGS);
   const [draft, setDraft] = React.useState<DraftState>(DEFAULT_DRAFT);
   const [isDialogOpen, setDialogOpen] = React.useState(false);
-  const [selectedBlock, setSelectedBlock] = React.useState<CalendarBlock | null>(null);
+  const [selectedBlock, setSelectedBlock] = React.useState<SelectedBlockState | null>(null);
   const [dragSelection, setDragSelection] = React.useState<{
     day: Date;
     dayKey: string;
@@ -521,6 +528,10 @@ const CalendarPage: React.FC = () => {
       setDraft(prev => ({ ...prev, date: format(selectedDate, "yyyy-MM-dd") }));
     }
   }, [selectedDate, isDialogOpen]);
+
+  React.useEffect(() => {
+    setSelectedBlock(null);
+  }, [view, selectedDate]);
 
   const openCreateDialog = React.useCallback(
     (overrides?: Partial<DraftState>) => {
@@ -1038,7 +1049,7 @@ const CalendarPage: React.FC = () => {
                           type="button"
                           data-calendar-block
                           onPointerDown={event => event.stopPropagation()}
-                          onClick={() => setSelectedBlock(block)}
+                          onClick={event => setSelectedBlock({ block, target: event.currentTarget })}
                           title={`${block.title} · ${formatTimeRange(block.startMinutes, block.endMinutes)}`}
                           className={cn(
                             "absolute flex h-full flex-col justify-between overflow-hidden rounded-2xl p-3 text-left text-sm shadow-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
@@ -1519,52 +1530,62 @@ const CalendarPage: React.FC = () => {
                 : [];
             const slot = selectedBlock.source === "booking" ? (selectedBlock.meta as BookingSlot | undefined) : undefined;
 
-            return (
-              <>
-                <DialogHeader>
-                  <DialogTitle>{selectedBlock.title}</DialogTitle>
-                  <DialogDescription>
-                    {`${format(parseISO(`${selectedBlock.date}T00:00:00`), "EEEE, MMM d yyyy")} · ${formatTimeRange(selectedBlock.startMinutes, selectedBlock.endMinutes)}`}
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 text-sm">
-                  <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
-                    <Badge variant="outline">{blockLabel}</Badge>
-                    {selectedBlock.subtitle && <span className="text-muted-foreground">{selectedBlock.subtitle}</span>}
-                  </div>
-                  {selectedBlock.source === "event" && selectedBlock.meta?.description && (
-                    <p className="text-muted-foreground">{String(selectedBlock.meta.description)}</p>
-                  )}
-                  {selectedBlock.source === "event" && attendees.length > 0 && (
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Attendees</p>
-                      <p className="mt-1 text-foreground">{attendees.join(", ")}</p>
-                    </div>
-                  )}
-                  {slot && (
-                    <div className="space-y-1">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Booking details</p>
-                      <p className="text-foreground">
-                        {slot.available ? "Open for booking" : slot.bookedBy ? `Booked by ${slot.bookedBy}` : "Unavailable"}
-                      </p>
-                      {slot.description && <p className="text-muted-foreground">{slot.description}</p>}
-                    </div>
-                  )}
-                  {selectedBlock.source === "task" && (
-                    <p className="text-muted-foreground">Focus session scheduled to keep the day on track.</p>
-                  )}
-                </div>
-                <DialogFooter>
-                  <Button variant="ghost" onClick={() => setSelectedBlock(null)}>
-                    Close
-                  </Button>
-                </DialogFooter>
-              </>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
-    </div>
+          {description && (
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/80">
+              {description}
+            </div>
+          )}
+
+          {attendees.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-white/60">
+                <UserRound className="h-3.5 w-3.5" />
+                Attendees
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {attendees.map(person => (
+                  <span
+                    key={person}
+                    className="inline-flex items-center rounded-full bg-white/10 px-3 py-1 text-xs text-white/80"
+                  >
+                    {person}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {slot && (
+            <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs uppercase tracking-wide text-white/60">Booking details</p>
+              <p className="text-sm font-medium text-white">
+                {slot.available ? "Open for booking" : slot.bookedBy ? `Booked by ${slot.bookedBy}` : "Unavailable"}
+              </p>
+              {slot.description && <p className="text-sm text-white/75">{slot.description}</p>}
+              {inviteUrl && (
+                <Button
+                  variant="secondary"
+                  className="w-full justify-center gap-2 bg-white text-slate-900 hover:bg-white/90"
+                  asChild
+                >
+                  <a href={inviteUrl} target="_blank" rel="noreferrer">
+                    <LinkIcon className="h-4 w-4" />
+                    View public link
+                  </a>
+                </Button>
+              )}
+            </div>
+          )}
+
+          {block.source === "task" && (
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/80">
+              Focus session scheduled to keep the day on track.
+            </div>
+          )}
+        </div>
+      </div>
+    </>,
+    document.body
   );
 };
 
