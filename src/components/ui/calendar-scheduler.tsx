@@ -122,29 +122,33 @@ function CalendarScheduler(props: CalendarSchedulerProps) {
 
   return (
     <div className={cn("flex flex-col items-center", className)}>
-      <Card className="w-full max-w-[600px] border-none bg-background shadow-none">
-        <CardHeader>
-          <CardTitle className="text-base">Schedule a Meeting</CardTitle>
+      <Card className="w-full max-w-[620px] rounded-3xl border border-border/60 bg-card/95 shadow-lg shadow-black/5">
+        <CardHeader className="gap-1 border-b border-border/50 pb-4">
+          <CardTitle className="text-base font-semibold">Schedule a Meeting</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4 lg:flex-row">
-          <div className="flex-1 rounded-md border p-2">
+        <CardContent className="flex flex-col gap-6 p-6 pt-6 lg:flex-row">
+          <div className="flex-1 rounded-2xl border border-border/60 bg-background/70 p-3">
             <Calendar
               mode="single"
               selected={date}
               onSelect={handleDateSelect}
               disabled={disabled}
-              className="rounded-md"
             />
           </div>
-          <div className="flex-1 max-h-[320px] overflow-y-auto rounded-md border p-2">
-            <p className="mb-2 text-sm font-medium text-muted-foreground">Pick a time</p>
+          <div className="flex-1 max-h-[320px] overflow-y-auto rounded-2xl border border-border/60 bg-background/70 p-4">
+            <p className="mb-3 text-sm font-medium text-muted-foreground">Pick a time</p>
             <div className="grid grid-cols-2 gap-2">
               {timeSlots.map(slot => (
                 <Button
                   key={slot}
                   variant={time === slot ? "default" : "outline"}
                   size="sm"
-                  className={cn("w-full", time === slot && "ring-2 ring-primary")}
+                  className={cn(
+                    "w-full rounded-full text-xs font-medium",
+                    time === slot
+                      ? "shadow-sm shadow-primary/20"
+                      : "border-border/60 bg-card/60 text-foreground"
+                  )}
                   onClick={() => handleTimeSelect(slot)}
                   disabled={!date}
                 >
@@ -152,28 +156,27 @@ function CalendarScheduler(props: CalendarSchedulerProps) {
                 </Button>
               ))}
               {!timeSlots.length && (
-                <div className="col-span-2 flex h-[140px] items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
+                <div className="col-span-2 flex h-[140px] items-center justify-center rounded-2xl border border-dashed border-border/60 bg-background/60 text-sm text-muted-foreground">
                   {date ? `No times available for ${format(date, "MMMM d")}.` : "Select a date to view times."}
                 </div>
               )}
             </div>
           </div>
         </CardContent>
-        <CardFooter className="flex justify-between">
-          <Button variant="ghost" size="sm" onClick={handleReset}>
+        <CardFooter className="flex items-center justify-between px-6 pb-6 pt-0">
+          <Button variant="ghost" size="sm" className="rounded-full" onClick={handleReset}>
             Reset
           </Button>
-          <Button size="sm" onClick={() => onConfirm?.({ date, time })} disabled={!date || !time}>
+          <Button
+            size="sm"
+            className="rounded-full"
+            onClick={() => onConfirm?.({ date, time })}
+            disabled={!date || !time}
+          >
             Confirm
           </Button>
         </CardFooter>
       </Card>
-      <div className="mt-4 text-center text-xs text-muted-foreground">
-        Minimal design • made by{" "}
-        <a href="https://www.ruixen.com" target="_blank" rel="noreferrer" className="underline">
-          ruixen.com
-        </a>
-      </div>
     </div>
   );
 }

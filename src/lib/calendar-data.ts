@@ -218,16 +218,22 @@ export function setStoredBookings(bookings: BookingSlot[]) {
 }
 
 export function generateBookingSlug(handle: string) {
-  const sanitized = handle.trim() || "jacob";
+  const sanitized = handle.trim();
+  if (!sanitized) {
+    return "jacob";
+  }
   return sanitized.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 }
 
 export function getPublicBookingUrl(handle: string) {
-  const defaultHost = "https://arlo.jacobtartabini.com";
+  const defaultHost = "https://jacobtartabini.com";
   const origin = typeof window !== "undefined" && window.location.origin
     ? window.location.origin
     : defaultHost;
   const slug = generateBookingSlug(handle);
+  if (!slug || slug === "jacob") {
+    return `${origin}/book`;
+  }
   return `${origin}/book/${slug}`;
 }
 

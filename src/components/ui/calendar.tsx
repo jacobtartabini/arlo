@@ -5,7 +5,6 @@ import * as React from "react";
 import { DayPicker } from "react-day-picker";
 
 import { cn } from "@/lib/utils";
-import { buttonVariants } from "@/components/ui/button";
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>;
 
@@ -17,32 +16,36 @@ function Calendar({
   ...props
 }: CalendarProps) {
   const defaultClassNames = {
-    months: "relative flex flex-col sm:flex-row gap-4",
-    month: "w-full",
-    month_caption: "relative mx-10 mb-1 flex h-9 items-center justify-center z-20",
-    caption_label: "text-sm font-medium",
-    nav: "absolute top-0 flex w-full justify-between z-10",
-    button_previous: cn(
-      buttonVariants({ variant: "ghost" }),
-      "size-9 text-muted-foreground/80 hover:text-foreground p-0",
-    ),
-    button_next: cn(
-      buttonVariants({ variant: "ghost" }),
-      "size-9 text-muted-foreground/80 hover:text-foreground p-0",
-    ),
-    weekday: "size-9 p-0 text-xs font-medium text-muted-foreground/80",
+    months:
+      "flex flex-col gap-4 rounded-2xl border border-border/70 bg-card/90 p-4 shadow-sm",
+    month: "space-y-4",
+    month_caption: "flex items-center justify-between",
+    caption_label: "text-sm font-semibold text-foreground",
+    nav: "flex items-center gap-2",
+    button_previous:
+      "inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+    button_next:
+      "inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted/70 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+    table: "w-full border-collapse",
+    head_row: "grid grid-cols-7 gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70",
+    head_cell: "text-center",
+    row: "mt-2 grid grid-cols-7 gap-1",
+    cell: "text-center",
+    weekday: "text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70",
+    week: "grid grid-cols-7 gap-1",
+    week_number: "text-xs text-muted-foreground/70",
+    day: "group relative h-8",
     day_button:
-      "relative flex size-9 items-center justify-center whitespace-nowrap rounded-lg p-0 text-foreground outline-offset-2 group-[[data-selected]:not(.range-middle)]:[transition-property:color,background-color,border-radius,box-shadow] group-[[data-selected]:not(.range-middle)]:duration-150 focus:outline-none group-data-[disabled]:pointer-events-none focus-visible:z-10 hover:bg-accent group-data-[selected]:bg-primary hover:text-foreground group-data-[selected]:text-primary-foreground group-data-[disabled]:text-foreground/30 group-data-[disabled]:line-through group-data-[outside]:text-foreground/30 group-data-[outside]:group-data-[selected]:text-primary-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring/70 group-[.range-start:not(.range-end)]:rounded-e-none group-[.range-end:not(.range-start)]:rounded-s-none group-[.range-middle]:rounded-none group-data-[selected]:group-[.range-middle]:bg-accent group-data-[selected]:group-[.range-middle]:text-foreground",
-    day: "group size-9 px-0 text-sm",
-    range_start: "range-start",
-    range_end: "range-end",
-    range_middle: "range-middle",
-    today:
-      "*:after:pointer-events-none *:after:absolute *:after:bottom-1 *:after:start-1/2 *:after:z-10 *:after:size-[3px] *:after:-translate-x-1/2 *:after:rounded-full *:after:bg-primary [&[data-selected]:not(.range-middle)>*]:after:bg-background [&[data-disabled]>*]:after:bg-foreground/30 *:after:transition-colors",
-    outside: "text-muted-foreground data-selected:bg-accent/50 data-selected:text-muted-foreground",
+      "inline-flex h-8 w-full items-center justify-center rounded-full text-xs font-medium text-foreground transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 data-[disabled]:pointer-events-none data-[disabled]:opacity-30 data-[outside-month]:text-muted-foreground/50 data-[selected]:bg-primary data-[selected]:text-primary-foreground data-[today]:ring-1 data-[today]:ring-primary/60 data-[today]:text-primary hover:bg-muted",
+    day_selected: "rounded-full",
+    day_today: "text-primary",
+    range_start: "rounded-s-full",
+    range_end: "rounded-e-full",
+    range_middle: "rounded-none",
+    outside:
+      "text-muted-foreground/50 data-[selected]:bg-primary/20 data-[selected]:text-primary",
     hidden: "invisible",
-    week_number: "size-9 p-0 text-xs font-medium text-muted-foreground/80",
-  };
+  } as const;
 
   const mergedClassNames: typeof defaultClassNames = Object.keys(defaultClassNames).reduce(
     (acc, key) => ({
@@ -74,7 +77,7 @@ function Calendar({
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
-      className={cn("w-fit", className)}
+      className={cn("w-full", className)}
       classNames={mergedClassNames}
       components={mergedComponents}
       {...props}

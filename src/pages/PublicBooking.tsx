@@ -18,10 +18,6 @@ function formatSlotTimeRange(slot: BookingSlot) {
   return `${format(getSlotStart(slot), "h:mm a")} – ${format(getSlotEnd(slot), "h:mm a")}`;
 }
 
-function getSlotTimeRange(slot: BookingSlot) {
-  return `${format(getSlotStart(slot), "h:mm a")} – ${format(getSlotEnd(slot), "h:mm a")}`;
-}
-
 const DEFAULT_HANDLE = "jacob";
 
 const PublicBookingPage = () => {
