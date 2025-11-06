@@ -1,4 +1,19 @@
-import { format } from "date-fns";
+import {
+  addDays,
+  addMinutes,
+  addMonths,
+  addWeeks,
+  addYears,
+  differenceInCalendarDays,
+  differenceInCalendarMonths,
+  differenceInCalendarWeeks,
+  differenceInCalendarYears,
+  differenceInMinutes,
+  endOfDay,
+  format,
+  parseISO,
+  startOfDay
+} from "date-fns";
 
 import type { BookingSlot, CalendarEvent, Task } from "@/lib/calendar-data";
 import { formatSlotLabel } from "@/lib/calendar-data";
@@ -39,6 +54,155 @@ type LayoutGroup = {
 };
 
 type BlockLayout = Map<string, { lane: number; columns: number }>;
+
+const MIN_EVENT_DURATION_MINUTES = 30;
+const UPCOMING_LOOKAHEAD_MONTHS = 6;
+
+type EventOccurrence = {
+  occurrenceStart: Date;
+  occurrenceEnd: Date;
+  occurrenceIndex: number;
+};
+
+function getEventDateRange(event: CalendarEvent) {
+  const startDate = event.date;
+  const endDate = event.endDate ?? event.date;
+  const start = event.allDay
+    ? startOfDay(parseISO(`${startDate}T00:00:00`))
+    : parseISO(`${startDate}T${(event.startTime || "09:00")}:00`);
+  let end = event.allDay
+    ? endOfDay(parseISO(`${endDate}T00:00:00`))
+    : parseISO(`${endDate}T${(event.endTime || event.startTime || "09:00")}:00`);
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return null;
+  }
+
+  if (end <= start) {
+    end = addMinutes(start, MIN_EVENT_DURATION_MINUTES);
+  }
+
+  return { start, end };
+}
+
+function computeOccurrenceStart(
+  baseStart: Date,
+  frequency: "daily" | "weekly" | "monthly" | "yearly",
+  interval: number,
+  step: number
+) {
+  switch (frequency) {
+    case "weekly":
+      return addWeeks(baseStart, step * interval);
+    case "monthly":
+      return addMonths(baseStart, step * interval);
+    case "yearly":
+      return addYears(baseStart, step * interval);
+    case "daily":
+    default:
+      return addDays(baseStart, step * interval);
+  }
+}
+
+function resolveEventOccurrenceForDay(event: CalendarEvent, day: Date): EventOccurrence | null {
+  const range = getEventDateRange(event);
+  if (!range) return null;
+
+  const { start: baseStart, end: baseEnd } = range;
+  const durationMs = baseEnd.getTime() - baseStart.getTime();
+  const dayStart = startOfDay(day);
+  const dayEnd = endOfDay(day);
+
+  const recurrence = event.recurrence;
+
+  if (!recurrence) {
+    if (baseEnd < dayStart || baseStart > dayEnd) {
+      return null;
+    }
+    return { occurrenceStart: baseStart, occurrenceEnd: baseEnd, occurrenceIndex: 0 };
+  }
+
+  if (dayEnd < baseStart) {
+    return null;
+  }
+
+  const startDay = startOfDay(baseStart);
+  const interval = Math.max(1, recurrence.interval ?? 1);
+
+  const frequency = recurrence.frequency;
+
+  const diffDays = differenceInCalendarDays(dayStart, startDay);
+  if (diffDays < 0) {
+    return null;
+  }
+
+  let stepCandidate = 0;
+
+  if (frequency === "daily") {
+    stepCandidate = Math.floor(diffDays / interval);
+  } else if (frequency === "weekly") {
+    const diffWeeks = differenceInCalendarWeeks(dayStart, startDay, { weekStartsOn: 0 });
+    if (diffWeeks < 0) return null;
+    stepCandidate = Math.floor(diffWeeks / interval);
+  } else if (frequency === "monthly") {
+    const diffMonths = differenceInCalendarMonths(dayStart, startDay);
+    if (diffMonths < 0) return null;
+    stepCandidate = Math.floor(diffMonths / interval);
+  } else if (frequency === "yearly") {
+    const diffYears = differenceInCalendarYears(dayStart, startDay);
+    if (diffYears < 0) return null;
+    stepCandidate = Math.floor(diffYears / interval);
+  }
+
+  const computeStart = (step: number) => computeOccurrenceStart(baseStart, frequency, interval, step);
+
+  let occurrenceIndex = stepCandidate;
+  let occurrenceStart = computeStart(occurrenceIndex);
+
+  if (occurrenceStart > dayEnd && occurrenceIndex > 0) {
+    occurrenceIndex -= 1;
+    occurrenceStart = computeStart(occurrenceIndex);
+  }
+
+  if (occurrenceIndex > 0 && occurrenceStart > dayStart) {
+    const previousStart = computeStart(occurrenceIndex - 1);
+    const previousEnd = new Date(previousStart.getTime() + durationMs);
+    if (previousEnd > dayStart) {
+      occurrenceIndex -= 1;
+      occurrenceStart = previousStart;
+    }
+  }
+
+  const occurrenceEnd = new Date(occurrenceStart.getTime() + durationMs);
+
+  if (recurrence.end) {
+    if (recurrence.end.type === "after") {
+      const maxCount = recurrence.end.count ?? 0;
+      if (occurrenceIndex >= maxCount) {
+        return null;
+      }
+    } else if (recurrence.end.type === "onDate") {
+      const until = endOfDay(parseISO(`${recurrence.end.date}T00:00:00`));
+      if (occurrenceStart > until) {
+        return null;
+      }
+    }
+  }
+
+  if (occurrenceEnd < dayStart || occurrenceStart > dayEnd) {
+    return null;
+  }
+
+  return { occurrenceStart, occurrenceEnd, occurrenceIndex };
+}
+
+function clampSegmentToDay(occurrenceStart: Date, occurrenceEnd: Date, day: Date) {
+  const dayStart = startOfDay(day);
+  const dayEnd = endOfDay(day);
+  const segmentStart = occurrenceStart > dayStart ? occurrenceStart : dayStart;
+  const segmentEnd = occurrenceEnd < dayEnd ? occurrenceEnd : dayEnd;
+  return { segmentStart, segmentEnd };
+}
 
 export function minutesToPx(minutes: number) {
   return ((minutes - DISPLAY_START_MINUTES) / 60) * HOUR_HEIGHT;
@@ -308,28 +472,52 @@ export function buildBlocks(
 ) {
   const dayStr = format(day, "yyyy-MM-dd");
 
-  const eventBlocks: CalendarBlock[] = events
-    .filter(event => event.date === dayStr)
-    .map(event => {
-      const start = parseTime(event.startTime);
-      const end = parseTime(event.endTime);
-      return {
-        id: event.id,
-        source: "event",
-        title: event.title,
-        subtitle: event.location || event.category,
-        date: dayStr,
-        startMinutes: start,
-        endMinutes: end,
-        color: event.color || "#2563eb",
-        allDay: Boolean(event.allDay),
-        meta: {
-          description: event.description,
-          attendees: event.attendees,
-          location: event.location
-        }
-      } satisfies CalendarBlock;
+  const eventBlocks: CalendarBlock[] = [];
+
+  events.forEach(event => {
+    const occurrence = resolveEventOccurrenceForDay(event, day);
+    if (!occurrence) return;
+
+    const { occurrenceStart, occurrenceEnd, occurrenceIndex } = occurrence;
+    const { segmentStart, segmentEnd } = clampSegmentToDay(occurrenceStart, occurrenceEnd, day);
+
+    let startMinutes = differenceInMinutes(segmentStart, startOfDay(day));
+    let endMinutes = differenceInMinutes(segmentEnd, startOfDay(day));
+
+    if (event.allDay) {
+      startMinutes = DISPLAY_START_MINUTES;
+      endMinutes = DISPLAY_END_MINUTES;
+    } else {
+      startMinutes = Math.max(0, startMinutes);
+      endMinutes = Math.max(startMinutes + MIN_EVENT_DURATION_MINUTES, endMinutes);
+    }
+
+    eventBlocks.push({
+      id: event.id,
+      source: "event",
+      title: event.title,
+      subtitle: event.location || event.category,
+      date: dayStr,
+      startMinutes,
+      endMinutes,
+      color: event.color || "#2563eb",
+      allDay: Boolean(event.allDay),
+      meta: {
+        description: event.description,
+        attendees: event.attendees,
+        location: event.location,
+        startDate: event.date,
+        endDate: event.endDate ?? event.date,
+        occurrenceStart: occurrenceStart.toISOString(),
+        occurrenceEnd: occurrenceEnd.toISOString(),
+        isOccurrenceStart: occurrenceStart >= startOfDay(day) && occurrenceStart <= endOfDay(day),
+        isOccurrenceEnd: occurrenceEnd >= startOfDay(day) && occurrenceEnd <= endOfDay(day),
+        occurrenceIndex,
+        recurrence: event.recurrence,
+        allDay: Boolean(event.allDay)
+      }
     });
+  });
 
   const bookingBlocks: CalendarBlock[] = bookings
     .filter(slot => slot.date === dayStr)
@@ -350,4 +538,60 @@ export function buildBlocks(
   const taskBlocks = scheduleTasks(day, tasks, baseBlocks);
 
   return [...baseBlocks, ...taskBlocks].sort((a, b) => a.startMinutes - b.startMinutes);
+}
+
+export function getUpcomingEventOccurrences(
+  events: CalendarEvent[],
+  fromDate: Date,
+  maxCount = 6
+) {
+  const start = startOfDay(fromDate);
+  const horizon = endOfDay(addMonths(fromDate, UPCOMING_LOOKAHEAD_MONTHS));
+  const seen = new Set<string>();
+  const occurrences: { event: CalendarEvent; start: Date; end: Date; occurrenceIndex: number }[] = [];
+
+  for (let cursor = start; cursor <= horizon && occurrences.length < maxCount * 3; cursor = addDays(cursor, 1)) {
+    events.forEach(event => {
+      const occurrence = resolveEventOccurrenceForDay(event, cursor);
+      if (!occurrence) return;
+
+      const key = `${event.id}:${occurrence.occurrenceIndex}`;
+      if (seen.has(key)) {
+        return;
+      }
+
+      const dayStart = startOfDay(cursor);
+      const dayEnd = endOfDay(cursor);
+      const isOccurrenceStart = occurrence.occurrenceStart >= dayStart && occurrence.occurrenceStart <= dayEnd;
+
+      if (!isOccurrenceStart) {
+        if (occurrence.occurrenceEnd <= fromDate) {
+          return;
+        }
+        if (occurrence.occurrenceStart >= dayStart) {
+          return;
+        }
+        // For ongoing events that started earlier, include them once if still active
+        if (occurrence.occurrenceEnd <= fromDate) {
+          return;
+        }
+      }
+
+      if (occurrence.occurrenceEnd <= fromDate) {
+        return;
+      }
+
+      seen.add(key);
+      occurrences.push({
+        event,
+        start: occurrence.occurrenceStart,
+        end: occurrence.occurrenceEnd,
+        occurrenceIndex: occurrence.occurrenceIndex
+      });
+    });
+  }
+
+  return occurrences
+    .sort((a, b) => a.start.getTime() - b.start.getTime())
+    .slice(0, maxCount);
 }

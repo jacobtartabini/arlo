@@ -31,11 +31,20 @@ export type DraftState = {
   title: string;
   description: string;
   date: string;
+  endDate: string;
   startTime: string;
   endTime: string;
+  allDay: boolean;
   location: string;
   color: string;
   attendees: string;
+  recurrenceFrequency: "none" | "daily" | "weekly" | "monthly" | "yearly";
+  recurrenceInterval: number;
+  recurrenceEnd: {
+    type: "never" | "onDate" | "after";
+    date: string;
+    count: string;
+  };
 };
 
 export type SelectedBlockState = {

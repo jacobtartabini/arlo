@@ -496,7 +496,7 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                           onPointerUp={event => handleBlockPointerUp(event, block)}
                           onPointerCancel={event => handleBlockPointerCancel(event, block)}
                           onClick={event => handleBlockClick(event, block)}
-                          title={`${block.title} · ${formatTimeRange(block.startMinutes, block.endMinutes)}`}
+                          title={`${block.title} · ${block.allDay ? "All day" : formatTimeRange(block.startMinutes, block.endMinutes)}`}
                           className={cn(
                             "absolute flex h-full flex-col justify-between overflow-hidden rounded-2xl p-3 text-left text-sm shadow-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                             "cursor-grab active:cursor-grabbing",

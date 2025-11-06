@@ -59,7 +59,7 @@ export const CalendarMonthGrid: React.FC<CalendarMonthGridProps> = ({
                 >
                   <span className="truncate font-medium">{block.title}</span>
                   <span className="truncate text-[10px] text-muted-foreground">
-                    {formatDisplayTime(block.startMinutes)}
+                    {block.allDay ? "All day" : formatDisplayTime(block.startMinutes)}
                   </span>
                 </div>
               ))}
