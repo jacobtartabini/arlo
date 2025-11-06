@@ -562,6 +562,10 @@ const CalendarPage: React.FC = () => {
   }, [selectedDate, view]);
 
   const bookingLink = React.useMemo(() => getPublicBookingUrl("jacob"), []);
+  const activeViewLabel = React.useMemo(
+    () => VIEW_OPTIONS.find(option => option.id === view)?.label ?? "",
+    [view]
+  );
 
   const handleCopyBookingLink = React.useCallback(() => {
     if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
