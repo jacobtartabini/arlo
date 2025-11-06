@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { ArrowUp, Mic, MicOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -37,7 +37,9 @@ export function FloatingChatBar() {
   const [input, setInput] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+  const [isMessagesOpen, setIsMessagesOpen] = useState(false);
   const { sendMessage, messages } = useArlo();
+  const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -52,15 +54,47 @@ export function FloatingChatBar() {
   }, []);
 
   useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      const root = rootRef.current;
+      if (!root) return;
+
+      if (!root.contains(event.target as Node)) {
+        setIsMessagesOpen(false);
+      }
+    };
+
+    const handleFocusIn = (event: FocusEvent) => {
+      const root = rootRef.current;
+      if (!root) return;
+
+      if (!root.contains(event.target as Node)) {
+        setIsMessagesOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("focusin", handleFocusIn);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("focusin", handleFocusIn);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isMessagesOpen) return;
+
     const container = messagesContainerRef.current;
     if (container) {
       container.scrollTop = container.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, isMessagesOpen]);
 
   useEffect(() => {
+    if (!isMessagesOpen) return;
+
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, isMessagesOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,6 +102,7 @@ export function FloatingChatBar() {
 
     const content = input;
     setInput("");
+    setIsMessagesOpen(true);
     await sendMessage(content);
   };
 
@@ -143,6 +178,7 @@ export function FloatingChatBar() {
     try {
       recognition.start();
       setIsRecording(true);
+      setIsMessagesOpen(true);
     } catch (error) {
       console.error("Failed to start speech recognition:", error);
       toast.error("Unable to access the microphone.");
@@ -152,39 +188,49 @@ export function FloatingChatBar() {
 
   return (
     <motion.div
+      ref={rootRef}
       initial={{ y: 100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
       className="fixed bottom-6 inset-x-0 z-50 flex flex-col items-center gap-4 px-4"
     >
-      {messages.length > 0 && (
-        <div className="w-full flex justify-center">
-          <div
-            ref={messagesContainerRef}
-            className="w-full max-w-[640px] space-y-3 overflow-y-auto max-h-72 pr-1"
+      <AnimatePresence initial={false}>
+        {isMessagesOpen && messages.length > 0 && (
+          <motion.div
+            key="messages-panel"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="w-full flex justify-center"
           >
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${
-                  message.role === "user" ? "justify-end" : "justify-start"
-                }`}
-              >
+            <div
+              ref={messagesContainerRef}
+              className="w-full max-w-[640px] space-y-3 overflow-y-auto max-h-72 pr-1"
+            >
+              {messages.map((message) => (
                 <div
-                  className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm shadow-lg transition-all ${
-                    message.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-foreground"
+                  key={message.id}
+                  className={`flex ${
+                    message.role === "user" ? "justify-end" : "justify-start"
                   }`}
                 >
-                  {message.content}
+                  <div
+                    className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm shadow-lg transition-all ${
+                      message.role === "user"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-foreground"
+                    }`}
+                  >
+                    {message.content}
+                  </div>
                 </div>
-              </div>
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
-        </div>
-      )}
+              ))}
+              <div ref={messagesEndRef} />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="relative w-full flex justify-center">
         <motion.div
@@ -200,7 +246,10 @@ export function FloatingChatBar() {
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onFocus={() => setIsFocused(true)}
+              onFocus={() => {
+                setIsFocused(true);
+                setIsMessagesOpen(true);
+              }}
               onBlur={() => setIsFocused(false)}
               placeholder="Ask Arlo anything..."
               className="flex-1 bg-transparent border-none focus-visible:ring-0 text-foreground placeholder:text-muted-foreground"
@@ -211,7 +260,10 @@ export function FloatingChatBar() {
                 type="button"
                 size="icon"
                 variant="ghost"
-                onClick={toggleRecording}
+                onClick={() => {
+                  setIsMessagesOpen(true);
+                  toggleRecording();
+                }}
                 className={`rounded-full transition-colors ${
                   isRecording ? "bg-destructive text-destructive-foreground" : ""
                 }`}
