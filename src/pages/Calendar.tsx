@@ -12,11 +12,13 @@ import {
   isSameMonth,
   isToday,
   parseISO,
+  setMonth,
+  setYear,
   startOfDay,
   startOfMonth,
   startOfWeek
 } from "date-fns";
-import { Calendar as CalendarIcon, CalendarClock, Check, ChevronLeft, ChevronRight, Link as LinkIcon, Plus, Target } from "lucide-react";
+import { Calendar as CalendarIcon, CalendarClock, Check, ChevronLeft, ChevronRight, Link as LinkIcon, Plus } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,7 +35,6 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import {
@@ -654,6 +655,39 @@ const CalendarPage: React.FC = () => {
     [selectedDate]
   );
 
+  const monthOptions = React.useMemo(
+    () =>
+      Array.from({ length: 12 }).map((_, index) => ({
+        value: String(index),
+        label: format(new Date(2020, index, 1), "MMMM")
+      })),
+    []
+  );
+
+  const yearOptions = React.useMemo(() => {
+    const currentYear = selectedDate.getFullYear();
+    return Array.from({ length: 11 }).map((_, index) => {
+      const year = currentYear - 5 + index;
+      return { value: String(year), label: String(year) };
+    });
+  }, [selectedDate]);
+
+  const handleMonthSelect = React.useCallback(
+    (value: string) => {
+      const monthIndex = Number(value);
+      setSelectedDate(prev => setMonth(prev, monthIndex));
+    },
+    [setSelectedDate]
+  );
+
+  const handleYearSelect = React.useCallback(
+    (value: string) => {
+      const year = Number(value);
+      setSelectedDate(prev => setYear(prev, year));
+    },
+    [setSelectedDate]
+  );
+
   const weekdayLabels = React.useMemo(() => {
     const start = startOfWeek(new Date(), { weekStartsOn: 1 });
     return Array.from({ length: 7 }).map((_, index) => format(addDays(start, index), "EEE"));
@@ -774,7 +808,7 @@ const CalendarPage: React.FC = () => {
             );
           })}
         </div>
-        <div className={cn("grid flex-1", view === "week" ? "min-w-[820px] grid-cols-7" : "grid-cols-1")}>
+        <div className={cn("grid min-w-full flex-1", view === "week" ? "grid-cols-7" : "grid-cols-1")}>
           {focusBlocks.map(({ day, blocks }) => {
             const dayKey = format(day, "yyyy-MM-dd");
             const layout = computeBlockLayout(blocks);
@@ -844,14 +878,11 @@ const CalendarPage: React.FC = () => {
             return (
               <div key={day.toISOString()} className="relative border-r last:border-r-0">
                 <div className="sticky top-0 z-10 flex h-20 flex-col justify-center border-b bg-card/95 px-4 py-3 backdrop-blur">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-start">
                     <div>
                       <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{format(day, "EEE")}</p>
                       <p className={cn("text-xl font-semibold", isToday(day) && "text-primary")}>{format(day, "d MMM")}</p>
                     </div>
-                    <span className="text-xs text-muted-foreground">
-                      {blocks.filter(block => block.source === "task").length} focus
-                    </span>
                   </div>
                 </div>
                 <div
@@ -894,7 +925,7 @@ const CalendarPage: React.FC = () => {
                     {blocks.map(block => {
                       const layoutInfo = layout.get(block.id);
                       const top = minutesToPx(block.startMinutes);
-                      const height = Math.max(44, minutesToPx(block.endMinutes) - top);
+                      const height = Math.max(40, minutesToPx(block.endMinutes) - top);
                       const widthPercent = layoutInfo ? 100 / layoutInfo.columns : 100;
                       const leftPercent = layoutInfo ? layoutInfo.lane * widthPercent : 0;
 
@@ -907,7 +938,7 @@ const CalendarPage: React.FC = () => {
                           onClick={() => setSelectedBlock(block)}
                           title={`${block.title} · ${formatTimeRange(block.startMinutes, block.endMinutes)}`}
                           className={cn(
-                            "absolute flex h-full flex-col rounded-xl border border-border/60 bg-card/95 p-3 text-left text-sm shadow-sm backdrop-blur transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                            "absolute flex h-full flex-col overflow-hidden rounded-xl border border-border/60 bg-card/95 p-2.5 text-left text-sm shadow-sm backdrop-blur transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                             block.source === "task" && "border-dashed"
                           )}
                           style={{
@@ -918,15 +949,15 @@ const CalendarPage: React.FC = () => {
                             borderLeft: `4px solid ${block.color}`
                           }}
                         >
-                          <div className="space-y-1">
-                            <p className="font-medium leading-tight">{block.title}</p>
+                          <div className="flex flex-col gap-1 overflow-hidden">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                              {formatTimeRange(block.startMinutes, block.endMinutes)}
+                            </p>
+                            <p className="truncate text-sm font-semibold leading-snug">{block.title}</p>
                             {block.subtitle && (
-                              <p className="text-xs text-muted-foreground">{block.subtitle}</p>
+                              <p className="truncate text-[11px] text-muted-foreground">{block.subtitle}</p>
                             )}
                           </div>
-                          <p className="mt-3 text-xs text-muted-foreground">
-                            {formatTimeRange(block.startMinutes, block.endMinutes)}
-                          </p>
                         </button>
                       );
                     })}
@@ -942,8 +973,33 @@ const CalendarPage: React.FC = () => {
 
   const renderMiniMonth = () => (
     <div className="rounded-2xl border bg-card p-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-sm font-medium text-foreground">{format(selectedDate, "MMMM yyyy")}</p>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-1 items-center gap-2">
+          <Select value={String(selectedDate.getMonth())} onValueChange={handleMonthSelect}>
+            <SelectTrigger className="w-[140px] justify-between text-left">
+              <SelectValue placeholder="Month" />
+            </SelectTrigger>
+            <SelectContent>
+              {monthOptions.map(option => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={String(selectedDate.getFullYear())} onValueChange={handleYearSelect}>
+            <SelectTrigger className="w-[110px] justify-between text-left">
+              <SelectValue placeholder="Year" />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map(option => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"
@@ -999,23 +1055,25 @@ const CalendarPage: React.FC = () => {
   return (
     <div className="flex h-full w-full flex-col">
       <header className="border-b bg-background/80 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6">
+        <div className="flex w-full flex-col gap-6 px-4 py-6 sm:px-6 lg:px-10">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex flex-col gap-2">
-              <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-2xl font-semibold tracking-tight">Calendar</h1>
-                {activeViewLabel && <Badge variant="secondary" className="uppercase tracking-wide">{activeViewLabel}</Badge>}
-              </div>
+              <h1 className="text-2xl font-semibold tracking-tight">Calendar</h1>
               <p className="text-sm text-muted-foreground">Intentional time-blocking with a calm, focused layout.</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <ToggleGroup type="single" value={view} onValueChange={value => value && setView(value as CalendarView)}>
-                {VIEW_OPTIONS.map(option => (
-                  <ToggleGroupItem key={option.id} value={option.id} className="px-3 py-1">
-                    {option.label}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
+              <Select value={view} onValueChange={value => value && setView(value as CalendarView)}>
+                <SelectTrigger className="w-[120px] justify-between">
+                  <SelectValue placeholder="View" />
+                </SelectTrigger>
+                <SelectContent>
+                  {VIEW_OPTIONS.map(option => (
+                    <SelectItem key={option.id} value={option.id}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Button onClick={() => openCreateDialog()} className="gap-2">
                 <Plus className="h-4 w-4" />
                 New item
@@ -1044,10 +1102,7 @@ const CalendarPage: React.FC = () => {
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
-              <Button variant="outline" size="sm" className="gap-2" onClick={() => handleNavigate("today")}>
-                <Target className="h-4 w-4" />
-                Today
-              </Button>
+              <Button variant="outline" size="sm" onClick={() => handleNavigate("today")}>Today</Button>
               <div className="flex flex-col">
                 <span className="text-xs uppercase tracking-wide text-muted-foreground">Selected range</span>
                 <span className="text-lg font-semibold text-foreground">{rangeLabel}</span>
@@ -1067,7 +1122,7 @@ const CalendarPage: React.FC = () => {
         </div>
       </header>
 
-      <div className="mx-auto flex w-full max-w-6xl flex-1 gap-6 px-6 pb-6 pt-4 lg:pt-6">
+      <div className="flex w-full flex-1 gap-6 px-4 pb-6 pt-4 sm:px-6 lg:px-10 lg:pt-6">
         <aside className="hidden w-64 flex-col gap-6 lg:flex">
           <div className="rounded-2xl border bg-card p-4 shadow-sm">
             <Button className="w-full justify-center gap-2" onClick={() => openCreateDialog()}>
@@ -1122,7 +1177,7 @@ const CalendarPage: React.FC = () => {
           </div>
         </aside>
 
-        <main className="flex-1 overflow-hidden rounded-3xl border bg-card shadow-sm">
+        <main className="flex-1 min-w-0 overflow-hidden rounded-3xl border bg-card shadow-sm">
           {view === "month" ? renderMonthGrid() : renderTimeline()}
         </main>
       </div>
