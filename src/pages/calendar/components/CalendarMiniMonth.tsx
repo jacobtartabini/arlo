@@ -30,9 +30,9 @@ export const CalendarMiniMonth: React.FC<CalendarMiniMonthProps> = ({
   onStepMonth
 }) => (
   <div className="rounded-2xl border bg-card p-5 shadow-sm">
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <Select value={String(selectedDate.getMonth())} onValueChange={onMonthChange}>
-        <SelectTrigger className="h-9 min-w-[104px] justify-between rounded-xl border-border/60 text-sm">
+        <SelectTrigger className="h-9 min-w-[128px] justify-between rounded-xl border-border/60 text-sm">
           <SelectValue placeholder="Month" />
         </SelectTrigger>
         <SelectContent>
@@ -44,7 +44,7 @@ export const CalendarMiniMonth: React.FC<CalendarMiniMonthProps> = ({
         </SelectContent>
       </Select>
       <Select value={String(selectedDate.getFullYear())} onValueChange={onYearChange}>
-        <SelectTrigger className="h-9 min-w-[80px] justify-between rounded-xl border-border/60 text-sm">
+        <SelectTrigger className="h-9 min-w-[88px] justify-between rounded-xl border-border/60 text-sm">
           <SelectValue placeholder="Year" />
         </SelectTrigger>
         <SelectContent>
@@ -59,20 +59,20 @@ export const CalendarMiniMonth: React.FC<CalendarMiniMonthProps> = ({
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 rounded-full"
+          className="h-7 w-7 rounded-full"
           onClick={() => onStepMonth(-1)}
           aria-label="Previous month"
         >
-          <ChevronLeft className="h-3.5 w-3.5" />
+          <ChevronLeft className="h-3 w-3" />
         </Button>
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 rounded-full"
+          className="h-7 w-7 rounded-full"
           onClick={() => onStepMonth(1)}
           aria-label="Next month"
         >
-          <ChevronRight className="h-3.5 w-3.5" />
+          <ChevronRight className="h-3 w-3" />
         </Button>
       </div>
     </div>
