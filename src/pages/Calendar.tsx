@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import {
   addDays,
   addMonths,
@@ -24,9 +25,13 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Clock,
   Info,
   Link as LinkIcon,
-  Plus
+  MapPin,
+  Plus,
+  UserRound,
+  X
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -83,6 +88,8 @@ type CalendarView = (typeof VIEW_OPTIONS)[number]["id"];
 
 type BlockType = "event" | "task" | "booking";
 
+const DEFAULT_BOOKING_HANDLE = "jacob";
+
 type CalendarBlock = {
   id: string;
   source: BlockType;
@@ -109,6 +116,11 @@ type DraftState = {
   location: string;
   color: string;
   attendees: string;
+};
+
+type SelectedBlockState = {
+  block: CalendarBlock;
+  target: HTMLElement;
 };
 
 const priorityOrder: Record<Task["priority"], number> = {
@@ -480,7 +492,7 @@ const CalendarPage: React.FC = () => {
   const [bookings, setBookings] = useStoredState<BookingSlot[]>(BOOKING_STORAGE_KEY, DEFAULT_BOOKINGS);
   const [draft, setDraft] = React.useState<DraftState>(DEFAULT_DRAFT);
   const [isDialogOpen, setDialogOpen] = React.useState(false);
-  const [selectedBlock, setSelectedBlock] = React.useState<CalendarBlock | null>(null);
+  const [selectedBlock, setSelectedBlock] = React.useState<SelectedBlockState | null>(null);
   const [dragSelection, setDragSelection] = React.useState<{
     day: Date;
     dayKey: string;
@@ -500,6 +512,10 @@ const CalendarPage: React.FC = () => {
       setDraft(prev => ({ ...prev, date: format(selectedDate, "yyyy-MM-dd") }));
     }
   }, [selectedDate, isDialogOpen]);
+
+  React.useEffect(() => {
+    setSelectedBlock(null);
+  }, [view, selectedDate]);
 
   const openCreateDialog = React.useCallback(
     (overrides?: Partial<DraftState>) => {
@@ -623,7 +639,7 @@ const CalendarPage: React.FC = () => {
     return format(selectedDate, "EEEE, d MMM yyyy");
   }, [selectedDate, view]);
 
-  const bookingLink = React.useMemo(() => getPublicBookingUrl("jacob"), []);
+  const bookingLink = React.useMemo(() => getPublicBookingUrl(DEFAULT_BOOKING_HANDLE), []);
   const activeViewLabel = React.useMemo(
     () => VIEW_OPTIONS.find(option => option.id === view)?.label ?? "",
     [view]
@@ -1017,7 +1033,7 @@ const CalendarPage: React.FC = () => {
                           type="button"
                           data-calendar-block
                           onPointerDown={event => event.stopPropagation()}
-                          onClick={() => setSelectedBlock(block)}
+                          onClick={event => setSelectedBlock({ block, target: event.currentTarget })}
                           title={`${block.title} · ${formatTimeRange(block.startMinutes, block.endMinutes)}`}
                           className={cn(
                             "absolute flex h-full flex-col justify-between overflow-hidden rounded-2xl p-3 text-left text-sm shadow-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
@@ -1425,67 +1441,260 @@ const CalendarPage: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Dialog open={Boolean(selectedBlock)} onOpenChange={open => !open && setSelectedBlock(null)}>
-        <DialogContent className="max-w-md">
-          {selectedBlock && (() => {
-            const blockTypeLabels: Record<CalendarBlock["source"], string> = {
-              event: "Event",
-              booking: "Booking",
-              task: "Task"
-            };
-            const blockLabel = blockTypeLabels[selectedBlock.source];
-            const attendees =
-              selectedBlock.source === "event" && Array.isArray(selectedBlock.meta?.attendees)
-                ? (selectedBlock.meta.attendees as string[])
-                : [];
-            const slot = selectedBlock.source === "booking" ? (selectedBlock.meta as BookingSlot | undefined) : undefined;
-
-            return (
-              <>
-                <DialogHeader>
-                  <DialogTitle>{selectedBlock.title}</DialogTitle>
-                  <DialogDescription>
-                    {`${format(parseISO(`${selectedBlock.date}T00:00:00`), "EEEE, MMM d yyyy")} · ${formatTimeRange(selectedBlock.startMinutes, selectedBlock.endMinutes)}`}
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 text-sm">
-                  <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
-                    <Badge variant="outline">{blockLabel}</Badge>
-                    {selectedBlock.subtitle && <span className="text-muted-foreground">{selectedBlock.subtitle}</span>}
-                  </div>
-                  {selectedBlock.source === "event" && selectedBlock.meta?.description && (
-                    <p className="text-muted-foreground">{String(selectedBlock.meta.description)}</p>
-                  )}
-                  {selectedBlock.source === "event" && attendees.length > 0 && (
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Attendees</p>
-                      <p className="mt-1 text-foreground">{attendees.join(", ")}</p>
-                    </div>
-                  )}
-                  {slot && (
-                    <div className="space-y-1">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Booking details</p>
-                      <p className="text-foreground">
-                        {slot.available ? "Open for booking" : slot.bookedBy ? `Booked by ${slot.bookedBy}` : "Unavailable"}
-                      </p>
-                      {slot.description && <p className="text-muted-foreground">{slot.description}</p>}
-                    </div>
-                  )}
-                  {selectedBlock.source === "task" && (
-                    <p className="text-muted-foreground">Focus session scheduled to keep the day on track.</p>
-                  )}
-                </div>
-                <DialogFooter>
-                  <Button variant="ghost" onClick={() => setSelectedBlock(null)}>
-                    Close
-                  </Button>
-                </DialogFooter>
-              </>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
+      {selectedBlock && (
+        <EventDetailsPopover
+          block={selectedBlock.block}
+          target={selectedBlock.target}
+          onClose={() => setSelectedBlock(null)}
+        />
+      )}
     </div>
+  );
+};
+
+type EventDetailsPopoverProps = {
+  block: CalendarBlock;
+  target: HTMLElement;
+  onClose: () => void;
+};
+
+const blockTypeLabels: Record<CalendarBlock["source"], string> = {
+  event: "Event",
+  booking: "Booking",
+  task: "Task"
+};
+
+const EventDetailsPopover: React.FC<EventDetailsPopoverProps> = ({ block, target, onClose }) => {
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [position, setPosition] = React.useState({
+    top: 0,
+    left: 0,
+    width: 320,
+    origin: "center top" as "center top" | "center bottom" | "center center"
+  });
+
+  const updatePosition = React.useCallback(() => {
+    if (typeof window === "undefined") return;
+    const rect = target.getBoundingClientRect();
+    const margin = 16;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const width = Math.min(360, viewportWidth - margin * 2);
+    const cardHeight = containerRef.current?.offsetHeight ?? 0;
+
+    let top = rect.bottom + window.scrollY + margin;
+    let origin: "center top" | "center bottom" | "center center" = "center top";
+
+    if (cardHeight && top + cardHeight > window.scrollY + viewportHeight - margin) {
+      top = rect.top + window.scrollY - cardHeight - margin;
+      origin = "center bottom";
+    }
+
+    if (top < window.scrollY + margin) {
+      top = window.scrollY + margin;
+      origin = "center center";
+    }
+
+    let left = rect.left + window.scrollX + rect.width / 2 - width / 2;
+    const minLeft = window.scrollX + margin;
+    const maxLeft = window.scrollX + viewportWidth - width - margin;
+    left = Math.max(minLeft, Math.min(left, maxLeft));
+
+    setPosition({ top, left, width, origin });
+  }, [target]);
+
+  React.useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
+    updatePosition();
+    const handle = () => updatePosition();
+    window.addEventListener("resize", handle);
+    window.addEventListener("scroll", handle, true);
+
+    const supportsResizeObserver = typeof ResizeObserver !== "undefined";
+    const targetObserver = supportsResizeObserver ? new ResizeObserver(handle) : null;
+    targetObserver?.observe(target);
+
+    const cardElement = containerRef.current;
+    const cardObserver = supportsResizeObserver && cardElement ? new ResizeObserver(handle) : null;
+    if (cardObserver && cardElement) {
+      cardObserver.observe(cardElement);
+    }
+
+    const raf = requestAnimationFrame(updatePosition);
+
+    return () => {
+      window.removeEventListener("resize", handle);
+      window.removeEventListener("scroll", handle, true);
+      targetObserver?.disconnect();
+      cardObserver?.disconnect();
+      cancelAnimationFrame(raf);
+    };
+  }, [target, updatePosition]);
+
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  React.useEffect(() => {
+    if (typeof MutationObserver === "undefined") return;
+    const observer = new MutationObserver(() => {
+      if (!document.body.contains(target)) {
+        onClose();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [onClose, target]);
+
+  const eventDate = React.useMemo(() => parseISO(`${block.date}T00:00:00`), [block.date]);
+  const formattedDate = React.useMemo(() => format(eventDate, "EEEE, MMM d yyyy"), [eventDate]);
+  const timeRange = block.allDay ? "All day" : formatTimeRange(block.startMinutes, block.endMinutes);
+  const attendees = block.source === "event" && Array.isArray(block.meta?.attendees)
+    ? (block.meta?.attendees as string[])
+    : [];
+  const slot = block.source === "booking" ? (block.meta as BookingSlot | undefined) : undefined;
+  const description = block.source === "event" && block.meta?.description
+    ? String(block.meta.description)
+    : undefined;
+  const accentRgb = hexToRgb(block.color ?? "#2563eb");
+  const accentBackground = accentRgb
+    ? `linear-gradient(135deg, rgba(${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}, 0.88), rgba(15, 23, 42, 0.95))`
+    : "linear-gradient(135deg, rgba(59, 130, 246, 0.88), rgba(15, 23, 42, 0.95))";
+
+  const inviteUrl = slot ? getPublicBookingUrl(DEFAULT_BOOKING_HANDLE) : undefined;
+
+  const portalTarget = typeof document !== "undefined" ? document.body : null;
+
+  if (!portalTarget) {
+    return null;
+  }
+
+  return createPortal(
+    <>
+      <div className="fixed inset-0 z-[199] bg-black/10 backdrop-blur-[1px]" onClick={onClose} />
+      <div
+        ref={containerRef}
+        role="dialog"
+        aria-modal="true"
+        className={cn(
+          "fixed z-[200] max-w-full rounded-3xl border border-white/10 bg-slate-950 text-white shadow-2xl transition-transform",
+          "ring-1 ring-white/10",
+          "sm:rounded-[28px]"
+        )}
+        style={{
+          top: position.top,
+          left: position.left,
+          width: position.width,
+          transformOrigin: position.origin
+        }}
+      >
+        <div className="relative overflow-hidden rounded-t-3xl sm:rounded-t-[28px]" style={{ backgroundImage: accentBackground }}>
+          <div className="absolute inset-0 opacity-30" style={{ backgroundImage: "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.35), transparent 60%)" }} />
+          <div className="relative flex items-start justify-between gap-3 px-5 py-4">
+            <div className="space-y-1">
+              <Badge
+                variant="secondary"
+                className="border-white/20 bg-white/15 text-[11px] font-semibold uppercase tracking-wide text-white"
+              >
+                {blockTypeLabels[block.source]}
+              </Badge>
+              <p className="text-lg font-semibold leading-tight sm:text-xl">{block.title}</p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/15 bg-black/10 text-white transition hover:bg-black/30"
+              aria-label="Close event details"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+        <div className="space-y-5 px-5 pb-5 pt-4 text-sm text-slate-100">
+          <div className="flex flex-col gap-3">
+            <div className="flex items-start gap-3">
+              <Clock className="mt-0.5 h-4 w-4 text-white/70" />
+              <div>
+                <p className="font-medium text-white">{timeRange}</p>
+                <p className="text-xs uppercase tracking-wide text-white/60">{formattedDate}</p>
+              </div>
+            </div>
+            {block.subtitle && (
+              <div className="flex items-start gap-3">
+                <Info className="mt-0.5 h-4 w-4 text-white/70" />
+                <p className="text-sm text-white/80">{block.subtitle}</p>
+              </div>
+            )}
+            {block.source === "event" && block.meta?.location && (
+              <div className="flex items-start gap-3">
+                <MapPin className="mt-0.5 h-4 w-4 text-white/70" />
+                <p className="text-sm text-white/80">{String(block.meta.location)}</p>
+              </div>
+            )}
+          </div>
+
+          {description && (
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/80">
+              {description}
+            </div>
+          )}
+
+          {attendees.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-white/60">
+                <UserRound className="h-3.5 w-3.5" />
+                Attendees
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {attendees.map(person => (
+                  <span
+                    key={person}
+                    className="inline-flex items-center rounded-full bg-white/10 px-3 py-1 text-xs text-white/80"
+                  >
+                    {person}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {slot && (
+            <div className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs uppercase tracking-wide text-white/60">Booking details</p>
+              <p className="text-sm font-medium text-white">
+                {slot.available ? "Open for booking" : slot.bookedBy ? `Booked by ${slot.bookedBy}` : "Unavailable"}
+              </p>
+              {slot.description && <p className="text-sm text-white/75">{slot.description}</p>}
+              {inviteUrl && (
+                <Button
+                  variant="secondary"
+                  className="w-full justify-center gap-2 bg-white text-slate-900 hover:bg-white/90"
+                  asChild
+                >
+                  <a href={inviteUrl} target="_blank" rel="noreferrer">
+                    <LinkIcon className="h-4 w-4" />
+                    View public link
+                  </a>
+                </Button>
+              )}
+            </div>
+          )}
+
+          {block.source === "task" && (
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/80">
+              Focus session scheduled to keep the day on track.
+            </div>
+          )}
+        </div>
+      </div>
+    </>,
+    portalTarget
   );
 };
 
