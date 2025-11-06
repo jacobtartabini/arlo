@@ -1,66 +1,58 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { 
-  Send, 
-  MessageSquare, 
-  Plus, 
-  Search, 
-  Settings, 
-  Trash2, 
+import {
+  Send,
+  MessageSquare,
+  Plus,
+  Search,
+  Settings,
+  Trash2,
   Edit3,
   History,
   X,
-  ChevronLeft,
-  ChevronRight
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useChatHistory } from "@/providers/ChatHistoryProvider";
+import { useArlo } from "@/providers/ArloProvider";
 
-interface Message {
-  id: string;
-  text: string;
-  sender: "user" | "arlo";
-  timestamp: Date;
-}
+const formatTimestamp = (timestamp: string) => {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
 
-interface ChatSession {
-  id: string;
-  title: string;
-  messages: Message[];
-  createdAt: Date;
-  updatedAt: Date;
-}
+const formatDate = (timestamp: string) => {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  return date.toLocaleDateString();
+};
 
 export default function Chat() {
   const [chatInput, setChatInput] = useState("");
-  const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
-  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [showHistory, setShowHistory] = useState(false);
-  const [isTyping, setIsTyping] = useState(false);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const endRef = useRef<HTMLDivElement | null>(null);
 
-  // Initialize with default session
-  useEffect(() => {
-    const defaultSession: ChatSession = {
-      id: "default",
-      title: "New Chat",
-      messages: [
-        {
-          id: "1",
-          text: "Hello! I'm Arlo, your AI assistant. How can I help you today?",
-          sender: "arlo",
-          timestamp: new Date(),
-        },
-      ],
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    setCurrentSession(defaultSession);
-    setChatSessions([defaultSession]);
-  }, []);
+  const {
+    conversations,
+    activeConversation,
+    activeConversationId,
+    setActiveConversation,
+    createConversation,
+    deleteConversation,
+    updateConversationTitle,
+    hasPendingPersistence,
+  } = useChatHistory();
+  const { sendMessage, isLoading } = useArlo();
 
   useEffect(() => {
     document.title = "Chat – Arlo AI";
@@ -68,118 +60,59 @@ export default function Chat() {
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [currentSession?.messages]);
+  }, [activeConversation?.messages?.length]);
 
-  // Save current session to history
-  const saveCurrentSession = () => {
-    if (!currentSession) return;
-    
-    setChatSessions(prev => {
-      const existingIndex = prev.findIndex(session => session.id === currentSession.id);
-      if (existingIndex >= 0) {
-        const updated = [...prev];
-        updated[existingIndex] = { ...currentSession, updatedAt: new Date() };
-        return updated;
-      }
-      return [...prev, { ...currentSession, updatedAt: new Date() }];
-    });
-  };
+  const sortedConversations = useMemo(() => conversations, [conversations]);
 
-  // Create new chat session
-  const createNewChat = () => {
-    if (currentSession && currentSession.messages.length > 1) {
-      saveCurrentSession();
-    }
-    
-    const newSession: ChatSession = {
-      id: Date.now().toString(),
-      title: "New Chat",
-      messages: [
-        {
-          id: "1",
-          text: "Hello! I'm Arlo, your AI assistant. How can I help you today?",
-          sender: "arlo",
-          timestamp: new Date(),
-        },
-      ],
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    
-    setCurrentSession(newSession);
-  };
+  const handleChatSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const trimmed = chatInput.trim();
+    if (!trimmed) return;
 
-  // Load a previous chat session
-  const loadChatSession = (session: ChatSession) => {
-    if (currentSession && currentSession.messages.length > 1) {
-      saveCurrentSession();
-    }
-    setCurrentSession(session);
-    setShowHistory(false);
-  };
-
-  // Delete a chat session
-  const deleteChatSession = (sessionId: string) => {
-    setChatSessions(prev => prev.filter(session => session.id !== sessionId));
-    if (currentSession?.id === sessionId) {
-      createNewChat();
-    }
-  };
-
-  // Generate session title from first user message
-  const generateSessionTitle = (message: string) => {
-    return message.length > 30 ? message.substring(0, 30) + "..." : message;
-  };
-
-  const handleChatSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!chatInput.trim() || !currentSession) return;
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text: chatInput,
-      sender: "user",
-      timestamp: new Date(),
-    };
-
-    // Update session title if this is the first user message
-    let updatedSession = { ...currentSession };
-    if (currentSession.messages.length === 1 && currentSession.title === "New Chat") {
-      updatedSession.title = generateSessionTitle(chatInput);
-    }
-
-    updatedSession.messages = [...updatedSession.messages, userMessage];
-    setCurrentSession(updatedSession);
+    await sendMessage(trimmed);
     setChatInput("");
-    setIsTyping(true);
-
-    // Simulate AI response
-    setTimeout(() => {
-      const responses = [
-        "That's an interesting question! Let me think about that...",
-        "I understand what you're asking. Here's my perspective...",
-        "Great point! Based on the information you've provided...",
-        "I can help you with that. Let me break this down...",
-        "That's a thoughtful question. Here's what I think...",
-      ];
-      
-      const arloResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        text: responses[Math.floor(Math.random() * responses.length)],
-        sender: "arlo",
-        timestamp: new Date(),
-      };
-
-      setCurrentSession(prev => prev ? {
-        ...prev,
-        messages: [...prev.messages, arloResponse],
-        updatedAt: new Date()
-      } : null);
-      setIsTyping(false);
-    }, 1500);
   };
 
-  if (!currentSession) return null;
+  const handleCreateConversation = () => {
+    const conversation = createConversation({ setActive: true });
+    if (conversation) {
+      setShowHistory(false);
+      setRenamingId(null);
+      setRenameValue("");
+    }
+  };
+
+  const handleSelectConversation = (conversationId: string) => {
+    setActiveConversation(conversationId);
+    setShowHistory(false);
+    setRenamingId(null);
+    setRenameValue("");
+  };
+
+  const handleDeleteConversation = (conversationId: string) => {
+    deleteConversation(conversationId);
+    if (renamingId === conversationId) {
+      setRenamingId(null);
+      setRenameValue("");
+    }
+  };
+
+  const handleRenameSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!renamingId) return;
+    const newTitle = renameValue.trim() || "New Chat";
+    updateConversationTitle(renamingId, newTitle);
+    setRenamingId(null);
+    setRenameValue("");
+  };
+
+  const handleRenameCancel = () => {
+    setRenamingId(null);
+    setRenameValue("");
+  };
+
+  const conversationMessages = activeConversation?.messages ?? [];
 
   return (
     <div className="h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex pt-16">
@@ -205,54 +138,105 @@ export default function Chat() {
                 </Button>
               </div>
               <Button
-                onClick={createNewChat}
+                onClick={handleCreateConversation}
                 className="w-full gap-2 bg-white/50 dark:bg-gray-800/50 hover:bg-white/70 dark:hover:bg-gray-700/70"
               >
                 <Plus className="h-4 w-4" />
                 New Chat
               </Button>
             </div>
-            
+
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
-              {chatSessions
-                .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
-                .map((session) => (
-                  <motion.div
-                    key={session.id}
-                    layout
-                    className={`p-3 rounded-lg cursor-pointer transition-all ${
-                      session.id === currentSession.id
-                        ? "bg-primary/20 border border-primary/30"
-                        : "bg-white/40 dark:bg-gray-800/40 hover:bg-white/60 dark:hover:bg-gray-700/60"
-                    }`}
-                    onClick={() => loadChatSession(session)}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-sm truncate">
-                          {session.title}
-                        </h3>
-                        <p className="text-xs text-muted-foreground">
-                          {session.messages.length} messages
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {session.updatedAt.toLocaleDateString()}
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 opacity-0 group-hover:opacity-100"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteChatSession(session.id);
-                        }}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
+              {sortedConversations.map((conversation) => (
+                <motion.div
+                  key={conversation.id}
+                  layout
+                  className={`group p-3 rounded-lg cursor-pointer transition-all ${
+                    conversation.id === activeConversationId
+                      ? "bg-primary/20 border border-primary/30"
+                      : "bg-white/40 dark:bg-gray-800/40 hover:bg-white/60 dark:hover:bg-gray-700/60"
+                  }`}
+                  onClick={() => handleSelectConversation(conversation.id)}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      {renamingId === conversation.id ? (
+                        <form
+                          onSubmit={handleRenameSubmit}
+                          className="space-y-2"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <Input
+                            value={renameValue}
+                            autoFocus
+                            onChange={(event) => setRenameValue(event.target.value)}
+                            onClick={(event) => event.stopPropagation()}
+                          />
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="submit"
+                              size="sm"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              Save
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleRenameCancel();
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </form>
+                      ) : (
+                        <>
+                          <h3 className="font-medium text-sm truncate">
+                            {conversation.title}
+                          </h3>
+                          <p className="text-xs text-muted-foreground">
+                            {conversation.messages.length} messages
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatDate(conversation.updatedAt)}
+                          </p>
+                        </>
+                      )}
                     </div>
-                  </motion.div>
-                ))}
+                    {renamingId !== conversation.id && (
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setRenamingId(conversation.id);
+                            setRenameValue(conversation.title);
+                          }}
+                        >
+                          <Edit3 className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleDeleteConversation(conversation.id);
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              ))}
             </div>
           </motion.div>
         )}
@@ -272,24 +256,31 @@ export default function Chat() {
               >
                 <History className="h-4 w-4" />
               </Button>
-              
+
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-white/50 dark:bg-gray-800/50">
                   <MessageSquare className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <h1 className="font-semibold">{currentSession.title}</h1>
+                  <h1 className="font-semibold">
+                    {activeConversation?.title ?? "New Chat"}
+                  </h1>
                   <p className="text-xs text-muted-foreground">
-                    {currentSession.messages.length} messages
+                    {conversationMessages.length} messages
                   </p>
                 </div>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
+              {hasPendingPersistence && (
+                <Badge variant="outline" className="animate-pulse">
+                  Saving history…
+                </Badge>
+              )}
               <Button
                 variant="outline"
-                onClick={createNewChat}
+                onClick={handleCreateConversation}
                 className="gap-2 bg-white/50 dark:bg-gray-800/50"
               >
                 <Plus className="h-4 w-4" />
@@ -308,12 +299,23 @@ export default function Chat() {
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto p-6">
           <div className="max-w-4xl mx-auto space-y-6">
-            {currentSession.messages.map((message, index) => (
+            {conversationMessages.length === 0 && (
+              <Card className="bg-white/60 dark:bg-gray-800/60 border-white/20">
+                <CardContent className="py-12 text-center text-muted-foreground space-y-2">
+                  <p>Your conversation history will appear here once you send a message.</p>
+                  <p className="text-sm">
+                    Use the floating chat bar or the composer below to talk to Arlo.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
+            {conversationMessages.map((message, index) => (
               <motion.div
                 key={message.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
+                transition={{ delay: Math.min(index * 0.05, 0.3) }}
                 className={`flex items-start gap-4 ${
                   message.sender === "user" ? "flex-row-reverse" : ""
                 }`}
@@ -323,7 +325,7 @@ export default function Chat() {
                     {message.sender === "user" ? "U" : "A"}
                   </AvatarFallback>
                 </Avatar>
-                
+
                 <div
                   className={`max-w-[70%] ${
                     message.sender === "user" ? "text-right" : "text-left"
@@ -337,19 +339,29 @@ export default function Chat() {
                     }`}
                   >
                     <p className="text-sm leading-relaxed">{message.text}</p>
+                    {message.status !== "sent" && (
+                      <div className="mt-3 flex items-center gap-2 text-xs">
+                        <span
+                          className={`h-2 w-2 rounded-full ${
+                            message.status === "pending"
+                              ? "bg-amber-400 animate-pulse"
+                              : "bg-destructive"
+                          }`}
+                        />
+                        <span className="opacity-80">
+                          {message.status === "pending" ? "Pending" : "Failed"}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-2 px-2">
-                    {message.timestamp.toLocaleTimeString([], { 
-                      hour: '2-digit', 
-                      minute: '2-digit' 
-                    })}
+                    {formatTimestamp(message.timestamp)}
                   </p>
                 </div>
               </motion.div>
             ))}
-            
-            {/* Typing Indicator */}
-            {isTyping && (
+
+            {isLoading && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -361,13 +373,19 @@ export default function Chat() {
                 <div className="bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border border-white/20 rounded-2xl p-4">
                   <div className="flex space-x-1">
                     <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" />
-                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
-                    <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                    <div
+                      className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"
+                      style={{ animationDelay: "0.1s" }}
+                    />
+                    <div
+                      className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"
+                      style={{ animationDelay: "0.2s" }}
+                    />
                   </div>
                 </div>
               </motion.div>
             )}
-            
+
             <div ref={endRef} />
           </div>
         </div>
@@ -379,15 +397,15 @@ export default function Chat() {
               <div className="flex-1 relative">
                 <Input
                   value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
+                  onChange={(event) => setChatInput(event.target.value)}
                   placeholder="Message Arlo..."
                   className="w-full bg-white/60 dark:bg-gray-800/60 backdrop-blur-sm border-white/20 pr-12"
-                  disabled={isTyping}
+                  disabled={isLoading}
                 />
               </div>
-              <Button 
-                type="submit" 
-                disabled={!chatInput.trim() || isTyping}
+              <Button
+                type="submit"
+                disabled={!chatInput.trim() || isLoading}
                 className="px-6"
               >
                 <Send className="h-4 w-4" />

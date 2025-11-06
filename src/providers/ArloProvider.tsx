@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { useChatHistory } from './ChatHistoryProvider';
+import { ChatMessageStatus } from '@/types/chat';
 
 export interface ArloConfig {
   apiEndpoint: string;
@@ -19,6 +21,8 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  status: ChatMessageStatus;
+  conversationId: string;
 }
 
 interface ArloContextType {
@@ -47,7 +51,25 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<ArloStatus | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const {
+    activeConversation,
+    appendMessage,
+    ensureActiveConversation,
+    updateMessageStatus,
+  } = useChatHistory();
+
+  const messages = useMemo<ChatMessage[]>(
+    () =>
+      (activeConversation?.messages ?? []).map((message) => ({
+        id: message.id,
+        role: message.sender === 'user' ? 'user' : 'assistant',
+        content: message.text,
+        timestamp: new Date(message.timestamp),
+        status: message.status,
+        conversationId: message.conversationId,
+      })),
+    [activeConversation],
+  );
 
   const setConfig = (newConfig: ArloConfig) => {
     setConfigState(newConfig);
@@ -99,33 +121,38 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
   };
 
   const sendMessage = async (content: string) => {
+    const trimmed = content.trim();
+    if (!trimmed) {
+      return;
+    }
+
     setIsLoading(true);
-    
-    const userMessage: ChatMessage = {
-      id: Date.now().toString(),
-      role: 'user',
-      content,
-      timestamp: new Date(),
-    };
-    
-    setMessages(prev => [...prev, userMessage]);
+
+    const conversationId = ensureActiveConversation();
+    const userMessage = appendMessage({
+      conversationId,
+      text: trimmed,
+      sender: 'user',
+      status: 'pending',
+    });
 
     try {
       const response = await makeApiCall('/ask', {
         method: 'POST',
-        body: JSON.stringify({ message: content }),
+        body: JSON.stringify({ message: trimmed }),
       });
 
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: response.reply,
-        timestamp: new Date(),
-      };
+      updateMessageStatus(conversationId, userMessage.id, 'sent');
 
-      setMessages(prev => [...prev, assistantMessage]);
+      appendMessage({
+        conversationId,
+        text: response.reply,
+        sender: 'arlo',
+        status: 'sent',
+      });
     } catch (error) {
       console.error('Failed to send message:', error);
+      updateMessageStatus(userMessage.conversationId, userMessage.id, 'error');
       toast.error('Failed to send message to Arlo');
     } finally {
       setIsLoading(false);
@@ -152,22 +179,21 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
       }
 
       const result = await response.json();
-      
-      const userMessage: ChatMessage = {
-        id: Date.now().toString(),
-        role: 'user',
-        content: result.transcription,
-        timestamp: new Date(),
-      };
-      
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: result.reply,
-        timestamp: new Date(),
-      };
+      const conversationId = ensureActiveConversation();
 
-      setMessages(prev => [...prev, userMessage, assistantMessage]);
+      appendMessage({
+        conversationId,
+        text: result.transcription,
+        sender: 'user',
+        status: 'sent',
+      });
+
+      appendMessage({
+        conversationId,
+        text: result.reply,
+        sender: 'arlo',
+        status: 'sent',
+      });
     } catch (error) {
       console.error('Failed to send voice message:', error);
       toast.error('Failed to send voice message to Arlo');

@@ -222,7 +222,23 @@ export function FloatingChatBar() {
                         : "bg-muted text-foreground"
                     }`}
                   >
-                    {message.content}
+                    <p>{message.content}</p>
+                    {message.status !== "sent" && (
+                      <div className="mt-2 flex items-center gap-2 text-xs opacity-80">
+                        <span
+                          className={`h-2 w-2 rounded-full ${
+                            message.status === "pending"
+                              ? "bg-amber-400 animate-pulse"
+                              : "bg-destructive"
+                          }`}
+                        />
+                        <span>
+                          {message.status === "pending"
+                            ? "Pending"
+                            : "Failed"}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
