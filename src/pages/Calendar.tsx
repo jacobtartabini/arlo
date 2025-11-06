@@ -66,7 +66,7 @@ import {
   SelectedBlockState,
   VIEW_OPTIONS
 } from "./calendar/types";
-import { buildBlocks, minutesToTime } from "./calendar/utils";
+import { buildBlocks, formatTimeRange, minutesToTime } from "./calendar/utils";
 
 const DEFAULT_DRAFT: DraftState = {
   kind: "event",
@@ -89,6 +89,7 @@ const CalendarPage: React.FC = () => {
   const [draft, setDraft] = React.useState<DraftState>(DEFAULT_DRAFT);
   const [isDialogOpen, setDialogOpen] = React.useState(false);
   const [selectedBlock, setSelectedBlock] = React.useState<SelectedBlockState | null>(null);
+  const [editingContext, setEditingContext] = React.useState<{ kind: DraftKind; id: string } | null>(null);
 
   const timezone = React.useMemo(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -120,6 +121,7 @@ const CalendarPage: React.FC = () => {
 
   const openCreateDialog = React.useCallback(
     (overrides?: Partial<DraftState>) => {
+      setEditingContext(null);
       setDraft(prev => ({
         ...DEFAULT_DRAFT,
         date: format(selectedDate, "yyyy-MM-dd"),
@@ -289,39 +291,90 @@ const CalendarPage: React.FC = () => {
     }
 
     if (draft.kind === "event") {
-      const newEvent: CalendarEvent = {
-        id: `event-${Date.now()}`,
-        title: draft.title,
-        description: draft.description || undefined,
-        date: draft.date,
-        startTime: draft.startTime,
-        endTime: draft.endTime,
-        location: draft.location || undefined,
-        attendees: draft.attendees
-          .split(",")
-          .map(entry => entry.trim())
-          .filter(Boolean),
-        color: draft.color,
-        category: "custom"
-      };
-      setEvents(prev => [...prev, newEvent]);
-      toast({ title: "Event added", description: `${draft.title} was added to your calendar.` });
+      const attendees = draft.attendees
+        .split(",")
+        .map(entry => entry.trim())
+        .filter(Boolean);
+
+      if (editingContext?.kind === "event") {
+        const existing = events.find(event => event.id === editingContext.id);
+        setEvents(prev =>
+          prev.map(event =>
+            event.id === editingContext.id
+              ? {
+                  ...event,
+                  title: draft.title,
+                  description: draft.description || undefined,
+                  date: draft.date,
+                  startTime: draft.startTime,
+                  endTime: draft.endTime,
+                  location: draft.location || undefined,
+                  attendees,
+                  color: draft.color
+                }
+              : event
+          )
+        );
+        toast({ title: "Event updated", description: `${draft.title} was updated in your calendar.` });
+        if (!existing) {
+          console.warn("Attempted to update missing event", editingContext.id);
+        }
+      } else {
+        const newEvent: CalendarEvent = {
+          id: `event-${Date.now()}`,
+          title: draft.title,
+          description: draft.description || undefined,
+          date: draft.date,
+          startTime: draft.startTime,
+          endTime: draft.endTime,
+          location: draft.location || undefined,
+          attendees,
+          color: draft.color,
+          category: "custom"
+        };
+        setEvents(prev => [...prev, newEvent]);
+        toast({ title: "Event added", description: `${draft.title} was added to your calendar.` });
+      }
     } else {
-      const newSlot: BookingSlot = {
-        id: `booking-${Date.now()}`,
-        date: draft.date,
-        startTime: draft.startTime,
-        endTime: draft.endTime,
-        available: true,
-        title: draft.title,
-        bookedBy: null,
-        description: draft.description
-      };
-      setBookings(prev => [...prev, newSlot]);
-      toast({ title: "Booking slot created", description: `${draft.title} is now available publicly.` });
+      if (editingContext?.kind === "booking") {
+        const existing = bookings.find(slot => slot.id === editingContext.id);
+        setBookings(prev =>
+          prev.map(slot =>
+            slot.id === editingContext.id
+              ? {
+                  ...slot,
+                  title: draft.title || slot.title,
+                  date: draft.date,
+                  startTime: draft.startTime,
+                  endTime: draft.endTime,
+                  description: draft.description || undefined
+                }
+              : slot
+          )
+        );
+        const slotLabel = draft.title || (existing ? formatSlotLabel(existing) : "Booking slot");
+        toast({ title: "Slot updated", description: `${slotLabel} has been updated.` });
+        if (!existing) {
+          console.warn("Attempted to update missing booking slot", editingContext.id);
+        }
+      } else {
+        const newSlot: BookingSlot = {
+          id: `booking-${Date.now()}`,
+          date: draft.date,
+          startTime: draft.startTime,
+          endTime: draft.endTime,
+          available: true,
+          title: draft.title,
+          bookedBy: null,
+          description: draft.description
+        };
+        setBookings(prev => [...prev, newSlot]);
+        toast({ title: "Booking slot created", description: `${draft.title} is now available publicly.` });
+      }
     }
 
     setDialogOpen(false);
+    setEditingContext(null);
     resetDraft();
   };
 
@@ -429,6 +482,86 @@ const CalendarPage: React.FC = () => {
   const handleBlockSelect = React.useCallback((block: CalendarBlock, target: HTMLElement) => {
     setSelectedBlock({ block, target });
   }, []);
+
+  const handleEditBlock = React.useCallback(
+    (block: CalendarBlock) => {
+      if (block.source === "task") {
+        setSelectedBlock(null);
+        return;
+      }
+
+      if (block.source === "event") {
+        const event = events.find(item => item.id === block.id);
+        if (!event) return;
+        setEditingContext({ kind: "event", id: block.id });
+        setDraft(prev => ({
+          ...DEFAULT_DRAFT,
+          kind: "event",
+          title: event.title,
+          description: event.description ?? "",
+          date: event.date,
+          startTime: event.startTime,
+          endTime: event.endTime,
+          location: (event as { location?: string }).location ?? "",
+          color: event.color ?? prev.color,
+          attendees: event.attendees?.join(", ") ?? ""
+        }));
+      } else if (block.source === "booking") {
+        const slot = bookings.find(item => item.id === block.id);
+        if (!slot) return;
+        const slotDescription = (slot as BookingSlot & { description?: string }).description ?? "";
+        setEditingContext({ kind: "booking", id: block.id });
+        setDraft(prev => ({
+          ...DEFAULT_DRAFT,
+          kind: "booking",
+          title: slot.title ?? "",
+          description: slotDescription,
+          date: slot.date,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          location: "",
+          color: block.color ?? prev.color,
+          attendees: ""
+        }));
+      }
+
+      setDialogOpen(true);
+      setSelectedBlock(null);
+    },
+    [bookings, events]
+  );
+
+  const handleBlockMove = React.useCallback(
+    (block: CalendarBlock, day: Date, startMinutes: number, endMinutes: number) => {
+      const dateString = format(day, "yyyy-MM-dd");
+      const startTime = minutesToTime(startMinutes);
+      const endTime = minutesToTime(endMinutes);
+      const whenLabel = `${format(day, "EEE, MMM d")} · ${formatTimeRange(startMinutes, endMinutes)}`;
+
+      if (block.source === "event") {
+        setEvents(prev =>
+          prev.map(event =>
+            event.id === block.id
+              ? { ...event, date: dateString, startTime, endTime }
+              : event
+          )
+        );
+        toast({ title: "Event rescheduled", description: `${block.title} moved to ${whenLabel}.` });
+      } else if (block.source === "booking") {
+        setBookings(prev =>
+          prev.map(slot =>
+            slot.id === block.id
+              ? { ...slot, date: dateString, startTime, endTime }
+              : slot
+          )
+        );
+        toast({ title: "Slot updated", description: `${block.title} now occurs ${whenLabel}.` });
+      }
+
+      setSelectedBlock(null);
+    },
+    [setBookings, setEvents, toast]
+  );
 
   return (
     <div className="flex h-full w-full flex-col">
@@ -558,6 +691,7 @@ const CalendarPage: React.FC = () => {
                   focusBlocks={focusBlocks}
                   onCreateRequest={handleCreateFromSelection}
                   onBlockSelect={handleBlockSelect}
+                  onBlockMove={handleBlockMove}
                 />
               )}
             </main>
@@ -629,6 +763,7 @@ const CalendarPage: React.FC = () => {
           setDialogOpen(open);
           if (!open) {
             resetDraft();
+            setEditingContext(null);
           }
         }}
       >
@@ -800,6 +935,7 @@ const CalendarPage: React.FC = () => {
           block={selectedBlock.block}
           target={selectedBlock.target}
           onClose={() => setSelectedBlock(null)}
+          onEdit={handleEditBlock}
         />
       )}
     </div>
