@@ -241,6 +241,12 @@ export function formatTimeRange(startMinutes: number, endMinutes: number) {
   return `${minutesToTime(startMinutes)} – ${minutesToTime(endMinutes)}`;
 }
 
+export function formatHourLabel(minutes: number) {
+  const date = new Date();
+  date.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+  return format(date, "h a");
+}
+
 export function hexToRgb(color: string) {
   let hex = color.replace("#", "");
   if (hex.length === 3) {
@@ -280,7 +286,7 @@ export function getContrastTextColor(color: string) {
 export function formatDisplayTime(minutes: number) {
   const date = new Date();
   date.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
-  return format(date, "h:mm a").toLowerCase();
+  return format(date, "h:mm a");
 }
 
 export function formatDisplayTimeRange(startMinutes: number, endMinutes: number) {
