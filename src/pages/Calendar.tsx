@@ -33,6 +33,7 @@ import {
   Palette,
   Plus,
   RefreshCcw,
+  Trash2,
   UserPlus
 } from "lucide-react";
 
@@ -609,6 +610,52 @@ const CalendarPage: React.FC = () => {
     resetDraft();
   };
 
+  const handleDelete = React.useCallback(() => {
+    if (!editingContext) {
+      return;
+    }
+
+    if (editingContext.kind === "event") {
+      let removedTitle: string | undefined;
+      setEvents(prev =>
+        prev.filter(event => {
+          if (event.id === editingContext.id) {
+            removedTitle = event.title;
+            return false;
+          }
+          return true;
+        })
+      );
+
+      if (removedTitle) {
+        toast({ title: "Event deleted", description: `${removedTitle} was removed from your calendar.` });
+      } else {
+        toast({ title: "Event not found", description: "The selected event could not be found." });
+      }
+    } else {
+      let removedTitle: string | undefined;
+      setBookings(prev =>
+        prev.filter(slot => {
+          if (slot.id === editingContext.id) {
+            removedTitle = slot.title || formatSlotLabel(slot);
+            return false;
+          }
+          return true;
+        })
+      );
+
+      if (removedTitle) {
+        toast({ title: "Slot removed", description: `${removedTitle} was removed.` });
+      } else {
+        toast({ title: "Booking not found", description: "The selected booking slot could not be found." });
+      }
+    }
+
+    setDialogOpen(false);
+    setEditingContext(null);
+    resetDraft();
+  }, [editingContext, resetDraft, setBookings, setEvents, toast]);
+
   const miniMonthDays = React.useMemo(
     () =>
       eachDayOfInterval({
@@ -1039,7 +1086,7 @@ const CalendarPage: React.FC = () => {
         }}
       >
         <DialogContent className="flex w-[calc(100vw-2rem)] max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-border/60 bg-background p-0 shadow-xl sm:max-w-[520px]">
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 overflow-y-auto">
             <div className="space-y-6 px-6 py-5">
               <div className="space-y-3">
                 <Tabs
@@ -1365,7 +1412,17 @@ const CalendarPage: React.FC = () => {
               </div>
             </div>
           </ScrollArea>
-          <DialogFooter className="flex flex-col gap-2 border-t border-border/60 bg-muted/40 px-6 py-4 sm:flex-row sm:items-center sm:justify-end">
+          <DialogFooter className="flex flex-col gap-2 border-t border-border/60 bg-muted/40 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+            {editingContext && (
+              <Button
+                variant="destructive"
+                type="button"
+                onClick={handleDelete}
+                className="w-full sm:w-auto"
+              >
+                <Trash2 className="mr-2 h-4 w-4" /> Delete
+              </Button>
+            )}
             <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
               <Button variant="ghost" type="button" onClick={() => setDialogOpen(false)}>
                 Cancel
