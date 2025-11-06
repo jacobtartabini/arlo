@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getPublicBookingUrl } from "@/lib/calendar-data";
 
+import type { BookingSlot } from "@/lib/calendar-data";
 import { blockTypeLabels } from "../constants";
 import type { CalendarBlock } from "../types";
 import { formatTimeRange } from "../utils";
@@ -16,15 +17,16 @@ import {
   Info,
   Link as LinkIcon,
   MapPin,
+  Pencil,
   UserRound,
   X
 } from "lucide-react";
-import type { BookingSlot } from "@/lib/calendar-data";
 
 export type EventDetailsPopoverProps = {
   block: CalendarBlock;
   target: HTMLElement;
   onClose: () => void;
+  onEdit?: (block: CalendarBlock) => void;
 };
 
 type PopoverPosition = {
@@ -41,7 +43,7 @@ const initialPosition: PopoverPosition = {
   origin: "center top"
 };
 
-export const EventDetailsPopover: React.FC<EventDetailsPopoverProps> = ({ block, target, onClose }) => {
+export const EventDetailsPopover: React.FC<EventDetailsPopoverProps> = ({ block, target, onClose, onEdit }) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [position, setPosition] = React.useState<PopoverPosition>(initialPosition);
 
@@ -51,7 +53,7 @@ export const EventDetailsPopover: React.FC<EventDetailsPopoverProps> = ({ block,
     const margin = 16;
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
-    const width = Math.min(360, viewportWidth - margin * 2);
+    const width = Math.min(392, viewportWidth - margin * 2);
     const cardHeight = containerRef.current?.offsetHeight ?? 0;
 
     let top = rect.bottom + window.scrollY + margin;
@@ -134,10 +136,16 @@ export const EventDetailsPopover: React.FC<EventDetailsPopoverProps> = ({ block,
 
   const inviteUrl = slot ? getPublicBookingUrl(slot) : undefined;
 
+  const handleEditClick = () => {
+    if (!onEdit) return;
+    onEdit(block);
+    onClose();
+  };
+
   return createPortal(
     (
       <>
-        <div className="fixed inset-0 z-[199] bg-black/5 backdrop-blur-[1px]" onClick={onClose} />
+        <div className="fixed inset-0 z-[199] bg-black/10 backdrop-blur-[1px]" onClick={onClose} />
         <div
           ref={containerRef}
           role="dialog"
@@ -156,65 +164,95 @@ export const EventDetailsPopover: React.FC<EventDetailsPopoverProps> = ({ block,
         >
           <div className="h-1 w-full" style={{ backgroundColor: block.color ?? "#2563eb" }} />
           <div className="flex max-h-[calc(100vh-3rem)] flex-col overflow-auto">
-            <div className="flex items-start justify-between gap-3 px-5 pb-4 pt-5">
-              <div className="space-y-1">
-                <Badge
-                  variant="secondary"
-                  className="bg-muted text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
-                >
-                  {blockTypeLabels[block.source]}
-                </Badge>
-                <p className="text-lg font-semibold leading-tight text-foreground sm:text-xl">{block.title}</p>
-              </div>
-              <button
-                type="button"
-                onClick={onClose}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition hover:text-foreground"
-                aria-label="Close event details"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="space-y-5 px-5 pb-5 text-sm text-muted-foreground">
-              <div className="flex flex-col gap-3">
+            <div className="px-5 pb-3 pt-5">
+              <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
-                  <Clock className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium text-foreground">{timeRange}</p>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground/80">{formattedDate}</p>
+                  <span
+                    aria-hidden="true"
+                    className="mt-1 inline-flex h-3.5 w-3.5 flex-shrink-0 rounded-full shadow-inner"
+                    style={{ backgroundColor: block.color ?? "#2563eb" }}
+                  />
+                  <div className="space-y-1">
+                    <Badge
+                      variant="secondary"
+                      className="bg-muted text-[11px] font-semibold uppercase tracking-wide text-muted-foreground"
+                    >
+                      {blockTypeLabels[block.source]}
+                    </Badge>
+                    <h2 className="text-lg font-semibold leading-tight text-foreground sm:text-xl">{block.title}</h2>
+                    {block.subtitle && (
+                      <p className="text-sm text-muted-foreground">{block.subtitle}</p>
+                    )}
                   </div>
                 </div>
-                {block.subtitle && (
-                  <div className="flex items-start gap-3">
-                    <Info className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                    <p className="text-sm">{block.subtitle}</p>
+                <div className="flex items-center gap-2">
+                  {onEdit && block.source !== "task" && (
+                    <Button variant="outline" size="sm" className="gap-2" onClick={handleEditClick}>
+                      <Pencil className="h-4 w-4" />
+                      Edit
+                    </Button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition hover:text-foreground"
+                    aria-label="Close event details"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-6 px-5 pb-6 text-sm text-muted-foreground">
+              <div className="space-y-3">
+                <div className="flex items-start gap-3 rounded-2xl border border-border/70 bg-background/60 px-4 py-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted/60 text-muted-foreground">
+                    <Clock className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-foreground">{timeRange}</p>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground/70">{formattedDate}</p>
+                  </div>
+                </div>
+                {block.source === "event" && block.meta?.location && (
+                  <div className="flex items-start gap-3 rounded-2xl border border-border/70 bg-background/60 px-4 py-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted/60 text-muted-foreground">
+                      <MapPin className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">{String(block.meta.location)}</p>
+                      <p className="text-xs text-muted-foreground/80">Location</p>
+                    </div>
                   </div>
                 )}
-                {block.source === "event" && block.meta?.location && (
-                  <div className="flex items-start gap-3">
-                    <MapPin className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                    <p className="text-sm">{String(block.meta.location)}</p>
+                {block.subtitle && (
+                  <div className="flex items-start gap-3 rounded-2xl border border-border/70 bg-background/60 px-4 py-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted/60 text-muted-foreground">
+                      <Info className="h-4 w-4" />
+                    </div>
+                    <p className="text-sm leading-snug text-muted-foreground">{block.subtitle}</p>
                   </div>
                 )}
               </div>
 
               {description && (
-                <div className="rounded-2xl border border-border/80 bg-muted/60 p-4 text-sm text-muted-foreground">
-                  {description}
+                <div className="space-y-2 rounded-2xl border border-border/80 bg-background/70 p-4 text-sm leading-relaxed text-muted-foreground">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/70">Description</p>
+                  <p className="whitespace-pre-wrap text-foreground/80">{description}</p>
                 </div>
               )}
 
               {attendees.length > 0 && (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground/80">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground/70">
                     <UserRound className="h-3.5 w-3.5" />
-                    Attendees
+                    Guests
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {attendees.map(person => (
                       <span
                         key={person}
-                        className="inline-flex items-center rounded-full border border-border/80 bg-background px-3 py-1 text-xs text-foreground"
+                        className="inline-flex items-center rounded-full border border-border/80 bg-background px-3 py-1 text-xs font-medium text-foreground"
                       >
                         {person}
                       </span>
@@ -224,17 +262,29 @@ export const EventDetailsPopover: React.FC<EventDetailsPopoverProps> = ({ block,
               )}
 
               {slot && (
-                <div className="space-y-3 rounded-2xl border border-border/80 bg-muted/60 p-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground/80">Booking details</p>
-                  <p className="text-sm font-medium text-foreground">
-                    {slot.available ? "Open for booking" : slot.bookedBy ? `Booked by ${slot.bookedBy}` : "Unavailable"}
-                  </p>
-                  {slot.description && <p className="text-sm">{slot.description}</p>}
+                <div className="space-y-3 rounded-2xl border border-border/80 bg-background/70 p-4">
+                  <div className="flex items-center justify-between text-xs uppercase tracking-wide text-muted-foreground/70">
+                    <span>Booking details</span>
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                        slot.available ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-700"
+                      )}
+                    >
+                      {slot.available ? "Open" : slot.bookedBy ? "Booked" : "Closed"}
+                    </span>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <p className="font-medium text-foreground">
+                      {slot.available ? "Accepting bookings" : slot.bookedBy ? `Booked by ${slot.bookedBy}` : "Not available"}
+                    </p>
+                    {slot.description && <p>{slot.description}</p>}
+                  </div>
                   {inviteUrl && (
                     <Button variant="outline" className="w-full justify-center gap-2" asChild>
                       <a href={inviteUrl} target="_blank" rel="noreferrer">
                         <LinkIcon className="h-4 w-4" />
-                        View public link
+                        Open booking link
                       </a>
                     </Button>
                   )}
@@ -242,8 +292,8 @@ export const EventDetailsPopover: React.FC<EventDetailsPopoverProps> = ({ block,
               )}
 
               {block.source === "task" && (
-                <div className="rounded-2xl border border-border/80 bg-muted/60 p-4 text-sm">
-                  Focus session scheduled to keep the day on track.
+                <div className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm text-muted-foreground">
+                  This focus block keeps the day on track. Drag to adjust the session or convert it into an event.
                 </div>
               )}
             </div>
@@ -254,3 +304,4 @@ export const EventDetailsPopover: React.FC<EventDetailsPopoverProps> = ({ block,
     document.body
   );
 };
+
