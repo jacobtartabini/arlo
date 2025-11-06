@@ -26,32 +26,44 @@ export interface CalendarSchedulerProps {
   onConfirm?: (value: { date?: Date; time?: string }) => void;
 }
 
-function CalendarScheduler({
-  className,
-  timeSlots = [
-    "08:00 AM",
-    "09:00 AM",
-    "10:00 AM",
-    "11:00 AM",
-    "12:00 PM",
-    "01:00 PM",
-    "02:00 PM",
-    "03:00 PM",
-    "04:00 PM",
-    "05:00 PM",
-  ],
-  selectedDate,
-  selectedTime,
-  disabled,
-  onDateChange,
-  onTimeChange,
-  onConfirm,
-}: CalendarSchedulerProps) {
-  const isDateControlled = selectedDate !== undefined;
-  const isTimeControlled = selectedTime !== undefined;
+function CalendarScheduler(props: CalendarSchedulerProps) {
+  const {
+    className,
+    timeSlots = [
+      "08:00 AM",
+      "09:00 AM",
+      "10:00 AM",
+      "11:00 AM",
+      "12:00 PM",
+      "01:00 PM",
+      "02:00 PM",
+      "03:00 PM",
+      "04:00 PM",
+      "05:00 PM",
+    ],
+    selectedDate,
+    selectedTime,
+    disabled,
+    onDateChange,
+    onTimeChange,
+    onConfirm,
+  } = props;
 
-  const [internalDate, setInternalDate] = React.useState<Date | undefined>(() => selectedDate ?? new Date());
-  const [internalTime, setInternalTime] = React.useState<string | undefined>(() => selectedTime);
+  const isDateControlled = Object.prototype.hasOwnProperty.call(props, "selectedDate");
+  const isTimeControlled = Object.prototype.hasOwnProperty.call(props, "selectedTime");
+
+  const [internalDate, setInternalDate] = React.useState<Date | undefined>(() => {
+    if (isDateControlled) {
+      return selectedDate;
+    }
+    return new Date();
+  });
+  const [internalTime, setInternalTime] = React.useState<string | undefined>(() => {
+    if (isTimeControlled) {
+      return selectedTime;
+    }
+    return undefined;
+  });
 
   const date = isDateControlled ? selectedDate : internalDate;
   const time = isTimeControlled ? selectedTime : internalTime;
@@ -109,7 +121,7 @@ function CalendarScheduler({
   };
 
   return (
-    <div className={cn("flex w-full flex-col items-center", className)}>
+    <div className={cn("flex flex-col items-center", className)}>
       <Card className="w-full max-w-[600px] border-none bg-background shadow-none">
         <CardHeader>
           <CardTitle className="text-base">Schedule a Meeting</CardTitle>
@@ -126,36 +138,32 @@ function CalendarScheduler({
           </div>
           <div className="flex-1 max-h-[320px] overflow-y-auto rounded-md border p-2">
             <p className="mb-2 text-sm font-medium text-muted-foreground">Pick a time</p>
-            {timeSlots.length ? (
-              <div className="grid grid-cols-2 gap-2">
-                {timeSlots.map(slot => (
-                  <Button
-                    key={slot}
-                    variant={time === slot ? "default" : "outline"}
-                    size="sm"
-                    className={cn("w-full", time === slot && "ring-2 ring-primary")}
-                    onClick={() => handleTimeSelect(slot)}
-                  >
-                    {slot}
-                  </Button>
-                ))}
-              </div>
-            ) : (
-              <div className="flex h-[180px] w-full items-center justify-center rounded-md border border-dashed text-center text-sm text-muted-foreground">
-                No times available for {date ? format(date, "MMMM d") : "this day"}.
-              </div>
-            )}
+            <div className="grid grid-cols-2 gap-2">
+              {timeSlots.map(slot => (
+                <Button
+                  key={slot}
+                  variant={time === slot ? "default" : "outline"}
+                  size="sm"
+                  className={cn("w-full", time === slot && "ring-2 ring-primary")}
+                  onClick={() => handleTimeSelect(slot)}
+                  disabled={!date}
+                >
+                  {slot}
+                </Button>
+              ))}
+              {!timeSlots.length && (
+                <div className="col-span-2 flex h-[140px] items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
+                  {date ? `No times available for ${format(date, "MMMM d")}.` : "Select a date to view times."}
+                </div>
+              )}
+            </div>
           </div>
         </CardContent>
-        <CardFooter className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <CardFooter className="flex justify-between">
           <Button variant="ghost" size="sm" onClick={handleReset}>
             Reset
           </Button>
-          <Button
-            size="sm"
-            onClick={() => onConfirm?.({ date, time })}
-            disabled={!date || !time}
-          >
+          <Button size="sm" onClick={() => onConfirm?.({ date, time })} disabled={!date || !time}>
             Confirm
           </Button>
         </CardFooter>
