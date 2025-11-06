@@ -24,7 +24,6 @@ import {
   ChevronRight,
   FileText,
   Info,
-  Link as LinkIcon,
   MapPin,
   Palette,
   Plus,
@@ -47,7 +46,6 @@ import {
   DEFAULT_TASKS,
   EVENT_STORAGE_KEY,
   formatSlotLabel,
-  getPublicBookingUrl
 } from "@/lib/calendar-data";
 import type { BookingSlot, CalendarEvent, Task } from "@/lib/calendar-data";
 
@@ -240,19 +238,10 @@ const CalendarPage: React.FC = () => {
     return format(selectedDate, "EEEE, d MMM yyyy");
   }, [selectedDate, view]);
 
-  const bookingLink = React.useMemo(() => getPublicBookingUrl("jacob"), []);
   const activeViewLabel = React.useMemo(
     () => VIEW_OPTIONS.find(option => option.id === view)?.label ?? "",
     [view]
   );
-
-  const handleCopyBookingLink = React.useCallback(() => {
-    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(bookingLink).then(() => {
-        toast({ title: "Link copied", description: "Your booking page URL is ready to share." });
-      });
-    }
-  }, [bookingLink, toast]);
 
   const handleNavigate = (direction: "prev" | "next" | "today") => {
     if (direction === "today") {
@@ -455,32 +444,6 @@ const CalendarPage: React.FC = () => {
       <div className="flex min-h-0 flex-1 flex-col gap-6 px-4 pb-6 pt-4 sm:px-6 lg:px-10 lg:pt-6">
         <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[260px,minmax(0,1fr)] 2xl:grid-cols-[260px,minmax(0,1fr),320px]">
           <aside className="hidden min-h-0 flex-col gap-6 lg:flex">
-            <div className="rounded-2xl border bg-card p-4 shadow-sm">
-              <Button className="w-full justify-center gap-2" onClick={() => openCreateDialog()}>
-                <Plus className="h-4 w-4" />
-                New event
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="mt-2 w-full justify-start gap-2 text-muted-foreground"
-                onClick={handleCopyBookingLink}
-              >
-                <LinkIcon className="h-4 w-4" />
-                Copy booking link
-              </Button>
-              <p className="mt-2 truncate text-[11px] text-muted-foreground">{bookingLink.replace(/^https?:\/\//, "")}</p>
-              {nextAvailableSlot && (
-                <div className="mt-3 rounded-xl bg-muted/60 px-3 py-2 text-xs">
-                  <p className="flex items-center gap-2 text-muted-foreground">
-                    <CalendarClock className="h-3.5 w-3.5" />
-                    Next available slot
-                  </p>
-                  <p className="mt-1 font-medium text-foreground">{formatSlotLabel(nextAvailableSlot)}</p>
-                </div>
-              )}
-            </div>
-
             <CalendarMiniMonth
               selectedDate={selectedDate}
               days={miniMonthDays}
