@@ -12,12 +12,24 @@ import {
   isSameMonth,
   isToday,
   parseISO,
+  setMonth,
+  setYear,
   startOfDay,
   startOfMonth,
   startOfWeek
 } from "date-fns";
-import { Calendar as CalendarIcon, CalendarClock, Check, ChevronLeft, ChevronRight, Link as LinkIcon, Plus, Target } from "lucide-react";
+import {
+  Calendar as CalendarIcon,
+  CalendarClock,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Info,
+  Link as LinkIcon,
+  Plus
+} from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -32,7 +44,6 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import {
@@ -58,6 +69,9 @@ const DISPLAY_START_MINUTES = 6 * 60;
 const DISPLAY_END_MINUTES = 22 * 60;
 const HOURS_PER_DAY = DISPLAY_END_MINUTES - DISPLAY_START_MINUTES;
 const HOUR_HEIGHT = 52;
+const MINUTE_STEP = 30;
+const STEPS_PER_HOUR = 60 / MINUTE_STEP;
+const DEFAULT_SELECTION_DURATION = 60;
 
 const VIEW_OPTIONS = [
   { id: "day", label: "Day" },
@@ -120,7 +134,13 @@ function minutesToPx(minutes: number) {
 }
 
 function pxToMinutes(px: number) {
-  return Math.round(px / HOUR_HEIGHT) * 60 + DISPLAY_START_MINUTES;
+  const totalMinutes = (px / HOUR_HEIGHT) * 60;
+  const snapped = Math.round(totalMinutes / MINUTE_STEP) * MINUTE_STEP;
+  return DISPLAY_START_MINUTES + snapped;
+}
+
+function clampMinutes(value: number) {
+  return Math.min(Math.max(value, DISPLAY_START_MINUTES), DISPLAY_END_MINUTES);
 }
 
 function clampToDayRange(start: number, end: number) {
@@ -128,6 +148,67 @@ function clampToDayRange(start: number, end: number) {
     start: Math.max(DISPLAY_START_MINUTES, Math.min(start, DISPLAY_END_MINUTES)),
     end: Math.max(DISPLAY_START_MINUTES, Math.min(end, DISPLAY_END_MINUTES))
   };
+}
+
+function computeBlockLayout(blocks: CalendarBlock[]) {
+  const sorted = [...blocks].sort((a, b) => {
+    if (a.startMinutes === b.startMinutes) {
+      return a.endMinutes - b.endMinutes;
+    }
+    return a.startMinutes - b.startMinutes;
+  });
+
+  type LayoutGroup = {
+    blocks: CalendarBlock[];
+    windowEnd: number;
+  };
+
+  const groups: LayoutGroup[] = [];
+  let currentGroup: LayoutGroup | null = null;
+
+  sorted.forEach(block => {
+    if (!currentGroup || block.startMinutes >= currentGroup.windowEnd) {
+      currentGroup = { blocks: [], windowEnd: block.endMinutes };
+      groups.push(currentGroup);
+    } else {
+      currentGroup.windowEnd = Math.max(currentGroup.windowEnd, block.endMinutes);
+    }
+    currentGroup.blocks.push(block);
+  });
+
+  const layout = new Map<string, { lane: number; columns: number }>();
+
+  groups.forEach(group => {
+    const laneEnds: number[] = [];
+    let maxLanes = 1;
+    const assignments: { id: string; lane: number }[] = [];
+
+    [...group.blocks]
+      .sort((a, b) => {
+        if (a.startMinutes === b.startMinutes) {
+          return a.endMinutes - b.endMinutes;
+        }
+        return a.startMinutes - b.startMinutes;
+      })
+      .forEach(block => {
+        let laneIndex = laneEnds.findIndex(end => block.startMinutes >= end);
+        if (laneIndex === -1) {
+          laneIndex = laneEnds.length;
+          laneEnds.push(block.endMinutes);
+        } else {
+          laneEnds[laneIndex] = block.endMinutes;
+        }
+
+        maxLanes = Math.max(maxLanes, laneEnds.length);
+        assignments.push({ id: block.id, lane: laneIndex });
+      });
+
+    assignments.forEach(({ id, lane }) => {
+      layout.set(id, { lane, columns: maxLanes });
+    });
+  });
+
+  return layout;
 }
 
 function getBusyIntervals(blocks: CalendarBlock[]) {
@@ -299,6 +380,10 @@ function minutesToTime(minutes: number) {
   return `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
 }
 
+function formatTimeRange(startMinutes: number, endMinutes: number) {
+  return `${minutesToTime(startMinutes)} – ${minutesToTime(endMinutes)}`;
+}
+
 function useStoredState<T>(key: string, defaults: T): [T, React.Dispatch<React.SetStateAction<T>>] {
   const [state, setState] = React.useState<T>(() => {
     if (key === EVENT_STORAGE_KEY) {
@@ -342,10 +427,39 @@ const CalendarPage: React.FC = () => {
   const [bookings, setBookings] = useStoredState<BookingSlot[]>(BOOKING_STORAGE_KEY, DEFAULT_BOOKINGS);
   const [draft, setDraft] = React.useState<DraftState>(DEFAULT_DRAFT);
   const [isDialogOpen, setDialogOpen] = React.useState(false);
+  const [selectedBlock, setSelectedBlock] = React.useState<CalendarBlock | null>(null);
+  const [dragSelection, setDragSelection] = React.useState<{
+    day: Date;
+    dayKey: string;
+    startMinutes: number;
+    endMinutes: number;
+  } | null>(null);
+  const dragStateRef = React.useRef<{
+    day: Date;
+    dayKey: string;
+    anchorMinutes: number;
+    startMinutes: number;
+    endMinutes: number;
+  } | null>(null);
 
   React.useEffect(() => {
-    setDraft(prev => ({ ...prev, date: format(selectedDate, "yyyy-MM-dd") }));
-  }, [selectedDate]);
+    if (!isDialogOpen) {
+      setDraft(prev => ({ ...prev, date: format(selectedDate, "yyyy-MM-dd") }));
+    }
+  }, [selectedDate, isDialogOpen]);
+
+  const openCreateDialog = React.useCallback(
+    (overrides?: Partial<DraftState>) => {
+      setDraft(prev => ({
+        ...DEFAULT_DRAFT,
+        date: format(selectedDate, "yyyy-MM-dd"),
+        color: prev.color,
+        ...overrides
+      }));
+      setDialogOpen(true);
+    },
+    [selectedDate]
+  );
 
   const visibleRange = React.useMemo(() => {
     if (view === "month") {
@@ -435,6 +549,13 @@ const CalendarPage: React.FC = () => {
     });
   }, [view, days, events, bookings, tasksByDay]);
 
+  const totalFocusBlocks = React.useMemo(() => {
+    if (view === "month") return 0;
+    return focusBlocks.reduce((count, entry) => {
+      return count + entry.blocks.filter(block => block.source === "task").length;
+    }, 0);
+  }, [focusBlocks, view]);
+
   const rangeLabel = React.useMemo(() => {
     if (view === "month") {
       return format(selectedDate, "MMMM yyyy");
@@ -479,9 +600,13 @@ const CalendarPage: React.FC = () => {
     setDraft(prev => ({ ...prev, [key]: value }));
   };
 
-  const resetDraft = () => {
-    setDraft(DEFAULT_DRAFT);
-  };
+  const resetDraft = React.useCallback(() => {
+    setDraft(prev => ({
+      ...DEFAULT_DRAFT,
+      date: format(selectedDate, "yyyy-MM-dd"),
+      color: prev.color
+    }));
+  }, [selectedDate]);
 
   const handleCreate = () => {
     if (!draft.title.trim()) {
@@ -533,6 +658,39 @@ const CalendarPage: React.FC = () => {
         end: endOfWeek(endOfMonth(selectedDate), { weekStartsOn: 1 })
       }),
     [selectedDate]
+  );
+
+  const monthOptions = React.useMemo(
+    () =>
+      Array.from({ length: 12 }).map((_, index) => ({
+        value: String(index),
+        label: format(new Date(2020, index, 1), "MMMM")
+      })),
+    []
+  );
+
+  const yearOptions = React.useMemo(() => {
+    const currentYear = selectedDate.getFullYear();
+    return Array.from({ length: 11 }).map((_, index) => {
+      const year = currentYear - 5 + index;
+      return { value: String(year), label: String(year) };
+    });
+  }, [selectedDate]);
+
+  const handleMonthSelect = React.useCallback(
+    (value: string) => {
+      const monthIndex = Number(value);
+      setSelectedDate(prev => setMonth(prev, monthIndex));
+    },
+    [setSelectedDate]
+  );
+
+  const handleYearSelect = React.useCallback(
+    (value: string) => {
+      const year = Number(value);
+      setSelectedDate(prev => setYear(prev, year));
+    },
+    [setSelectedDate]
   );
 
   const weekdayLabels = React.useMemo(() => {
@@ -643,10 +801,10 @@ const CalendarPage: React.FC = () => {
   );
 
   const renderTimeline = () => (
-    <div className="relative h-full min-h-[640px] overflow-auto">
+    <div className="relative h-full min-h-[640px] overflow-x-auto overflow-y-auto">
       <div className="flex min-h-full">
         <div className="sticky left-0 z-10 flex w-16 flex-col border-r bg-card text-right text-[11px] text-muted-foreground">
-          {Array.from({ length: (DISPLAY_END_MINUTES - DISPLAY_START_MINUTES) / 60 }).map((_, index) => {
+          {Array.from({ length: (HOURS_PER_DAY / 60) + 1 }).map((_, index) => {
             const minutes = DISPLAY_START_MINUTES + index * 60;
             return (
               <div key={minutes} className="h-[52px] px-2 pt-2">
@@ -655,58 +813,171 @@ const CalendarPage: React.FC = () => {
             );
           })}
         </div>
-        <div className={cn("grid flex-1", view === "week" ? "min-w-[700px] grid-cols-7" : "grid-cols-1")}> 
-          {focusBlocks.map(({ day, blocks }) => (
-            <div key={day.toISOString()} className="relative border-r last:border-r-0">
-              <div className="sticky top-0 z-10 flex h-16 items-end justify-between border-b bg-card/95 px-4 pb-3 backdrop-blur">
-                <div>
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{format(day, "EEE")}</p>
-                  <p className={cn("text-xl font-semibold", isToday(day) && "text-primary")}>{format(day, "d MMM")}</p>
-                </div>
-                <span className="text-xs text-muted-foreground">
-                  {blocks.filter(block => block.source === "task").length} focus
-                </span>
-              </div>
-              <div
-                className="relative"
-                style={{ height: `${(HOURS_PER_DAY / 60) * HOUR_HEIGHT}px` }}
-              >
-                <div className="absolute inset-0">
-                  {Array.from({ length: (HOURS_PER_DAY / 60) + 1 }).map((_, index) => (
-                    <div
-                      key={index}
-                      className="absolute left-0 right-0 border-t border-dashed border-border/70"
-                      style={{ top: `${index * HOUR_HEIGHT}px` }}
-                    />
-                  ))}
-                </div>
-                {blocks.map(block => {
-                  const top = minutesToPx(block.startMinutes);
-                  const height = Math.max(44, minutesToPx(block.endMinutes) - top);
-                  return (
-                    <div
-                      key={block.id}
-                      className={cn(
-                        "absolute left-3 right-3 rounded-xl border border-border/60 bg-card/95 p-3 text-sm shadow-sm backdrop-blur transition",
-                        block.source === "task" && "border-dashed"
-                      )}
-                      style={{ top, height, borderLeft: `4px solid ${block.color}` }}
-                    >
-                      <div className="space-y-1">
-                        <p className="font-medium leading-tight">{block.title}</p>
-                        {block.subtitle && (
-                          <p className="text-xs text-muted-foreground">{block.subtitle}</p>
-                        )}
-                      </div>
-                      <p className="mt-3 text-xs text-muted-foreground">
-                        {minutesToTime(block.startMinutes)} – {minutesToTime(block.endMinutes)}
-                      </p>
+        <div
+          className={cn(
+            "grid flex-1",
+            view === "week" ? "min-w-[960px] grid-cols-7" : "min-w-[360px] grid-cols-1"
+          )}
+        >
+          {focusBlocks.map(({ day, blocks }) => {
+            const dayKey = format(day, "yyyy-MM-dd");
+            const layout = computeBlockLayout(blocks);
+            const selectionForDay = dragSelection && dragSelection.dayKey === dayKey ? dragSelection : null;
+
+            const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+              if ((event.target as HTMLElement).closest("[data-calendar-block]")) {
+                return;
+              }
+              if (event.button !== 0) return;
+
+              const rect = event.currentTarget.getBoundingClientRect();
+              const offsetY = event.clientY - rect.top;
+              const rawMinutes = clampMinutes(pxToMinutes(offsetY));
+              const anchor = clampMinutes(Math.min(rawMinutes, DISPLAY_END_MINUTES - MINUTE_STEP));
+              const startMinutes = anchor;
+              const endMinutes = clampMinutes(anchor + DEFAULT_SELECTION_DURATION);
+              const selection = { day, dayKey, startMinutes, endMinutes };
+
+              dragStateRef.current = { ...selection, anchorMinutes: anchor };
+              setDragSelection(selection);
+              event.currentTarget.setPointerCapture(event.pointerId);
+            };
+
+            const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+              if (!dragStateRef.current || dragStateRef.current.dayKey !== dayKey) return;
+              const rect = event.currentTarget.getBoundingClientRect();
+              const offsetY = event.clientY - rect.top;
+              const rawMinutes = clampMinutes(pxToMinutes(offsetY));
+              const anchor = dragStateRef.current.anchorMinutes;
+
+              let startMinutes = Math.min(anchor, rawMinutes);
+              let endMinutes = Math.max(anchor, rawMinutes);
+
+              if (endMinutes - startMinutes < MINUTE_STEP) {
+                if (rawMinutes >= anchor) {
+                  endMinutes = clampMinutes(anchor + MINUTE_STEP);
+                } else {
+                  startMinutes = clampMinutes(anchor - MINUTE_STEP);
+                }
+              }
+
+              const nextSelection = { day, dayKey, startMinutes, endMinutes };
+              dragStateRef.current = { ...nextSelection, anchorMinutes: anchor };
+              setDragSelection(nextSelection);
+            };
+
+            const handlePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+              if (!dragStateRef.current || dragStateRef.current.dayKey !== dayKey) return;
+              event.currentTarget.releasePointerCapture(event.pointerId);
+              const selection = dragStateRef.current;
+              dragStateRef.current = null;
+              setDragSelection(null);
+              openCreateDialog({
+                kind: "event",
+                date: dayKey,
+                startTime: minutesToTime(selection.startMinutes),
+                endTime: minutesToTime(selection.endMinutes)
+              });
+            };
+
+            const handlePointerCancel = () => {
+              dragStateRef.current = null;
+              setDragSelection(null);
+            };
+
+            return (
+              <div key={day.toISOString()} className="relative border-r last:border-r-0">
+                <div className="sticky top-0 z-10 flex h-20 flex-col justify-center border-b bg-card/95 px-4 py-3 backdrop-blur">
+                  <div className="flex items-center justify-start">
+                    <div>
+                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{format(day, "EEE")}</p>
+                      <p className={cn("text-xl font-semibold", isToday(day) && "text-primary")}>{format(day, "d MMM")}</p>
                     </div>
-                  );
-                })}
+                  </div>
+                </div>
+                <div
+                  className="relative cursor-crosshair"
+                  style={{ height: `${(HOURS_PER_DAY / 60) * HOUR_HEIGHT}px` }}
+                  onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={handlePointerUp}
+                  onPointerCancel={handlePointerCancel}
+                >
+                  <div className="absolute inset-0">
+                    {Array.from({ length: HOURS_PER_DAY / MINUTE_STEP + 1 }).map((_, index) => {
+                      const top = (index * MINUTE_STEP * HOUR_HEIGHT) / 60;
+                      const isHourMark = index % STEPS_PER_HOUR === 0;
+                      return (
+                        <div
+                          key={index}
+                          className={cn(
+                            "absolute left-0 right-0 border-border/60",
+                            isHourMark ? "border-t" : "border-t border-dashed opacity-60"
+                          )}
+                          style={{ top: `${top}px` }}
+                        />
+                      );
+                    })}
+                  </div>
+                  <div className="absolute inset-x-3 inset-y-0 pb-6">
+                    {selectionForDay && (() => {
+                      const top = minutesToPx(selectionForDay.startMinutes);
+                      const height = Math.max(32, minutesToPx(selectionForDay.endMinutes) - top);
+                      return (
+                        <div
+                          className="pointer-events-none absolute left-1 right-1 rounded-lg border border-primary/60 bg-primary/10 px-2 py-1.5 text-[11px] font-medium text-primary shadow-sm"
+                          style={{ top, height }}
+                        >
+                          {formatTimeRange(selectionForDay.startMinutes, selectionForDay.endMinutes)}
+                        </div>
+                      );
+                    })()}
+                    {blocks.map(block => {
+                      const layoutInfo = layout.get(block.id);
+                      const top = minutesToPx(block.startMinutes);
+                      const height = Math.max(36, minutesToPx(block.endMinutes) - top);
+                      const widthPercent = layoutInfo ? 100 / layoutInfo.columns : 100;
+                      const leftPercent = layoutInfo ? layoutInfo.lane * widthPercent : 0;
+
+                      return (
+                        <button
+                          key={block.id}
+                          type="button"
+                          data-calendar-block
+                          onPointerDown={event => event.stopPropagation()}
+                          onClick={() => setSelectedBlock(block)}
+                          title={`${block.title} · ${formatTimeRange(block.startMinutes, block.endMinutes)}`}
+                          className={cn(
+                            "absolute flex h-full flex-col overflow-hidden rounded-xl border border-border/60 bg-card/95 p-2 text-left text-sm shadow-sm backdrop-blur transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                            block.source === "task" && "border-dashed"
+                          )}
+                          style={{
+                            top,
+                            height,
+                            left: `calc(${leftPercent}% + 0.25rem)`,
+                            width: `calc(${widthPercent}% - 0.5rem)`,
+                            borderLeft: `4px solid ${block.color}`
+                          }}
+                        >
+                          <div className="flex flex-col gap-1 overflow-hidden">
+                            <p className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                              <span>{minutesToTime(block.startMinutes)}</span>
+                              <span aria-hidden className="text-muted-foreground/70">•</span>
+                              <span>{minutesToTime(block.endMinutes)}</span>
+                            </p>
+                            <p className="truncate text-sm font-semibold leading-snug">{block.title}</p>
+                            {block.subtitle && (
+                              <p className="truncate text-[11px] text-muted-foreground">{block.subtitle}</p>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
@@ -714,8 +985,33 @@ const CalendarPage: React.FC = () => {
 
   const renderMiniMonth = () => (
     <div className="rounded-2xl border bg-card p-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-sm font-medium text-foreground">{format(selectedDate, "MMMM yyyy")}</p>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-1 items-center gap-2">
+          <Select value={String(selectedDate.getMonth())} onValueChange={handleMonthSelect}>
+            <SelectTrigger className="w-[140px] justify-between text-left">
+              <SelectValue placeholder="Month" />
+            </SelectTrigger>
+            <SelectContent>
+              {monthOptions.map(option => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={String(selectedDate.getFullYear())} onValueChange={handleYearSelect}>
+            <SelectTrigger className="w-[110px] justify-between text-left">
+              <SelectValue placeholder="Year" />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map(option => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"
@@ -770,119 +1066,182 @@ const CalendarPage: React.FC = () => {
 
   return (
     <div className="flex h-full w-full flex-col">
-      <header className="border-b bg-background/80 backdrop-blur">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-col gap-1">
-              <h1 className="text-2xl font-semibold tracking-tight">Calendar</h1>
-              <p className="text-sm text-muted-foreground">Intentional time-blocking with a calm, focused layout.</p>
+      <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur">
+        <div className="flex w-full flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-6 lg:px-10">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <CalendarIcon className="h-5 w-5" />
             </div>
-            <div className="flex items-center gap-2">
-              <ToggleGroup type="single" value={view} onValueChange={value => value && setView(value as CalendarView)}>
-                {VIEW_OPTIONS.map(option => (
-                  <ToggleGroupItem key={option.id} value={option.id} className="px-3 py-1">
-                    {option.label}
-                  </ToggleGroupItem>
-                ))}
-              </ToggleGroup>
-              <Button onClick={() => setDialogOpen(true)} className="gap-2">
-                <Plus className="h-4 w-4" />
-                Create
-              </Button>
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight">Calendar</h1>
+              <p className="text-sm text-muted-foreground">Plan your time with clarity and keep every view aligned.</p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center rounded-full border bg-card">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="rounded-full"
-                onClick={() => handleNavigate("prev")}
-                aria-label="Previous period"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="rounded-full"
-                onClick={() => handleNavigate("next")}
-                aria-label="Next period"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-            <Button variant="outline" size="sm" className="gap-2" onClick={() => handleNavigate("today")}>
-              <Target className="h-4 w-4" />
-              Today
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={() => openCreateDialog()} className="gap-2">
+              <Plus className="h-4 w-4" />
+              New item
             </Button>
-            <span className="text-lg font-medium text-foreground">{rangeLabel}</span>
           </div>
         </div>
       </header>
 
-      <div className="mx-auto flex w-full max-w-6xl flex-1 gap-6 px-6 pb-6 pt-4 lg:pt-6">
-        <aside className="hidden w-64 flex-col gap-6 lg:flex">
-          <div className="rounded-2xl border bg-card p-4 shadow-sm">
-            <Button className="w-full justify-center gap-2" onClick={() => setDialogOpen(true)}>
-              <Plus className="h-4 w-4" />
-              New event
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="mt-2 w-full justify-start gap-2 text-muted-foreground"
-              onClick={handleCopyBookingLink}
-            >
-              <LinkIcon className="h-4 w-4" />
-              Copy booking link
-            </Button>
-            <p className="mt-2 truncate text-[11px] text-muted-foreground">{bookingLink.replace(/^https?:\/\//, "")}</p>
-            {nextAvailableSlot && (
-              <div className="mt-3 rounded-xl bg-muted/60 px-3 py-2 text-xs">
-                <p className="flex items-center gap-2 text-muted-foreground">
-                  <CalendarClock className="h-3.5 w-3.5" />
-                  Next available slot
-                </p>
-                <p className="mt-1 font-medium text-foreground">{formatSlotLabel(nextAvailableSlot)}</p>
+      <div className="flex min-h-0 flex-1 flex-col gap-6 px-4 pb-6 pt-4 sm:px-6 lg:px-10 lg:pt-6">
+        <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[260px,minmax(0,1fr)] 2xl:grid-cols-[260px,minmax(0,1fr),320px]">
+          <aside className="hidden min-h-0 flex-col gap-6 lg:flex">
+            <div className="rounded-2xl border bg-card p-4 shadow-sm">
+              <Button className="w-full justify-center gap-2" onClick={() => openCreateDialog()}>
+                <Plus className="h-4 w-4" />
+                New event
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-2 w-full justify-start gap-2 text-muted-foreground"
+                onClick={handleCopyBookingLink}
+              >
+                <LinkIcon className="h-4 w-4" />
+                Copy booking link
+              </Button>
+              <p className="mt-2 truncate text-[11px] text-muted-foreground">{bookingLink.replace(/^https?:\/\//, "")}</p>
+              {nextAvailableSlot && (
+                <div className="mt-3 rounded-xl bg-muted/60 px-3 py-2 text-xs">
+                  <p className="flex items-center gap-2 text-muted-foreground">
+                    <CalendarClock className="h-3.5 w-3.5" />
+                    Next available slot
+                  </p>
+                  <p className="mt-1 font-medium text-foreground">{formatSlotLabel(nextAvailableSlot)}</p>
+                </div>
+              )}
+            </div>
+
+            {renderMiniMonth()}
+          </aside>
+
+          <div className="flex min-w-0 flex-1 flex-col gap-4">
+            <div className="rounded-2xl border bg-card px-4 py-4 shadow-sm sm:px-6">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center rounded-full border bg-background px-1 py-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="rounded-full"
+                      onClick={() => handleNavigate("prev")}
+                      aria-label="Previous period"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="rounded-full"
+                      onClick={() => handleNavigate("next")}
+                      aria-label="Next period"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => handleNavigate("today")}>
+                    Today
+                  </Button>
+                  <div className="flex flex-col">
+                    <span className="text-xs uppercase tracking-wide text-muted-foreground">Selected range</span>
+                    <span className="text-lg font-semibold text-foreground">{rangeLabel}</span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Select value={view} onValueChange={value => value && setView(value as CalendarView)}>
+                    <SelectTrigger className="w-[120px] justify-between">
+                      <SelectValue placeholder="View" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {VIEW_OPTIONS.map(option => (
+                        <SelectItem key={option.id} value={option.id}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-            )}
+            </div>
+
+            <main className="flex-1 min-w-0 overflow-hidden rounded-3xl border bg-card shadow-sm">
+              {view === "month" ? renderMonthGrid() : renderTimeline()}
+            </main>
           </div>
 
-          {renderMiniMonth()}
-
-          <div className="rounded-2xl border bg-card p-4 shadow-sm">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <CalendarIcon className="h-4 w-4" />
-              Upcoming
-            </div>
-            <ScrollArea className="mt-3 max-h-[240px] pr-2">
-              <div className="space-y-3">
-                {upcomingItems.length ? (
-                  upcomingItems.map(item => (
-                    <div key={item.id} className="rounded-lg border border-border/60 p-3 text-xs">
-                      <p className="text-sm font-medium" style={{ color: item.color }}>
-                        {item.title}
-                      </p>
-                      {item.subtitle && <p className="mt-1 text-muted-foreground">{item.subtitle}</p>}
-                      <p className="mt-1 text-muted-foreground">{format(item.start, "EEE, MMM d · p")}</p>
+          <aside className="hidden min-h-0 flex-col gap-6 2xl:flex">
+            <div className="rounded-2xl border bg-card p-5 shadow-sm">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <Info className="h-4 w-4" />
+                Planning insights
+              </div>
+              <div className="mt-4 space-y-4 text-sm text-muted-foreground">
+                <div className="flex items-start gap-3">
+                  <CalendarClock className="mt-0.5 h-4 w-4" />
+                  <div>
+                    <p className="font-medium text-foreground">{totalFocusBlocks} focus sessions</p>
+                    <p>Scheduled across the selected range.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Plus className="mt-0.5 h-4 w-4" />
+                  <div>
+                    <p className="font-medium text-foreground">Quick create</p>
+                    <p>Drag across any open space to block time instantly.</p>
+                  </div>
+                </div>
+                {nextAvailableSlot && (
+                  <div className="flex items-start gap-3">
+                    <CalendarIcon className="mt-0.5 h-4 w-4" />
+                    <div>
+                      <p className="font-medium text-foreground">Next public slot</p>
+                      <p>{formatSlotLabel(nextAvailableSlot)}</p>
                     </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-muted-foreground">Nothing scheduled yet.</p>
+                  </div>
                 )}
               </div>
-            </ScrollArea>
-          </div>
-        </aside>
+            </div>
 
-        <main className="flex-1 overflow-hidden rounded-3xl border bg-card shadow-sm">
-          {view === "month" ? renderMonthGrid() : renderTimeline()}
-        </main>
+            <div className="rounded-2xl border bg-card p-5 shadow-sm">
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <CalendarIcon className="h-4 w-4" />
+                Upcoming schedule
+              </div>
+              <ScrollArea className="mt-3 max-h-[320px] pr-2">
+                <div className="space-y-3">
+                  {upcomingItems.length ? (
+                    upcomingItems.map(item => (
+                      <div key={item.id} className="rounded-lg border border-border/60 p-3 text-xs">
+                        <p className="text-sm font-medium" style={{ color: item.color }}>
+                          {item.title}
+                        </p>
+                        {item.subtitle && <p className="mt-1 text-muted-foreground">{item.subtitle}</p>}
+                        <p className="mt-1 text-muted-foreground">{format(item.start, "EEE, MMM d · p")}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Nothing scheduled yet.</p>
+                  )}
+                </div>
+              </ScrollArea>
+            </div>
+          </aside>
+        </div>
       </div>
 
-      <Dialog open={isDialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
+      <Dialog
+        open={isDialogOpen}
+        onOpenChange={open => {
+          setDialogOpen(open);
+          if (!open) {
+            resetDraft();
+          }
+        }}
+      >
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Create new item</DialogTitle>
             <DialogDescription>Publish an event or open a public booking slot.</DialogDescription>
@@ -987,6 +1346,66 @@ const CalendarPage: React.FC = () => {
               <Check className="mr-2 h-4 w-4" /> Save
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(selectedBlock)} onOpenChange={open => !open && setSelectedBlock(null)}>
+        <DialogContent className="max-w-md">
+          {selectedBlock && (() => {
+            const blockTypeLabels: Record<CalendarBlock["source"], string> = {
+              event: "Event",
+              booking: "Booking",
+              task: "Task"
+            };
+            const blockLabel = blockTypeLabels[selectedBlock.source];
+            const attendees =
+              selectedBlock.source === "event" && Array.isArray(selectedBlock.meta?.attendees)
+                ? (selectedBlock.meta.attendees as string[])
+                : [];
+            const slot = selectedBlock.source === "booking" ? (selectedBlock.meta as BookingSlot | undefined) : undefined;
+
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle>{selectedBlock.title}</DialogTitle>
+                  <DialogDescription>
+                    {`${format(parseISO(`${selectedBlock.date}T00:00:00`), "EEEE, MMM d yyyy")} · ${formatTimeRange(selectedBlock.startMinutes, selectedBlock.endMinutes)}`}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 text-sm">
+                  <div className="flex flex-wrap items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
+                    <Badge variant="outline">{blockLabel}</Badge>
+                    {selectedBlock.subtitle && <span className="text-muted-foreground">{selectedBlock.subtitle}</span>}
+                  </div>
+                  {selectedBlock.source === "event" && selectedBlock.meta?.description && (
+                    <p className="text-muted-foreground">{String(selectedBlock.meta.description)}</p>
+                  )}
+                  {selectedBlock.source === "event" && attendees.length > 0 && (
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Attendees</p>
+                      <p className="mt-1 text-foreground">{attendees.join(", ")}</p>
+                    </div>
+                  )}
+                  {slot && (
+                    <div className="space-y-1">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">Booking details</p>
+                      <p className="text-foreground">
+                        {slot.available ? "Open for booking" : slot.bookedBy ? `Booked by ${slot.bookedBy}` : "Unavailable"}
+                      </p>
+                      {slot.description && <p className="text-muted-foreground">{slot.description}</p>}
+                    </div>
+                  )}
+                  {selectedBlock.source === "task" && (
+                    <p className="text-muted-foreground">Focus session scheduled to keep the day on track.</p>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button variant="ghost" onClick={() => setSelectedBlock(null)}>
+                    Close
+                  </Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>
