@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowUp, Mic, MicOff } from "lucide-react";
+import { AlertCircle, ArrowUp, Mic } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useArlo } from "@/providers/ArloProvider";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 type SpeechRecognitionAlternative = {
   transcript?: string;
@@ -13,11 +14,17 @@ type SpeechRecognitionAlternative = {
 type SpeechRecognitionResult = {
   0?: SpeechRecognitionAlternative;
   length?: number;
+  isFinal?: boolean;
   [index: number]: SpeechRecognitionAlternative | undefined;
 };
 
 type SpeechRecognitionEventLike = {
   results: ArrayLike<SpeechRecognitionResult>;
+};
+
+type SpeechRecognitionErrorEventLike = {
+  error?: string;
+  message?: string;
 };
 
 type BrowserSpeechRecognition = {
@@ -26,6 +33,7 @@ type BrowserSpeechRecognition = {
   lang: string;
   interimResults: boolean;
   maxAlternatives: number;
+  continuous: boolean;
   onresult: ((event: SpeechRecognitionEventLike) => void) | null;
   onerror: ((event: unknown) => void) | null;
   onend: (() => void) | null;
@@ -38,12 +46,16 @@ export function FloatingChatBar() {
   const [isRecording, setIsRecording] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const [isMessagesOpen, setIsMessagesOpen] = useState(false);
+  const [micError, setMicError] = useState<string | null>(null);
   const { sendMessage, messages } = useArlo();
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recordingBaseInputRef = useRef("");
+  const finalTranscriptRef = useRef("");
+  const interimTranscriptRef = useRef("");
 
   useEffect(() => {
     return () => {
@@ -132,31 +144,71 @@ export function FloatingChatBar() {
 
     const recognition = new SpeechRecognitionConstructor();
     recognition.lang = "en-US";
-    recognition.interimResults = false;
+    recognition.interimResults = true;
+    recognition.continuous = true;
     recognition.maxAlternatives = 1;
 
     recognition.onresult = (event) => {
-      const transcript = Array.from(event.results)
+      const results = Array.from(event.results);
+
+      const finalTranscript = results
+        .filter((result) => result.isFinal)
         .map((result) => result[0]?.transcript ?? "")
         .join(" ")
         .trim();
 
-      if (transcript) {
-        setInput((prev) => {
-          if (!prev) return transcript;
-          return `${prev} ${transcript}`.trim();
-        });
-        inputRef.current?.focus();
-      }
+      const interimTranscript = results
+        .filter((result) => !result.isFinal)
+        .map((result) => result[0]?.transcript ?? "")
+        .join(" ")
+        .trim();
+
+      finalTranscriptRef.current = finalTranscript;
+      interimTranscriptRef.current = interimTranscript;
+
+      const base = recordingBaseInputRef.current.trim();
+      const combined = [base, finalTranscript, interimTranscript]
+        .filter((value) => value && value.length > 0)
+        .join(" ")
+        .trim();
+
+      setInput(combined);
+      inputRef.current?.focus();
     };
 
     recognition.onerror = (event) => {
       console.error("Speech recognition error:", event);
-      toast.error("Microphone error. Please try again.");
+      const errorEvent = event as SpeechRecognitionErrorEventLike;
+      if (
+        errorEvent.error === "not-allowed" ||
+        errorEvent.error === "service-not-allowed"
+      ) {
+        setMicError("Voice input requires microphone access.");
+      } else {
+        toast.error("Microphone error. Please try again.");
+      }
+      try {
+        recognition.stop();
+      } catch (stopError) {
+        console.error("Failed to stop recognition after error:", stopError);
+      }
       setIsRecording(false);
     };
 
     recognition.onend = () => {
+      const base = recordingBaseInputRef.current.trim();
+      const finalTranscript = finalTranscriptRef.current.trim();
+      const interimTranscript = interimTranscriptRef.current.trim();
+      const transcriptToKeep = finalTranscript || interimTranscript;
+      const combined = [base, transcriptToKeep]
+        .filter((value) => value && value.length > 0)
+        .join(" ")
+        .trim();
+
+      setInput(combined);
+      recordingBaseInputRef.current = combined;
+      finalTranscriptRef.current = "";
+      interimTranscriptRef.current = "";
       setIsRecording(false);
     };
 
@@ -176,12 +228,25 @@ export function FloatingChatBar() {
     }
 
     try {
+      setMicError(null);
+      recordingBaseInputRef.current = input.trim();
+      finalTranscriptRef.current = "";
+      interimTranscriptRef.current = "";
       recognition.start();
       setIsRecording(true);
       setIsMessagesOpen(true);
+      inputRef.current?.focus();
     } catch (error) {
       console.error("Failed to start speech recognition:", error);
-      toast.error("Unable to access the microphone.");
+      const errorName =
+        error && typeof error === "object" && "name" in error
+          ? String((error as { name?: string }).name)
+          : "";
+      if (errorName === "NotAllowedError" || errorName === "SecurityError") {
+        setMicError("Voice input requires microphone access.");
+      } else {
+        toast.error("Unable to access the microphone.");
+      }
       setIsRecording(false);
     }
   };
@@ -280,15 +345,39 @@ export function FloatingChatBar() {
                   setIsMessagesOpen(true);
                   toggleRecording();
                 }}
-                className={`rounded-full transition-colors ${
-                  isRecording ? "bg-destructive text-destructive-foreground" : ""
-                }`}
-              >
-                {isRecording ? (
-                  <MicOff className="w-5 h-5" />
-                ) : (
-                  <Mic className="w-5 h-5" />
+                aria-pressed={isRecording}
+                aria-label={
+                  isRecording ? "Stop voice input" : "Start voice input"
+                }
+                className={cn(
+                  "relative overflow-hidden rounded-full transition-all duration-200",
+                  isRecording
+                    ? "bg-destructive text-destructive-foreground shadow-[0_0_0_3px_rgba(239,68,68,0.35)]"
+                    : "hover:bg-muted"
                 )}
+              >
+                {isRecording && (
+                  <>
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 rounded-full bg-destructive/40"
+                    />
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 rounded-full bg-destructive/30 blur-xl"
+                    />
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 rounded-full border border-destructive/40 animate-pulse"
+                    />
+                  </>
+                )}
+                <Mic
+                  className={cn(
+                    "relative z-[1] h-5 w-5 transition-all duration-200",
+                    isRecording ? "fill-current" : ""
+                  )}
+                />
               </Button>
             </motion.div>
 
@@ -306,6 +395,22 @@ export function FloatingChatBar() {
 
           <div className="absolute inset-0 rounded-full bg-primary/20 blur-3xl -z-10 opacity-50" />
         </motion.div>
+
+        <AnimatePresence>
+          {micError && (
+            <motion.div
+              key="mic-permission-error"
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.2 }}
+              className="absolute top-full mt-3 flex items-center gap-2 rounded-full bg-destructive/10 px-3 py-1 text-xs text-destructive backdrop-blur"
+            >
+              <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{micError}</span>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </motion.div>
   );
