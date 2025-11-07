@@ -30,6 +30,7 @@ type SpeechRecognitionErrorEventLike = {
 type BrowserSpeechRecognition = {
   start: () => void;
   stop: () => void;
+  abort?: () => void;
   lang: string;
   interimResults: boolean;
   maxAlternatives: number;
@@ -56,6 +57,7 @@ export function FloatingChatBar() {
   const recordingBaseInputRef = useRef("");
   const finalTranscriptRef = useRef("");
   const interimTranscriptRef = useRef("");
+  const hasCommittedTranscriptRef = useRef(false);
 
   useEffect(() => {
     return () => {
@@ -165,6 +167,7 @@ export function FloatingChatBar() {
 
       finalTranscriptRef.current = finalTranscript;
       interimTranscriptRef.current = interimTranscript;
+      hasCommittedTranscriptRef.current = false;
 
       const base = recordingBaseInputRef.current.trim();
       const combined = [base, finalTranscript, interimTranscript]
@@ -196,24 +199,33 @@ export function FloatingChatBar() {
     };
 
     recognition.onend = () => {
-      const base = recordingBaseInputRef.current.trim();
-      const finalTranscript = finalTranscriptRef.current.trim();
-      const interimTranscript = interimTranscriptRef.current.trim();
-      const transcriptToKeep = finalTranscript || interimTranscript;
-      const combined = [base, transcriptToKeep]
-        .filter((value) => value && value.length > 0)
-        .join(" ")
-        .trim();
-
-      setInput(combined);
-      recordingBaseInputRef.current = combined;
-      finalTranscriptRef.current = "";
-      interimTranscriptRef.current = "";
+      finalizeTranscript();
       setIsRecording(false);
     };
 
     recognitionRef.current = recognition;
     return recognition;
+  };
+
+  const finalizeTranscript = () => {
+    if (hasCommittedTranscriptRef.current) {
+      return;
+    }
+
+    const base = recordingBaseInputRef.current.trim();
+    const finalTranscript = finalTranscriptRef.current.trim();
+    const interimTranscript = interimTranscriptRef.current.trim();
+    const transcriptToKeep = finalTranscript || interimTranscript;
+    const combined = [base, transcriptToKeep]
+      .filter((value) => value && value.length > 0)
+      .join(" ")
+      .trim();
+
+    setInput(combined);
+    recordingBaseInputRef.current = combined;
+    finalTranscriptRef.current = "";
+    interimTranscriptRef.current = "";
+    hasCommittedTranscriptRef.current = true;
   };
 
   const toggleRecording = () => {
@@ -223,7 +235,14 @@ export function FloatingChatBar() {
     }
 
     if (isRecording) {
-      recognition.stop();
+      finalizeTranscript();
+      setIsRecording(false);
+      try {
+        recognition.stop();
+        recognition.abort?.();
+      } catch (stopError) {
+        console.error("Failed to stop speech recognition:", stopError);
+      }
       return;
     }
 
@@ -232,6 +251,7 @@ export function FloatingChatBar() {
       recordingBaseInputRef.current = input.trim();
       finalTranscriptRef.current = "";
       interimTranscriptRef.current = "";
+      hasCommittedTranscriptRef.current = false;
       recognition.start();
       setIsRecording(true);
       setIsMessagesOpen(true);
@@ -352,7 +372,7 @@ export function FloatingChatBar() {
                 className={cn(
                   "relative overflow-hidden rounded-full transition-all duration-200",
                   isRecording
-                    ? "bg-destructive text-destructive-foreground shadow-[0_0_0_3px_rgba(239,68,68,0.35)]"
+                    ? "bg-destructive text-destructive-foreground shadow-[0_0_0_3px_rgba(239,68,68,0.25)]"
                     : "hover:bg-muted"
                 )}
               >
@@ -360,23 +380,24 @@ export function FloatingChatBar() {
                   <>
                     <span
                       aria-hidden="true"
-                      className="pointer-events-none absolute inset-0 rounded-full bg-destructive/40"
+                      className="pointer-events-none absolute inset-0 rounded-full border border-destructive/40"
                     />
                     <span
                       aria-hidden="true"
-                      className="pointer-events-none absolute inset-0 rounded-full bg-destructive/30 blur-xl"
+                      className="pointer-events-none absolute inset-0 rounded-full bg-destructive/20"
                     />
                     <span
                       aria-hidden="true"
-                      className="pointer-events-none absolute inset-0 rounded-full border border-destructive/40 animate-pulse"
+                      className="pointer-events-none absolute inset-0 rounded-full animate-[ping_1.5s_ease-in-out_infinite] bg-destructive/20"
                     />
                   </>
                 )}
                 <Mic
                   className={cn(
                     "relative z-[1] h-5 w-5 transition-all duration-200",
-                    isRecording ? "fill-current" : ""
+                    isRecording ? "scale-95" : ""
                   )}
+                  strokeWidth={isRecording ? 2.25 : 2}
                 />
               </Button>
             </motion.div>
