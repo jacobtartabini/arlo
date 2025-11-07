@@ -43,7 +43,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Verify Tailscale access (checks both Pi and Mac endpoints)
   const verifyTailscaleAccess = async (): Promise<void> => {
     const endpoints = [
-      'https://raspberrypi.tailf531bd.ts.net/api/verify',
+      'https://raspberrypi.tailf531bd.ts.net/auth/verify',
       'https://jacobs-macbook-pro.tailf531bd.ts.net/api/verify',
     ];
 
