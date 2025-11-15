@@ -1,17 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useArlo } from '@/providers/ArloProvider';
+import { useArlo, type MapUpdate } from '@/providers/ArloProvider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { MapPin, Navigation, Clock, ExternalLink } from 'lucide-react';
-
-interface MapData {
-  start: string;
-  end: string;
-  distance: string;
-  duration: string;
-  route: string;
-  mapUrl?: string;
-}
 
 interface MapWidgetProps {
   start?: string;
@@ -19,10 +10,31 @@ interface MapWidgetProps {
 }
 
 export function MapWidget({ start, end }: MapWidgetProps) {
-  const { config } = useArlo();
-  const [mapData, setMapData] = useState<MapData | null>(null);
+  const { config, latestMapUpdate } = useArlo();
+  const [mapData, setMapData] = useState<MapUpdate | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!latestMapUpdate) {
+      return;
+    }
+
+    const normalize = (value?: string) => value?.toLowerCase?.().trim() ?? '';
+    const updateStart = normalize(latestMapUpdate.start);
+    const updateEnd = normalize(latestMapUpdate.end);
+    const requestedStart = normalize(start);
+    const requestedEnd = normalize(end);
+
+    const matchesStart = !requestedStart || updateStart === requestedStart;
+    const matchesEnd = !requestedEnd || updateEnd === requestedEnd;
+
+    if (matchesStart && matchesEnd) {
+      setMapData(latestMapUpdate);
+      setIsLoading(false);
+      setError(null);
+    }
+  }, [end, latestMapUpdate, start]);
 
   useEffect(() => {
     const fetchMapData = async () => {
@@ -45,7 +57,7 @@ export function MapWidget({ start, end }: MapWidgetProps) {
           throw new Error('Failed to fetch map data');
         }
 
-        const data = await response.json();
+        const data = (await response.json()) as MapUpdate;
         setMapData(data);
         setError(null);
       } catch (err) {
@@ -58,7 +70,7 @@ export function MapWidget({ start, end }: MapWidgetProps) {
     if (config.apiEndpoint && config.apiToken) {
       fetchMapData();
     }
-  }, [start, end, config]);
+  }, [config, end, start]);
 
   if (isLoading) {
     return (
