@@ -1,4 +1,12 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { toast } from 'sonner';
 import { useChatHistory } from './ChatHistoryProvider';
 import { ChatMessageStatus } from '@/types/chat';
@@ -37,6 +45,8 @@ interface ArloContextType {
   checkConnection: () => Promise<boolean>;
   refreshStatus: () => Promise<void>;
   restartArlo: () => Promise<void>;
+  latestWeatherUpdate: WeatherUpdate | null;
+  latestMapUpdate: MapUpdate | null;
 }
 
 const ArloContext = createContext<ArloContextType | undefined>(undefined);
@@ -46,17 +56,80 @@ const DEFAULT_CONFIG: ArloConfig = {
   apiToken: localStorage.getItem('arlo-api-token') || '',
 };
 
+const WS_PATH = '/ws';
+
+type SocketMessage = Record<string, unknown>;
+
+const getString = (payload: SocketMessage, key: string) => {
+  const value = payload[key];
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'bigint') {
+    return value.toString();
+  }
+  return null;
+};
+
+const getBoolean = (payload: SocketMessage, key: string) => {
+  const value = payload[key];
+  return typeof value === 'boolean' ? value : null;
+};
+
+const getObject = <T extends object>(payload: SocketMessage, key: string) => {
+  const value = payload[key];
+  if (value && typeof value === 'object') {
+    return value as T;
+  }
+  return null;
+};
+
+export interface WeatherUpdate {
+  location: string;
+  temperature: number;
+  condition: string;
+  humidity: number;
+  windSpeed: number;
+  description: string;
+  [key: string]: unknown;
+}
+
+export interface MapUpdate {
+  start: string;
+  end: string;
+  distance: string;
+  duration: string;
+  route: string;
+  mapUrl?: string;
+  [key: string]: unknown;
+}
+
 export function ArloProvider({ children }: { children: React.ReactNode }) {
   const [config, setConfigState] = useState<ArloConfig>(DEFAULT_CONFIG);
   const [status, setStatus] = useState<ArloStatus | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [latestWeatherUpdate, setLatestWeatherUpdate] = useState<WeatherUpdate | null>(null);
+  const [latestMapUpdate, setLatestMapUpdate] = useState<MapUpdate | null>(null);
   const {
     activeConversation,
     appendMessage,
     ensureActiveConversation,
     updateMessageStatus,
   } = useChatHistory();
+
+  const socketRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<number | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const pendingMessagesRef = useRef(new Set<string>());
+  const outboundMessageMapRef = useRef(
+    new Map<string, { conversationId: string; messageId: string }>(),
+  );
+  const streamingReplyMapRef = useRef(
+    new Map<string, { conversationId: string; messageId: string }>(),
+  );
+  const streamingBufferRef = useRef(new Map<string, string>());
+  const isUnmountingRef = useRef(false);
 
   const messages = useMemo<ChatMessage[]>(
     () =>
@@ -97,6 +170,440 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
     return response.json();
   };
 
+  const updateLoadingState = useCallback(() => {
+    setIsLoading(pendingMessagesRef.current.size > 0);
+  }, []);
+
+  const completePendingMessage = useCallback(
+    (messageId: string) => {
+      if (pendingMessagesRef.current.delete(messageId)) {
+        updateLoadingState();
+      }
+    },
+    [updateLoadingState],
+  );
+
+  const flushPendingMessages = useCallback(
+    (status: ChatMessageStatus = 'error') => {
+      const pendingIds = Array.from(pendingMessagesRef.current);
+      pendingMessagesRef.current.clear();
+      for (const messageId of pendingIds) {
+        const record = outboundMessageMapRef.current.get(messageId);
+        if (record) {
+          updateMessageStatus(record.conversationId, record.messageId, status);
+          outboundMessageMapRef.current.delete(messageId);
+        }
+      }
+      updateLoadingState();
+    },
+    [updateLoadingState, updateMessageStatus],
+  );
+
+  const deriveWebSocketUrl = useMemo(() => {
+    try {
+      if (!config.apiEndpoint) {
+        return null;
+      }
+      const url = new URL(config.apiEndpoint);
+      const normalizedPath = url.pathname.endsWith('/')
+        ? url.pathname.slice(0, -1)
+        : url.pathname;
+      url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+      url.pathname = `${normalizedPath}${WS_PATH}`;
+      return url.toString();
+    } catch (error) {
+      console.error('Failed to derive WebSocket URL', error);
+      return null;
+    }
+  }, [config.apiEndpoint]);
+
+  const handleChatAck = useCallback(
+    (payload: SocketMessage) => {
+      const identifier =
+        getString(payload, 'messageId') ??
+        getString(payload, 'clientMessageId') ??
+        getString(payload, 'id');
+      if (!identifier) {
+        return;
+      }
+
+      const record = outboundMessageMapRef.current.get(identifier);
+      if (!record) {
+        return;
+      }
+
+      const timestamp = getString(payload, 'timestamp') ?? new Date().toISOString();
+      updateMessageStatus(record.conversationId, record.messageId, 'sent', {
+        timestamp,
+      });
+      outboundMessageMapRef.current.delete(identifier);
+    },
+    [updateMessageStatus],
+  );
+
+  const finalizePendingForConversation = useCallback(
+    (conversationId: string, timestamp?: string) => {
+      const pending = Array.from(outboundMessageMapRef.current.entries());
+      for (const [key, value] of pending) {
+        if (value.conversationId === conversationId) {
+          updateMessageStatus(conversationId, value.messageId, 'sent', {
+            timestamp: timestamp ?? new Date().toISOString(),
+          });
+          outboundMessageMapRef.current.delete(key);
+          completePendingMessage(key);
+          break;
+        }
+      }
+    },
+    [completePendingMessage, updateMessageStatus],
+  );
+
+  const handleStreamingChunk = useCallback(
+    (payload: SocketMessage) => {
+      const conversationId = getString(payload, 'conversationId');
+      const replyId =
+        getString(payload, 'replyId') ??
+        getString(payload, 'messageId') ??
+        getString(payload, 'id');
+      if (!conversationId || !replyId) {
+        return;
+      }
+
+      const delta =
+        getString(payload, 'delta') ?? getString(payload, 'text') ?? '';
+      const bufferKey = replyId.toString();
+      const existing = streamingReplyMapRef.current.get(bufferKey);
+
+      if (!existing) {
+        const message = appendMessage({
+          conversationId,
+          id: replyId,
+          text: delta,
+          sender: 'arlo',
+          status: getBoolean(payload, 'done') ? 'sent' : 'pending',
+        });
+        streamingReplyMapRef.current.set(bufferKey, {
+          conversationId,
+          messageId: message.id,
+        });
+        streamingBufferRef.current.set(bufferKey, delta ?? '');
+      } else {
+        const previous = streamingBufferRef.current.get(bufferKey) ?? '';
+        const combined = `${previous}${delta ?? ''}`;
+        streamingBufferRef.current.set(bufferKey, combined);
+        updateMessageStatus(existing.conversationId, existing.messageId, getBoolean(payload, 'done') ? 'sent' : 'pending', {
+          text: combined,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      if (getBoolean(payload, 'done')) {
+        const mapping = streamingReplyMapRef.current.get(bufferKey);
+        if (mapping) {
+          const combined = streamingBufferRef.current.get(bufferKey) ?? '';
+          updateMessageStatus(mapping.conversationId, mapping.messageId, 'sent', {
+            text: combined,
+            timestamp: new Date().toISOString(),
+          });
+          streamingReplyMapRef.current.delete(bufferKey);
+          streamingBufferRef.current.delete(bufferKey);
+          const sourceId =
+            getString(payload, 'replyTo') ??
+            getString(payload, 'requestId') ??
+            getString(payload, 'sourceId');
+          if (sourceId) {
+            const requestKey = sourceId.toString();
+            const pendingRecord = outboundMessageMapRef.current.get(requestKey);
+            if (pendingRecord) {
+              updateMessageStatus(
+                pendingRecord.conversationId,
+                pendingRecord.messageId,
+                'sent',
+                {
+                  timestamp: new Date().toISOString(),
+                },
+              );
+              outboundMessageMapRef.current.delete(requestKey);
+            }
+            completePendingMessage(requestKey);
+          } else {
+            finalizePendingForConversation(conversationId, new Date().toISOString());
+          }
+        }
+      }
+    },
+    [
+      appendMessage,
+      completePendingMessage,
+      finalizePendingForConversation,
+      updateMessageStatus,
+    ],
+  );
+
+  const handleChatReply = useCallback(
+    (payload: SocketMessage) => {
+      const conversationId =
+        getString(payload, 'conversationId') ?? activeConversation?.id;
+      if (!conversationId) {
+        return;
+      }
+
+      const replyId =
+        getString(payload, 'replyId') ??
+        getString(payload, 'messageId') ??
+        getString(payload, 'id');
+      const text =
+        getString(payload, 'text') ?? getString(payload, 'reply') ?? '';
+      const timestamp = getString(payload, 'timestamp') ?? new Date().toISOString();
+
+      if (replyId) {
+        const streamingEntry = streamingReplyMapRef.current.get(replyId.toString());
+        if (streamingEntry) {
+          updateMessageStatus(streamingEntry.conversationId, streamingEntry.messageId, 'sent', {
+            text,
+            timestamp,
+          });
+          streamingReplyMapRef.current.delete(replyId.toString());
+          streamingBufferRef.current.delete(replyId.toString());
+        } else {
+          appendMessage({
+            conversationId,
+            id: replyId,
+            text,
+            sender: 'arlo',
+            status: 'sent',
+            timestamp,
+          });
+        }
+      } else {
+        appendMessage({
+          conversationId,
+          text,
+          sender: 'arlo',
+          status: 'sent',
+          timestamp,
+        });
+      }
+
+      const responseKey =
+        getString(payload, 'replyTo') ??
+        getString(payload, 'requestId') ??
+        getString(payload, 'sourceId') ??
+        getString(payload, 'messageId');
+      if (responseKey) {
+        const key = responseKey.toString();
+        const pendingRecord = outboundMessageMapRef.current.get(key);
+        if (pendingRecord) {
+          updateMessageStatus(conversationId, pendingRecord.messageId, 'sent', {
+            timestamp,
+          });
+          outboundMessageMapRef.current.delete(key);
+        }
+        completePendingMessage(key);
+      } else {
+        finalizePendingForConversation(conversationId, timestamp);
+      }
+    },
+    [activeConversation?.id, appendMessage, completePendingMessage, finalizePendingForConversation, updateMessageStatus],
+  );
+
+  const handleChatError = useCallback(
+    (payload: SocketMessage) => {
+      const messageId =
+        getString(payload, 'messageId') ??
+        getString(payload, 'requestId') ??
+        getString(payload, 'id');
+      const conversationId =
+        getString(payload, 'conversationId') ?? activeConversation?.id;
+
+      if (messageId && conversationId) {
+        updateMessageStatus(conversationId, messageId, 'error');
+        completePendingMessage(messageId);
+      }
+
+      const errorMessage = getString(payload, 'error');
+      if (errorMessage) {
+        toast.error(errorMessage);
+      }
+    },
+    [activeConversation?.id, completePendingMessage, updateMessageStatus],
+  );
+
+  const handleSocketMessage = useCallback(
+    (event: MessageEvent) => {
+      let rawPayload: unknown = null;
+      try {
+        rawPayload = JSON.parse(event.data as string);
+      } catch (error) {
+        console.warn('Received non-JSON WebSocket message', event.data);
+        return;
+      }
+
+      if (!rawPayload || typeof rawPayload !== 'object') {
+        return;
+      }
+
+      const payload = rawPayload as SocketMessage;
+      const type = getString(payload, 'type');
+
+      switch (type) {
+        case 'status':
+        case 'system_status':
+          {
+            const data = getObject<ArloStatus>(payload, 'data');
+            if (data) {
+              setStatus(data);
+            }
+          }
+          setIsConnected(true);
+          break;
+        case 'chat_ack':
+        case 'message_ack':
+          handleChatAck(payload);
+          break;
+        case 'chat_chunk':
+        case 'chat_reply_chunk':
+        case 'chat_partial':
+          handleStreamingChunk(payload);
+          break;
+        case 'chat_reply':
+        case 'chat_response':
+        case 'assistant_message':
+          handleChatReply(payload);
+          break;
+        case 'chat_complete':
+          {
+            const replyTo = getString(payload, 'replyTo');
+            if (replyTo) {
+              completePendingMessage(replyTo.toString());
+            }
+          }
+          break;
+        case 'chat_error':
+          handleChatError(payload);
+          break;
+        case 'weather_update':
+          {
+            const data = getObject<WeatherUpdate>(payload, 'data');
+            if (data) {
+              setLatestWeatherUpdate(data);
+            }
+          }
+          break;
+        case 'map_update':
+          {
+            const data = getObject<MapUpdate>(payload, 'data');
+            if (data) {
+              setLatestMapUpdate(data);
+            }
+          }
+          break;
+        default:
+          break;
+      }
+    },
+    [
+      completePendingMessage,
+      handleChatAck,
+      handleChatError,
+      handleChatReply,
+      handleStreamingChunk,
+    ],
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (!deriveWebSocketUrl || !config.apiToken) {
+      if (socketRef.current) {
+        socketRef.current.close();
+        socketRef.current = null;
+      }
+      flushPendingMessages('error');
+      return;
+    }
+
+    isUnmountingRef.current = false;
+
+    const connect = () => {
+      if (!deriveWebSocketUrl || typeof window === 'undefined') {
+        return;
+      }
+
+      try {
+        const url = new URL(deriveWebSocketUrl);
+        if (config.apiToken) {
+          url.searchParams.set('token', config.apiToken);
+        }
+
+        const socket = new WebSocket(url.toString());
+        socketRef.current = socket;
+
+        const handleOpen = () => {
+          reconnectAttemptsRef.current = 0;
+          setIsConnected(true);
+        };
+
+        const handleClose = () => {
+          socket.removeEventListener('message', handleSocketMessage);
+          socket.removeEventListener('open', handleOpen);
+          socket.removeEventListener('close', handleClose);
+          socket.removeEventListener('error', handleError);
+
+          if (isUnmountingRef.current) {
+            return;
+          }
+
+          setIsConnected(false);
+
+          flushPendingMessages('error');
+
+          const attempt = reconnectAttemptsRef.current + 1;
+          reconnectAttemptsRef.current = attempt;
+          const delay = Math.min(30000, 1000 * 2 ** (attempt - 1));
+
+          if (reconnectTimeoutRef.current) {
+            window.clearTimeout(reconnectTimeoutRef.current);
+          }
+          reconnectTimeoutRef.current = window.setTimeout(connect, delay);
+        };
+
+        const handleError = (event: Event) => {
+          console.error('WebSocket error', event);
+          socket.close();
+        };
+
+        socket.addEventListener('open', handleOpen);
+        socket.addEventListener('message', handleSocketMessage);
+        socket.addEventListener('close', handleClose);
+        socket.addEventListener('error', handleError);
+      } catch (error) {
+        console.error('Failed to establish WebSocket connection', error);
+      }
+    };
+
+    connect();
+
+    return () => {
+      isUnmountingRef.current = true;
+      if (reconnectTimeoutRef.current) {
+        window.clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+      if (socketRef.current) {
+        socketRef.current.close();
+        socketRef.current = null;
+      }
+    };
+  }, [
+    config.apiToken,
+    deriveWebSocketUrl,
+    flushPendingMessages,
+    handleSocketMessage,
+  ]);
+
   const checkConnection = async (): Promise<boolean> => {
     try {
       await makeApiCall('/status');
@@ -126,8 +633,6 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    setIsLoading(true);
-
     const conversationId = ensureActiveConversation();
     const userMessage = appendMessage({
       conversationId,
@@ -135,6 +640,31 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
       sender: 'user',
       status: 'pending',
     });
+
+    pendingMessagesRef.current.add(userMessage.id);
+    updateLoadingState();
+
+    const socket = socketRef.current;
+    const socketReady = socket && socket.readyState === WebSocket.OPEN;
+
+    if (socketReady) {
+      try {
+        const payload = {
+          type: 'chat_prompt',
+          conversationId,
+          messageId: userMessage.id,
+          text: trimmed,
+        };
+        socket!.send(JSON.stringify(payload));
+        outboundMessageMapRef.current.set(userMessage.id, {
+          conversationId,
+          messageId: userMessage.id,
+        });
+        return;
+      } catch (error) {
+        console.error('WebSocket send failed, falling back to HTTP', error);
+      }
+    }
 
     try {
       const response = await makeApiCall('/ask', {
@@ -155,13 +685,13 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
       updateMessageStatus(userMessage.conversationId, userMessage.id, 'error');
       toast.error('Failed to send message to Arlo');
     } finally {
-      setIsLoading(false);
+      completePendingMessage(userMessage.id);
     }
   };
 
   const sendVoiceMessage = async (audioBlob: Blob) => {
     setIsLoading(true);
-    
+
     try {
       const formData = new FormData();
       formData.append('audio', audioBlob, 'audio.wav');
@@ -233,6 +763,8 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
     checkConnection,
     refreshStatus,
     restartArlo,
+    latestWeatherUpdate,
+    latestMapUpdate,
   };
 
   return (

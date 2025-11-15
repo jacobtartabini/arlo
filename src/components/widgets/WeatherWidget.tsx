@@ -1,27 +1,33 @@
 import { useEffect, useState } from 'react';
-import { useArlo } from '@/providers/ArloProvider';
+import { useArlo, type WeatherUpdate } from '@/providers/ArloProvider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Cloud, Sun, CloudRain, CloudSnow, Thermometer, Wind } from 'lucide-react';
-
-interface WeatherData {
-  location: string;
-  temperature: number;
-  condition: string;
-  humidity: number;
-  windSpeed: number;
-  description: string;
-}
 
 interface WeatherWidgetProps {
   location?: string;
 }
 
 export function WeatherWidget({ location = 'current location' }: WeatherWidgetProps) {
-  const { config } = useArlo();
-  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const { config, latestWeatherUpdate } = useArlo();
+  const [weather, setWeather] = useState<WeatherUpdate | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!latestWeatherUpdate) {
+      return;
+    }
+
+    const updateLocation = latestWeatherUpdate.location?.toLowerCase?.() ?? '';
+    const desiredLocation = location?.toLowerCase?.() ?? '';
+
+    if (!location || location === 'current location' || updateLocation === desiredLocation) {
+      setWeather(latestWeatherUpdate);
+      setIsLoading(false);
+      setError(null);
+    }
+  }, [latestWeatherUpdate, location]);
 
   useEffect(() => {
     const fetchWeather = async () => {
@@ -40,7 +46,7 @@ export function WeatherWidget({ location = 'current location' }: WeatherWidgetPr
           throw new Error('Failed to fetch weather data');
         }
 
-        const data = await response.json();
+        const data = (await response.json()) as WeatherUpdate;
         setWeather(data);
         setError(null);
       } catch (err) {
@@ -53,7 +59,7 @@ export function WeatherWidget({ location = 'current location' }: WeatherWidgetPr
     if (config.apiEndpoint && config.apiToken) {
       fetchWeather();
     }
-  }, [location, config]);
+  }, [config, location]);
 
   const getWeatherIcon = (condition: string) => {
     const cond = condition.toLowerCase();
