@@ -71,6 +71,16 @@ const getString = (payload: SocketMessage, key: string) => {
   return null;
 };
 
+const getStringFromKeys = (payload: SocketMessage, keys: string[]) => {
+  for (const key of keys) {
+    const value = getString(payload, key);
+    if (value !== null) {
+      return value;
+    }
+  }
+  return null;
+};
+
 const getBoolean = (payload: SocketMessage, key: string) => {
   const value = payload[key];
   return typeof value === 'boolean' ? value : null;
@@ -237,10 +247,15 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
 
   const handleChatAck = useCallback(
     (payload: SocketMessage) => {
-      const identifier =
-        getString(payload, 'messageId') ??
-        getString(payload, 'clientMessageId') ??
-        getString(payload, 'id');
+      const identifier = getStringFromKeys(payload, [
+        'messageId',
+        'message_id',
+        'clientMessageId',
+        'client_message_id',
+        'requestId',
+        'request_id',
+        'id',
+      ]);
       if (!identifier) {
         return;
       }
@@ -280,17 +295,23 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
 
   const handleStreamingChunk = useCallback(
     (payload: SocketMessage) => {
-      const conversationId = getString(payload, 'conversationId');
-      const replyId =
-        getString(payload, 'replyId') ??
-        getString(payload, 'messageId') ??
-        getString(payload, 'id');
+      const conversationId = getStringFromKeys(payload, [
+        'conversationId',
+        'conversation_id',
+      ]);
+      const replyId = getStringFromKeys(payload, [
+        'replyId',
+        'reply_id',
+        'messageId',
+        'message_id',
+        'id',
+      ]);
       if (!conversationId || !replyId) {
         return;
       }
 
       const delta =
-        getString(payload, 'delta') ?? getString(payload, 'text') ?? '';
+        getStringFromKeys(payload, ['delta', 'text', 'content']) ?? '';
       const bufferKey = replyId.toString();
       const existing = streamingReplyMapRef.current.get(bufferKey);
 
@@ -327,10 +348,14 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
           });
           streamingReplyMapRef.current.delete(bufferKey);
           streamingBufferRef.current.delete(bufferKey);
-          const sourceId =
-            getString(payload, 'replyTo') ??
-            getString(payload, 'requestId') ??
-            getString(payload, 'sourceId');
+          const sourceId = getStringFromKeys(payload, [
+            'replyTo',
+            'reply_to',
+            'requestId',
+            'request_id',
+            'sourceId',
+            'source_id',
+          ]);
           if (sourceId) {
             const requestKey = sourceId.toString();
             const pendingRecord = outboundMessageMapRef.current.get(requestKey);
@@ -363,18 +388,24 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
   const handleChatReply = useCallback(
     (payload: SocketMessage) => {
       const conversationId =
-        getString(payload, 'conversationId') ?? activeConversation?.id;
+        getStringFromKeys(payload, ['conversationId', 'conversation_id']) ??
+        activeConversation?.id;
       if (!conversationId) {
         return;
       }
 
-      const replyId =
-        getString(payload, 'replyId') ??
-        getString(payload, 'messageId') ??
-        getString(payload, 'id');
+      const replyId = getStringFromKeys(payload, [
+        'replyId',
+        'reply_id',
+        'messageId',
+        'message_id',
+        'id',
+      ]);
       const text =
-        getString(payload, 'text') ?? getString(payload, 'reply') ?? '';
-      const timestamp = getString(payload, 'timestamp') ?? new Date().toISOString();
+        getStringFromKeys(payload, ['text', 'reply', 'content']) ?? '';
+      const timestamp =
+        getStringFromKeys(payload, ['timestamp', 'createdAt', 'created_at']) ??
+        new Date().toISOString();
 
       if (replyId) {
         const streamingEntry = streamingReplyMapRef.current.get(replyId.toString());
@@ -405,11 +436,16 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
-      const responseKey =
-        getString(payload, 'replyTo') ??
-        getString(payload, 'requestId') ??
-        getString(payload, 'sourceId') ??
-        getString(payload, 'messageId');
+      const responseKey = getStringFromKeys(payload, [
+        'replyTo',
+        'reply_to',
+        'requestId',
+        'request_id',
+        'sourceId',
+        'source_id',
+        'messageId',
+        'message_id',
+      ]);
       if (responseKey) {
         const key = responseKey.toString();
         const pendingRecord = outboundMessageMapRef.current.get(key);
@@ -437,12 +473,16 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
 
   const handleChatError = useCallback(
     (payload: SocketMessage) => {
-      const messageId =
-        getString(payload, 'messageId') ??
-        getString(payload, 'requestId') ??
-        getString(payload, 'id');
+      const messageId = getStringFromKeys(payload, [
+        'messageId',
+        'message_id',
+        'requestId',
+        'request_id',
+        'id',
+      ]);
       const conversationId =
-        getString(payload, 'conversationId') ?? activeConversation?.id;
+        getStringFromKeys(payload, ['conversationId', 'conversation_id']) ??
+        activeConversation?.id;
 
       if (messageId && conversationId) {
         updateMessageStatus(conversationId, messageId, 'error');
@@ -450,7 +490,8 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
         clearMessageFallbackTimeout(messageId);
       }
 
-      const errorMessage = getString(payload, 'error');
+      const errorMessage =
+        getStringFromKeys(payload, ['error', 'message', 'detail']) ?? undefined;
       if (errorMessage) {
         toast.error(errorMessage);
       }
@@ -478,7 +519,8 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
       }
 
       const payload = rawPayload as SocketMessage;
-      const type = getString(payload, 'type');
+      const type =
+        getStringFromKeys(payload, ['type', 'event', 'kind']) ?? undefined;
 
       switch (type) {
         case 'status':
@@ -503,17 +545,25 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
         case 'chat_reply':
         case 'chat_response':
         case 'assistant_message':
+        case 'chat_message':
+        case 'assistant':
           handleChatReply(payload);
           break;
         case 'chat_complete':
           {
-            const replyTo = getString(payload, 'replyTo');
+            const replyTo = getStringFromKeys(payload, [
+              'replyTo',
+              'reply_to',
+              'requestId',
+              'request_id',
+            ]);
             if (replyTo) {
               completePendingMessage(replyTo.toString());
             }
           }
           break;
         case 'chat_error':
+        case 'error':
           handleChatError(payload);
           break;
         case 'weather_update':
@@ -664,18 +714,41 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
   const sendMessageOverHttp = useCallback(
     async (conversationId: string, messageId: string, text: string) => {
       try {
+        const timestamp = new Date().toISOString();
         const response = await makeApiCall('/ask', {
           method: 'POST',
-          body: JSON.stringify({ message: text }),
+          body: JSON.stringify({
+            message: text,
+            prompt: text,
+            content: text,
+            conversationId,
+            conversation_id: conversationId,
+            conversation: conversationId,
+            messageId,
+            message_id: messageId,
+            clientMessageId: messageId,
+            client_message_id: messageId,
+            requestId: messageId,
+            request_id: messageId,
+            timestamp,
+            createdAt: timestamp,
+            created_at: timestamp,
+            source: 'web',
+          }),
         });
 
         updateMessageStatus(conversationId, messageId, 'sent');
 
         appendMessage({
           conversationId,
-          text: response.reply,
+          text:
+            response.reply ??
+            response.text ??
+            response.message ??
+            'Arlo did not return a response.',
           sender: 'arlo',
           status: 'sent',
+          timestamp: response.timestamp ?? response.createdAt ?? response.created_at,
         });
       } catch (error) {
         console.error('Failed to send message:', error);
@@ -733,13 +806,28 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
 
     if (socketReady) {
       try {
+        const timestamp = new Date().toISOString();
         const payload = {
           type: 'chat_prompt',
-          conversationId,
+          channel: 'chat',
+          id: userMessage.id,
           messageId: userMessage.id,
+          message_id: userMessage.id,
+          clientMessageId: userMessage.id,
+          client_message_id: userMessage.id,
+          requestId: userMessage.id,
+          request_id: userMessage.id,
+          conversationId,
+          conversation_id: conversationId,
+          conversation: conversationId,
           text: trimmed,
           message: trimmed,
           prompt: trimmed,
+          content: trimmed,
+          timestamp,
+          createdAt: timestamp,
+          created_at: timestamp,
+          source: 'web',
         };
         socket!.send(JSON.stringify(payload));
         outboundMessageMapRef.current.set(userMessage.id, {
