@@ -1,11 +1,23 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { AuthContextType, AuthState } from '@/types/auth';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
+import { AuthContextType, AuthState } from "@/types/auth";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 interface AuthProviderProps {
   children: ReactNode;
 }
+
+// Backends to verify identity against
+const VERIFY_ENDPOINTS = [
+  "https://raspberrypi.tailf531bd.ts.net/auth/verify",
+  "https://jacobs-macbook-pro.tailf531bd.ts.net/api/verify",
+];
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [authState, setAuthState] = useState<AuthState>({
@@ -14,52 +26,36 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     error: null,
   });
 
-  // Initialize verification state
-  useEffect(() => {
-    const initAuth = () => {
-      try {
-        const tailscaleVerified = sessionStorage.getItem('arlo_access_verified') === 'true';
-        const verificationExpiry = sessionStorage.getItem('arlo_access_verified_expiry');
-        const isVerificationValid = verificationExpiry && Date.now() < parseInt(verificationExpiry);
-
-        setAuthState({
-          tailscaleVerified: tailscaleVerified && !!isVerificationValid,
-          isLoading: false,
-          error: null,
-        });
-      } catch (error) {
-        console.error('Auth initialization failed:', error);
-        setAuthState({
-          tailscaleVerified: false,
-          isLoading: false,
-          error: 'Failed to initialize authentication',
-        });
-      }
-    };
-
-    initAuth();
-  }, []);
-
-  // Verify Tailscale access (checks both Pi and Mac endpoints)
-  const verifyTailscaleAccess = async (): Promise<void> => {
-    const endpoints = [
-      'https://raspberrypi.tailf531bd.ts.net/auth/verify',
-      'https://jacobs-macbook-pro.tailf531bd.ts.net/api/verify',
-    ];
-
-    let success = false;
+  // ------------------------------------------------------------
+  // Helper: call all verification endpoints until one succeeds
+  // ------------------------------------------------------------
+  const checkTailscaleBackend = async () => {
     let lastError: any = null;
 
-    for (const url of endpoints) {
+    for (const url of VERIFY_ENDPOINTS) {
       try {
-        const response = await fetch(url, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
+        const res = await fetch(url, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
         });
 
-        if (response.ok) {
-          success = true;
-          break;
+        if (res.ok) {
+          const data = await res.json();
+
+          // Many endpoints return different shapes, normalize them
+          const status = (data as any).status;
+          const msg = (data as any).message;
+
+          const authorized =
+            status === "authorized" ||
+            msg === "Tailscale access verified" ||
+            msg === "Tailscale access verified ✅";
+
+          if (authorized) {
+            return { ok: true, data };
+          }
+
+          lastError = new Error(`Access denied via ${url}`);
         } else {
           lastError = new Error(`Access denied via ${url}`);
         }
@@ -68,38 +64,74 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     }
 
-    if (!success) {
-      sessionStorage.removeItem('arlo_access_verified');
-      sessionStorage.removeItem('arlo_access_verified_expiry');
-
-      setAuthState(prev => ({
-        ...prev,
-        tailscaleVerified: false,
-        error: lastError instanceof Error ? lastError.message : 'Failed to verify access',
-      }));
-      throw lastError || new Error('Verification failed');
-    }
-
-    // Store verification with 15-minute expiry
-    const expiry = Date.now() + 15 * 60 * 1000;
-    sessionStorage.setItem('arlo_access_verified', 'true');
-    sessionStorage.setItem('arlo_access_verified_expiry', expiry.toString());
-
-    setAuthState(prev => ({ ...prev, tailscaleVerified: true, error: null }));
+    return { ok: false, error: lastError };
   };
 
-  // Set Tailscale verification status
-  const setTailscaleVerified = (verified: boolean) => {
-    if (verified) {
-      const expiry = Date.now() + 15 * 60 * 1000;
-      sessionStorage.setItem('arlo_access_verified', 'true');
-      sessionStorage.setItem('arlo_access_verified_expiry', expiry.toString());
-    } else {
-      sessionStorage.removeItem('arlo_access_verified');
-      sessionStorage.removeItem('arlo_access_verified_expiry');
+  // ------------------------------------------------------------
+  // On mount → ask backend if we're authorized
+  // ------------------------------------------------------------
+  useEffect(() => {
+    const init = async () => {
+      setAuthState((prev) => ({ ...prev, isLoading: true }));
+
+      const result = await checkTailscaleBackend();
+
+      if (!result.ok) {
+        setAuthState({
+          tailscaleVerified: false,
+          isLoading: false,
+          error:
+            result.error instanceof Error
+              ? result.error.message
+              : "Failed to verify Tailscale access",
+        });
+      } else {
+        setAuthState({
+          tailscaleVerified: true,
+          isLoading: false,
+          error: null,
+        });
+      }
+    };
+
+    init();
+  }, []);
+
+  // ------------------------------------------------------------
+  // Manual re-check (e.g., retry button in AccessDenied UI)
+  // ------------------------------------------------------------
+  const verifyTailscaleAccess = async () => {
+    setAuthState((prev) => ({ ...prev, isLoading: true, error: null }));
+
+    const result = await checkTailscaleBackend();
+
+    if (!result.ok) {
+      setAuthState((prev) => ({
+        ...prev,
+        tailscaleVerified: false,
+        isLoading: false,
+        error:
+          result.error instanceof Error
+            ? result.error.message
+            : "Failed to verify Tailscale access",
+      }));
+      throw result.error || new Error("Verification failed");
     }
 
-    setAuthState(prev => ({ ...prev, tailscaleVerified: verified }));
+    setAuthState((prev) => ({
+      ...prev,
+      tailscaleVerified: true,
+      isLoading: false,
+      error: null,
+    }));
+  };
+
+  // ------------------------------------------------------------
+  // Optional helper to override state inside app logic
+  // ------------------------------------------------------------
+  const setTailscaleVerified = (verified: boolean) => {
+    // Local state only — backend remains source of truth
+    setAuthState((prev) => ({ ...prev, tailscaleVerified: verified }));
   };
 
   const contextValue: AuthContextType = {
@@ -108,12 +140,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setTailscaleVerified,
   };
 
-  return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={contextValue}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
 
-// Custom hook
+// ------------------------------------------------------------
+// Hook
+// ------------------------------------------------------------
 export const useAuth = (): AuthContextType => {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within an AuthProvider');
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) {
+    throw new Error("useAuth must be used inside an AuthProvider");
+  }
+  return ctx;
 };
