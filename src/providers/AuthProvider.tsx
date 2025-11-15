@@ -4,6 +4,7 @@ import React, {
   useEffect,
   useState,
   ReactNode,
+  useCallback,
 } from "react";
 import { AuthContextType, AuthState } from "@/types/auth";
 
@@ -29,8 +30,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // ------------------------------------------------------------
   // Helper: call all verification endpoints until one succeeds
   // ------------------------------------------------------------
-  const checkTailscaleBackend = async () => {
-    let lastError: any = null;
+  const checkTailscaleBackend = useCallback(async () => {
+    let lastError: unknown = null;
 
     for (const url of VERIFY_ENDPOINTS) {
       try {
@@ -40,11 +41,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         });
 
         if (res.ok) {
-          const data = await res.json();
+          const data = (await res.json()) as Partial<
+            Record<"status" | "message", string>
+          >;
 
           // Many endpoints return different shapes, normalize them
-          const status = (data as any).status;
-          const msg = (data as any).message;
+          const status = data.status;
+          const msg = data.message;
 
           const authorized =
             status === "authorized" ||
@@ -59,13 +62,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         } else {
           lastError = new Error(`Access denied via ${url}`);
         }
-      } catch (err) {
+      } catch (err: unknown) {
         lastError = err;
       }
     }
 
     return { ok: false, error: lastError };
-  };
+  }, []);
 
   // ------------------------------------------------------------
   // On mount → ask backend if we're authorized
@@ -95,12 +98,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
 
     init();
-  }, []);
+  }, [checkTailscaleBackend]);
 
   // ------------------------------------------------------------
   // Manual re-check (e.g., retry button in AccessDenied UI)
   // ------------------------------------------------------------
-  const verifyTailscaleAccess = async () => {
+  const verifyTailscaleAccess = useCallback(async () => {
     setAuthState((prev) => ({ ...prev, isLoading: true, error: null }));
 
     const result = await checkTailscaleBackend();
@@ -124,15 +127,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       isLoading: false,
       error: null,
     }));
-  };
+  }, [checkTailscaleBackend]);
 
   // ------------------------------------------------------------
   // Optional helper to override state inside app logic
   // ------------------------------------------------------------
-  const setTailscaleVerified = (verified: boolean) => {
+  const setTailscaleVerified = useCallback((verified: boolean) => {
     // Local state only — backend remains source of truth
     setAuthState((prev) => ({ ...prev, tailscaleVerified: verified }));
-  };
+  }, []);
 
   const contextValue: AuthContextType = {
     ...authState,
