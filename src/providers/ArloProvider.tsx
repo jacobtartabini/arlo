@@ -125,6 +125,7 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
   const outboundMessageMapRef = useRef(
     new Map<string, { conversationId: string; messageId: string }>(),
   );
+  const fallbackTimeoutsRef = useRef(new Map<string, number>());
   const streamingReplyMapRef = useRef(
     new Map<string, { conversationId: string; messageId: string }>(),
   );
@@ -150,37 +151,53 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('arlo-api-token', newConfig.apiToken);
   };
 
-  const makeApiCall = async (endpoint: string, options: RequestInit = {}) => {
-    const url = `${config.apiEndpoint}${endpoint}`;
-    const headers = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.apiToken}`,
-      ...options.headers,
-    };
+  const makeApiCall = useCallback(
+    async (endpoint: string, options: RequestInit = {}) => {
+      const url = `${config.apiEndpoint}${endpoint}`;
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.apiToken}`,
+        ...options.headers,
+      };
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
+      const response = await fetch(url, {
+        ...options,
+        headers,
+      });
 
-    if (!response.ok) {
-      throw new Error(`API call failed: ${response.status} ${response.statusText}`);
-    }
+      if (!response.ok) {
+        throw new Error(`API call failed: ${response.status} ${response.statusText}`);
+      }
 
-    return response.json();
-  };
+      return response.json();
+    },
+    [config.apiEndpoint, config.apiToken],
+  );
 
   const updateLoadingState = useCallback(() => {
     setIsLoading(pendingMessagesRef.current.size > 0);
   }, []);
 
+  const clearMessageFallbackTimeout = useCallback((messageId: string) => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const timeoutId = fallbackTimeoutsRef.current.get(messageId);
+    if (timeoutId) {
+      window.clearTimeout(timeoutId);
+      fallbackTimeoutsRef.current.delete(messageId);
+    }
+  }, []);
+
   const completePendingMessage = useCallback(
     (messageId: string) => {
+      clearMessageFallbackTimeout(messageId);
       if (pendingMessagesRef.current.delete(messageId)) {
         updateLoadingState();
       }
     },
-    [updateLoadingState],
+    [clearMessageFallbackTimeout, updateLoadingState],
   );
 
   const flushPendingMessages = useCallback(
@@ -188,6 +205,7 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
       const pendingIds = Array.from(pendingMessagesRef.current);
       pendingMessagesRef.current.clear();
       for (const messageId of pendingIds) {
+        clearMessageFallbackTimeout(messageId);
         const record = outboundMessageMapRef.current.get(messageId);
         if (record) {
           updateMessageStatus(record.conversationId, record.messageId, status);
@@ -196,7 +214,7 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
       }
       updateLoadingState();
     },
-    [updateLoadingState, updateMessageStatus],
+    [clearMessageFallbackTimeout, updateLoadingState, updateMessageStatus],
   );
 
   const deriveWebSocketUrl = useMemo(() => {
@@ -237,8 +255,10 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
         timestamp,
       });
       outboundMessageMapRef.current.delete(identifier);
+      clearMessageFallbackTimeout(identifier);
+      completePendingMessage(identifier);
     },
-    [updateMessageStatus],
+    [clearMessageFallbackTimeout, completePendingMessage, updateMessageStatus],
   );
 
   const finalizePendingForConversation = useCallback(
@@ -399,12 +419,20 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
           });
           outboundMessageMapRef.current.delete(key);
         }
+        clearMessageFallbackTimeout(key);
         completePendingMessage(key);
       } else {
         finalizePendingForConversation(conversationId, timestamp);
       }
     },
-    [activeConversation?.id, appendMessage, completePendingMessage, finalizePendingForConversation, updateMessageStatus],
+    [
+      activeConversation?.id,
+      appendMessage,
+      clearMessageFallbackTimeout,
+      completePendingMessage,
+      finalizePendingForConversation,
+      updateMessageStatus,
+    ],
   );
 
   const handleChatError = useCallback(
@@ -419,6 +447,7 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
       if (messageId && conversationId) {
         updateMessageStatus(conversationId, messageId, 'error');
         completePendingMessage(messageId);
+        clearMessageFallbackTimeout(messageId);
       }
 
       const errorMessage = getString(payload, 'error');
@@ -426,7 +455,12 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
         toast.error(errorMessage);
       }
     },
-    [activeConversation?.id, completePendingMessage, updateMessageStatus],
+    [
+      activeConversation?.id,
+      clearMessageFallbackTimeout,
+      completePendingMessage,
+      updateMessageStatus,
+    ],
   );
 
   const handleSocketMessage = useCallback(
@@ -604,7 +638,7 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
     handleSocketMessage,
   ]);
 
-  const checkConnection = async (): Promise<boolean> => {
+  const checkConnection = useCallback(async (): Promise<boolean> => {
     try {
       await makeApiCall('/status');
       setIsConnected(true);
@@ -613,7 +647,7 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
       setIsConnected(false);
       return false;
     }
-  };
+  }, [makeApiCall]);
 
   const refreshStatus = async () => {
     try {
@@ -626,6 +660,56 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
       toast.error('Failed to connect to Arlo');
     }
   };
+
+  const sendMessageOverHttp = useCallback(
+    async (conversationId: string, messageId: string, text: string) => {
+      try {
+        const response = await makeApiCall('/ask', {
+          method: 'POST',
+          body: JSON.stringify({ message: text }),
+        });
+
+        updateMessageStatus(conversationId, messageId, 'sent');
+
+        appendMessage({
+          conversationId,
+          text: response.reply,
+          sender: 'arlo',
+          status: 'sent',
+        });
+      } catch (error) {
+        console.error('Failed to send message:', error);
+        updateMessageStatus(conversationId, messageId, 'error');
+        toast.error('Failed to send message to Arlo');
+      } finally {
+        completePendingMessage(messageId);
+      }
+    },
+    [appendMessage, completePendingMessage, makeApiCall, updateMessageStatus],
+  );
+
+  const scheduleHttpFallback = useCallback(
+    (conversationId: string, messageId: string, text: string) => {
+      if (typeof window === 'undefined') {
+        return;
+      }
+
+      clearMessageFallbackTimeout(messageId);
+
+      const timeoutId = window.setTimeout(() => {
+        fallbackTimeoutsRef.current.delete(messageId);
+        if (!outboundMessageMapRef.current.has(messageId)) {
+          return;
+        }
+
+        outboundMessageMapRef.current.delete(messageId);
+        void sendMessageOverHttp(conversationId, messageId, text);
+      }, 3000);
+
+      fallbackTimeoutsRef.current.set(messageId, timeoutId);
+    },
+    [clearMessageFallbackTimeout, sendMessageOverHttp],
+  );
 
   const sendMessage = async (content: string) => {
     const trimmed = content.trim();
@@ -654,39 +738,22 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
           conversationId,
           messageId: userMessage.id,
           text: trimmed,
+          message: trimmed,
+          prompt: trimmed,
         };
         socket!.send(JSON.stringify(payload));
         outboundMessageMapRef.current.set(userMessage.id, {
           conversationId,
           messageId: userMessage.id,
         });
+        scheduleHttpFallback(conversationId, userMessage.id, trimmed);
         return;
       } catch (error) {
         console.error('WebSocket send failed, falling back to HTTP', error);
       }
     }
 
-    try {
-      const response = await makeApiCall('/ask', {
-        method: 'POST',
-        body: JSON.stringify({ message: trimmed }),
-      });
-
-      updateMessageStatus(conversationId, userMessage.id, 'sent');
-
-      appendMessage({
-        conversationId,
-        text: response.reply,
-        sender: 'arlo',
-        status: 'sent',
-      });
-    } catch (error) {
-      console.error('Failed to send message:', error);
-      updateMessageStatus(userMessage.conversationId, userMessage.id, 'error');
-      toast.error('Failed to send message to Arlo');
-    } finally {
-      completePendingMessage(userMessage.id);
-    }
+    await sendMessageOverHttp(conversationId, userMessage.id, trimmed);
   };
 
   const sendVoiceMessage = async (audioBlob: Blob) => {
@@ -749,7 +816,7 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
     if (config.apiEndpoint && config.apiToken) {
       checkConnection();
     }
-  }, [config]);
+  }, [checkConnection, config.apiEndpoint, config.apiToken]);
 
   const value: ArloContextType = {
     config,
