@@ -17,7 +17,10 @@ import {
   BellRing,
   CheckCircle2,
   TrendingUp,
-  Clock3
+  Clock3,
+  HardDrive,
+  UploadCloud,
+  Link
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -190,6 +193,56 @@ d">
             <div className="flex items-center justify-between text-xs">
               <span className="text-muted-foreground">Uptime</span>
               <span className="text-foreground">12d 4h 18m</span>
+            </div>
+          </div>
+        );
+
+      case "files":
+        return (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <HardDrive className="w-4 h-4 text-primary" />
+                <div>
+                  <p className="text-sm text-muted-foreground">Filebrowser</p>
+                  <p className="text-lg font-semibold text-foreground">Arlo Pi storage</p>
+                </div>
+              </div>
+              <Badge variant="secondary" className="bg-emerald-500/15 text-emerald-400 border-emerald-500/20">
+                Mounted
+              </Badge>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="rounded-lg border border-border/40 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-foreground font-semibold">External SSD</span>
+                  <span className="text-muted-foreground">/media/pi/ssd</span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span>Usage</span>
+                  <span className="text-foreground font-medium">62% of 1 TB</span>
+                </div>
+                <Progress value={62} className="h-1.5" />
+              </div>
+              <div className="rounded-lg border border-border/40 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-foreground font-semibold">Archive</span>
+                  <span className="text-muted-foreground">/media/pi/archive</span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                  <span>Usage</span>
+                  <span className="text-foreground font-medium">38% of 2 TB</span>
+                </div>
+                <Progress value={38} className="h-1.5" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <Button size="sm" variant="outline" className="glass" onClick={(event) => event.stopPropagation()}>
+                <UploadCloud className="w-4 h-4 mr-2" /> Upload
+              </Button>
+              <Button size="sm" className="glass-intense" onClick={(event) => event.stopPropagation()}>
+                <Link className="w-4 h-4 mr-2" /> Share
+              </Button>
             </div>
           </div>
         );

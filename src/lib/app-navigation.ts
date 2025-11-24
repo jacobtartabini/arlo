@@ -6,6 +6,7 @@ import {
   Calendar,
   CalendarCheck,
   FileText,
+  FolderOpen,
   Home,
   Library,
   MessageCircle,
@@ -90,6 +91,16 @@ export const APP_MODULES: Module[] = [
     size: "medium",
     summary: "Calorie burn 82% • Streak 9 days",
     keywords: ["wellness", "fitness", "sleep", "nutrition"]
+  },
+  {
+    id: "files",
+    title: "Files & Storage",
+    icon: FolderOpen,
+    route: "/files",
+    color: "primary",
+    size: "medium",
+    summary: "Drives mounted • Filebrowser running",
+    keywords: ["filebrowser", "storage", "raspberry pi", "drives"]
   },
   {
     id: "creation",
