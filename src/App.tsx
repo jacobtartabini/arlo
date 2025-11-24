@@ -23,6 +23,7 @@ import Productivity from "./pages/modules/Productivity";
 import Travel from "./pages/modules/Travel";
 import SystemSecurity from "./pages/modules/SystemSecurity";
 import Health from "./pages/modules/Health";
+import Files from "./pages/modules/Files";
 import Creation from "./pages/modules/Creation";
 import Knowledge from "./pages/modules/Knowledge";
 import Automations from "./pages/modules/Automations";
@@ -95,6 +96,11 @@ const App = () => (
                 <Route path="/system" element={
                   <ProtectedRoute>
                     <SystemSecurity />
+                  </ProtectedRoute>
+                } />
+                <Route path="/files" element={
+                  <ProtectedRoute>
+                    <Files />
                   </ProtectedRoute>
                 } />
                 <Route path="/health" element={
