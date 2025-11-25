@@ -3,6 +3,9 @@ import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   CalendarDays,
   CircleDashed,
@@ -31,6 +34,15 @@ import {
   upcomingBills
 } from "./finance/finance-data";
 
+const timeframes = ["Week", "Month", "Quarter", "Year"] as const;
+
+const timeframeCopy: Record<(typeof timeframes)[number], string> = {
+  Week: "This week's pulse across cash, credit, and investments.",
+  Month: "Month-to-date glidepath across everything you’ve linked.",
+  Quarter: "Quarter-to-date read with spend pace and reserves.",
+  Year: "Year-to-date view to track momentum and progress.",
+};
+
 const cardVariants = {
   hidden: { opacity: 0, y: 20 },
   visible: (index: number) => ({
@@ -41,7 +53,8 @@ const cardVariants = {
 };
 
 export default function Finance() {
-  const [activeRange, setActiveRange] = useState(timeRanges[0].value);
+  const navigate = useNavigate();
+  const [timeframe, setTimeframe] = useState<(typeof timeframes)[number]>("Month");
 
   useEffect(() => {
     document.title = "Finance — Arlo";
@@ -57,14 +70,96 @@ export default function Finance() {
 
       <main className="relative z-10 p-6 pb-32">
         <div className="max-w-6xl mx-auto space-y-6">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">Timeframe</p>
-              <TimeRangeTabs ranges={timeRanges} activeRange={activeRange} onSelect={setActiveRange} />
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900 via-primary/35 to-primary/15 p-6 md:p-8 shadow-xl relative overflow-hidden"
+          >
+            <div className="absolute inset-0 pointer-events-none opacity-40">
+              <div className="absolute -left-10 -top-16 h-40 w-40 rounded-full bg-primary/30 blur-3xl" />
+              <div className="absolute right-0 bottom-0 h-48 w-48 rounded-full bg-emerald-400/20 blur-3xl" />
             </div>
-            <Badge variant="outline" className="border-primary/30 text-primary flex items-center gap-1">
-              <Gift className="w-4 h-4" /> Personalized savings for {timeRanges.find((range) => range.value === activeRange)?.label}
-            </Badge>
+
+            <div className="relative flex flex-col gap-6">
+              <div className="flex flex-col gap-3 text-white">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="space-y-2">
+                    <p className="text-sm uppercase tracking-[0.08em] text-white/70">Net worth</p>
+                    <p className="text-4xl sm:text-5xl font-semibold drop-shadow-sm">$124,650</p>
+                    <p className="text-sm text-white/70">Cash, credit, and investments linked in one rollup.</p>
+                  </div>
+                  <div className="rounded-2xl bg-white/10 border border-white/15 px-4 py-3 text-right min-w-[180px]">
+                    <p className="text-xs uppercase tracking-wide text-white/70">Spend to date</p>
+                    <p className="text-2xl font-semibold leading-tight">$4,230</p>
+                    <p className="text-xs text-emerald-100">8% under pace</p>
+                  </div>
+                </div>
+
+                <p className="text-sm text-white/70">{timeframeCopy[timeframe]}</p>
+              </div>
+
+              <div className="flex flex-col gap-4">
+                <ToggleGroup
+                  type="single"
+                  value={timeframe}
+                  onValueChange={(value) => value && setTimeframe(value as (typeof timeframes)[number])}
+                  className="w-full max-w-xl rounded-xl bg-white/10 border border-white/15 p-1"
+                >
+                  {timeframes.map((range) => (
+                    <ToggleGroupItem
+                      key={range}
+                      value={range}
+                      className="flex-1 text-white/80 data-[state=on]:text-slate-900 data-[state=on]:bg-white data-[state=on]:font-semibold"
+                    >
+                      {range}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {["Income", "Spend", "Net"].map((label, index) => {
+                    const values = ["$12,400", "$8,170", "+$4,230"];
+                    const accents = ["text-emerald-100", "text-white", "text-emerald-200"];
+
+                    return (
+                      <div
+                        key={label}
+                        className="rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-white/80 flex items-center justify-between"
+                      >
+                        <div className="space-y-1">
+                          <p className="text-xs uppercase tracking-wide text-white/60">{label}</p>
+                          <p className="text-lg font-semibold text-white">{values[index]}</p>
+                        </div>
+                        <span className={`text-xs ${accents[index]}`}>
+                          {label === "Net" ? "after tax" : label === "Spend" ? "to date" : "this period"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </motion.div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            {cashFlowSignals.map((signal, index) => (
+              <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={index} key={signal.label}>
+                <Card className="glass p-4 space-y-2">
+                  <div className="flex items-center justify-between text-sm text-muted-foreground">
+                    <span>{signal.label}</span>
+                    <Badge
+                      variant="secondary"
+                      className={`border ${signal.tone === "warn" ? "border-amber-500/40 text-amber-400 bg-amber-500/10" : "border-emerald-500/40 text-emerald-400 bg-emerald-500/10"}`}
+                    >
+                      {signal.delta}
+                    </Badge>
+                  </div>
+                  <p className="text-2xl font-semibold text-foreground">{signal.value}</p>
+                  <Progress value={signal.tone === "warn" ? 72 : 92} className="h-1.5" />
+                </Card>
+              </motion.div>
+            ))}
           </div>
 
           <SpendingSummaryCard signals={cashFlowSignals} />
