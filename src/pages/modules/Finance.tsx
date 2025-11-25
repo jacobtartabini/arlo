@@ -11,6 +11,7 @@ import {
   CircleDashed,
   CreditCard,
   Gift,
+  ChevronRight,
   Link2,
   LineChart,
   Receipt,
@@ -41,6 +42,19 @@ const timeframeCopy: Record<(typeof timeframes)[number], string> = {
   Month: "Month-to-date glidepath across everything you’ve linked.",
   Quarter: "Quarter-to-date read with spend pace and reserves.",
   Year: "Year-to-date view to track momentum and progress.",
+};
+
+const getAccountIcon = (type: string) => {
+  switch (type.toLowerCase()) {
+    case "credit":
+      return <CreditCard className="w-5 h-5 text-primary" />;
+    case "investments":
+      return <LineChart className="w-5 h-5 text-primary" />;
+    case "wallet":
+      return <Gift className="w-5 h-5 text-primary" />;
+    default:
+      return <PiggyBank className="w-5 h-5 text-primary" />;
+  }
 };
 
 const cardVariants = {
@@ -212,7 +226,58 @@ export default function Finance() {
             </motion.div>
 
             <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={1} className="lg:col-span-2">
-              <AccountsList accounts={linkedAccounts} />
+              <Card className="glass p-6 space-y-4 h-full">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary/12 flex items-center justify-center">
+                      <Activity className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-semibold text-foreground">Accounts at a glance</h2>
+                      <p className="text-sm text-muted-foreground">Clean, Rocket Money-style rollup of every balance.</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="border-primary/30 text-primary flex items-center gap-1">
+                    <TrendingUp className="w-4 h-4" /> Net worth +4.2%
+                  </Badge>
+                </div>
+
+                <div className="rounded-xl border border-border/50 bg-muted/30 overflow-hidden">
+                  <div className="divide-y divide-border/60">
+                    {linkedAccounts.map((account) => (
+                      <div key={account.name} className="px-4 py-3 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-primary/12 flex items-center justify-center">
+                          {getAccountIcon(account.type)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <p className="text-foreground font-medium truncate">{account.name}</p>
+                            <Badge
+                              variant="outline"
+                              className={
+                                account.status === "connected"
+                                  ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10"
+                                  : account.status === "relink"
+                                    ? "border-amber-500/40 text-amber-400 bg-amber-500/10"
+                                    : "border-primary/40 text-primary bg-primary/10"
+                              }
+                            >
+                              {account.status === "connected" ? "Synced" : account.status === "relink" ? "Relink" : "Connect"}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">{account.type} • {account.lastSync}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <p className="text-lg font-semibold text-foreground text-right tabular-nums">{account.balance}</p>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-muted-foreground">
+                            <ChevronRight className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </Card>
             </motion.div>
           </div>
 
