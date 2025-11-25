@@ -13,6 +13,7 @@ import {
   CircleDashed,
   CreditCard,
   Gift,
+  ChevronRight,
   Link2,
   LineChart,
   PiggyBank,
@@ -58,6 +59,19 @@ const spendingInsights = [
 ];
 
 const monthlySpending = [620, 540, 580, 610, 560, 640, 590, 630, 670, 610, 580, 550];
+
+const getAccountIcon = (type: string) => {
+  switch (type.toLowerCase()) {
+    case "credit":
+      return <CreditCard className="w-5 h-5 text-primary" />;
+    case "investments":
+      return <LineChart className="w-5 h-5 text-primary" />;
+    case "wallet":
+      return <Gift className="w-5 h-5 text-primary" />;
+    default:
+      return <PiggyBank className="w-5 h-5 text-primary" />;
+  }
+};
 
 const cardVariants = {
   hidden: { opacity: 0, y: 20 },
@@ -199,34 +213,40 @@ export default function Finance() {
                   </Badge>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-3">
-                  {linkedAccounts.map((account) => (
-                    <div
-                      key={account.name}
-                      className="rounded-lg border border-border/40 p-4 bg-muted/30 flex flex-col gap-1"
-                    >
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-foreground font-medium">{account.name}</span>
-                        <Badge
-                          variant="outline"
-                          className={
-                            account.status === "connected"
-                              ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10"
-                              : account.status === "relink"
-                                ? "border-amber-500/40 text-amber-400 bg-amber-500/10"
-                                : "border-primary/40 text-primary bg-primary/10"
-                          }
-                        >
-                          {account.status === "connected" ? "Synced" : account.status === "relink" ? "Relink" : "Connect"}
-                        </Badge>
+                <div className="rounded-xl border border-border/50 bg-muted/30 overflow-hidden">
+                  <div className="divide-y divide-border/60">
+                    {linkedAccounts.map((account) => (
+                      <div key={account.name} className="px-4 py-3 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-primary/12 flex items-center justify-center">
+                          {getAccountIcon(account.type)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <p className="text-foreground font-medium truncate">{account.name}</p>
+                            <Badge
+                              variant="outline"
+                              className={
+                                account.status === "connected"
+                                  ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10"
+                                  : account.status === "relink"
+                                    ? "border-amber-500/40 text-amber-400 bg-amber-500/10"
+                                    : "border-primary/40 text-primary bg-primary/10"
+                              }
+                            >
+                              {account.status === "connected" ? "Synced" : account.status === "relink" ? "Relink" : "Connect"}
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">{account.type} • {account.lastSync}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <p className="text-lg font-semibold text-foreground text-right tabular-nums">{account.balance}</p>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full text-muted-foreground">
+                            <ChevronRight className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
-                      <p className="text-xs text-muted-foreground">{account.type} • {account.lastSync}</p>
-                      <p className="text-lg font-semibold text-foreground">{account.balance}</p>
-                      <Button variant="outline" size="sm" className="mt-2">
-                        <Link2 className="w-4 h-4 mr-2" /> {account.status === "connected" ? "Resync" : "Link with Plaid"}
-                      </Button>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </Card>
             </motion.div>
