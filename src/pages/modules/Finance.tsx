@@ -33,7 +33,6 @@ export default function Finance() {
         description: `${segment.value}% of monthly spend`,
         badge: segment.value >= 30 ? "On watch" : "Stable",
       })),
-      span: 7,
     },
     {
       title: "Upcoming bills",
@@ -43,7 +42,6 @@ export default function Finance() {
         description: `${bill.amount} due ${bill.due}`,
         badge: bill.status,
       })),
-      span: 5,
     },
     {
       title: "Linked accounts",
@@ -54,7 +52,6 @@ export default function Finance() {
         meta: account.lastSync,
         badge: account.status === "connected" ? "Synced" : account.status === "connect" ? "Connect" : "Relink",
       })),
-      span: 6,
     },
     {
       title: "Recurring charges",
@@ -64,7 +61,6 @@ export default function Finance() {
         description: `${item.amount} · ${item.status}`,
         badge: item.action,
       })),
-      span: 6,
     },
   ];
 
@@ -80,4 +76,3 @@ export default function Finance() {
     />
   );
 }
-
