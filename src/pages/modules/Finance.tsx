@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
+  Activity,
   CalendarDays,
   CircleDashed,
   CreditCard,
@@ -14,24 +15,22 @@ import {
   ChevronRight,
   Link2,
   LineChart,
+  PiggyBank,
   Receipt,
   ShieldCheck,
   Sparkles,
   TrendingUp
 } from "lucide-react";
 import { FloatingChatBar } from "@/components/FloatingChatBar";
-import { AccountsList } from "./finance/components/AccountsList";
 import { FinanceHeaderCard } from "./finance/components/FinanceHeaderCard";
 import { NetWorthChart } from "./finance/components/NetWorthChart";
 import { SpendingSummaryCard } from "./finance/components/SpendingSummaryCard";
-import { TimeRangeTabs } from "./finance/components/TimeRangeTabs";
 import {
   cashFlowSignals,
   linkedAccounts,
   monthlySpending,
   recurringWatchlist,
   spendingInsights,
-  timeRanges,
   upcomingBills
 } from "./finance/finance-data";
 
