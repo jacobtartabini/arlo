@@ -56,8 +56,8 @@ export function ModuleTemplate({
   return (
     <div className="min-h-screen bg-background">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-10">
-        <header className="flex flex-col gap-6 rounded-2xl border border-border/60 bg-card p-6 shadow-sm">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <header className="flex flex-col gap-5 rounded-2xl border border-border/50 bg-card/90 p-5 shadow-sm">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
               <Button
                 variant="ghost"
@@ -89,10 +89,10 @@ export function ModuleTemplate({
           </div>
 
           {stats.length ? (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {stats.map((stat) => (
-                <Card key={stat.label} className="border-border/60 bg-card/80 p-4 shadow-none">
-                  <p className="text-sm text-muted-foreground">{stat.label}</p>
+                <Card key={stat.label} className="border-border/40 bg-muted/30 p-4 shadow-none">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{stat.label}</p>
                   <div className="mt-2 flex items-baseline justify-between">
                     <span className="text-xl font-semibold text-foreground">{stat.value}</span>
                     {stat.helper ? (
@@ -107,24 +107,27 @@ export function ModuleTemplate({
           ) : null}
         </header>
 
-        <div className="grid gap-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {sections.map((section) => (
-            <Card key={section.title} className="border-border/70 bg-card p-5 shadow-sm">
-              <div className="mb-4 flex items-start justify-between gap-4">
+            <Card key={section.title} className="border-border/50 bg-card/80 p-5 shadow-sm">
+              <div className="mb-3 flex items-start justify-between gap-3">
                 <div className="space-y-1">
-                  <h2 className="text-lg font-semibold text-foreground">{section.title}</h2>
+                  <h2 className="text-base font-semibold text-foreground">{section.title}</h2>
                   {section.description ? (
                     <p className="text-sm text-muted-foreground">{section.description}</p>
                   ) : null}
                 </div>
-                <Button variant="ghost" size="icon" className="h-9 w-9">
-                  <MoreHorizontal className="h-5 w-5" />
+                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
+                  <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </div>
-              <div className="divide-y divide-border/70">
+              <div className="grid gap-3 sm:grid-cols-2">
                 {section.items.map((item) => (
-                  <div key={item.title} className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
-                    <div className="flex gap-3">
+                  <div
+                    key={item.title}
+                    className="flex h-full flex-col justify-between gap-2 rounded-xl border border-border/50 bg-muted/20 p-3"
+                  >
+                    <div className="flex items-start gap-3">
                       {item.icon ? (
                         <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-lg bg-muted text-muted-foreground">
                           {item.icon}
@@ -139,7 +142,7 @@ export function ModuleTemplate({
                       </div>
                     </div>
                     {item.badge ? (
-                      <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                      <span className="self-start rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
                         {item.badge}
                       </span>
                     ) : null}
@@ -153,4 +156,3 @@ export function ModuleTemplate({
     </div>
   );
 }
-
