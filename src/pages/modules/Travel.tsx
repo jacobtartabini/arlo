@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { ModuleTemplate, type ModuleSection, type ModuleStat } from "@/components/ModuleTemplate";
-import { Luggage } from "lucide-react";
+import { Backpack, Bed, Luggage, Map, Plane, Utensils } from "lucide-react";
 
 const bookings = [
   { type: "Flight", route: "SFO → NYC", date: "Apr 28", status: "Confirmed" },
@@ -35,45 +35,96 @@ export default function Travel() {
   }, []);
 
   const stats: ModuleStat[] = [
-    { label: "Next flight", value: "SFO → NYC", helper: "Apr 28 · 09:10", tone: "neutral" },
-    { label: "Stay", value: "Hudson Loft", helper: "Check-in Apr 28", tone: "neutral" },
-    { label: "Dining", value: "3 holds", helper: "2 confirmed", tone: "positive" },
-    { label: "Packing", value: "4 items", helper: "2 required", tone: "neutral" },
+    { label: "Next flight", value: "SFO → NYC", helper: "Apr 28 · 09:10", tone: "neutral", trend: [12, 9, 6, 3] },
+    { label: "Stay", value: "Hudson Loft", helper: "Check-in Apr 28", tone: "neutral", trend: [1, 1, 1, 0.5] },
+    { label: "Dining", value: "3 holds", helper: "2 confirmed", tone: "positive", trend: [1, 2, 3] },
+    { label: "Packing", value: "4 items", helper: "2 required", tone: "neutral", trend: [20, 40, 60, 70] },
   ];
 
   const sections: ModuleSection[] = [
     {
-      title: "Bookings",
-      description: "Flights and stays kept in one simple list.",
+      title: "Trip brief",
+      description: "A modern, visual deck for this itinerary so you see the posture, not just the list.",
+      variant: "split",
+      items: [
+        {
+          title: "Outbound",
+          description: "SFO → NYC · Delta 204 · Boarding group checked",
+          badge: "Confirmed",
+          tone: "positive",
+          icon: <Plane className="h-5 w-5" />,
+          visual: { type: "progress", value: 72, label: "Gate timing" },
+          spotlight: true,
+        },
+        {
+          title: "Stay",
+          description: "Hudson Loft · SoHo · Early check-in requested",
+          badge: "Pending response",
+          tone: "info",
+          icon: <Bed className="h-5 w-5" />,
+          visual: { type: "pill", label: "Hold till 6 PM", tone: "info" },
+        },
+        {
+          title: "Return",
+          description: "NYC → SFO · standby window locked",
+          badge: "Standby",
+          tone: "neutral",
+          icon: <Plane className="h-5 w-5" />,
+          visual: { type: "trend", points: [3, 2, 1], tone: "neutral" },
+        },
+      ],
+    },
+    {
+      title: "Flight + stay stack",
+      description: "Everything travelers need in one skinny rail: status, timing, and the nudge you should take now.",
       items: bookings.map((booking) => ({
         title: `${booking.type}: ${booking.route}`,
         description: booking.date,
         badge: booking.status,
+        tone: booking.status === "Pending" ? "info" : booking.status === "Standby" ? "neutral" : "positive",
+        icon: booking.type === "Flight" ? <Plane className="h-4 w-4" /> : <Bed className="h-4 w-4" />,
+        visual:
+          booking.status === "Confirmed"
+            ? { type: "pill", label: "Boarding pass saved", tone: "positive" }
+            : { type: "progress", value: booking.status === "Pending" ? 48 : 30 },
       })),
     },
     {
-      title: "Trip timeline",
-      description: "The next few checkpoints for this itinerary.",
+      title: "Itinerary timeline",
+      description: "The checkpoints that matter. Arlo keeps the spacing quiet while still making order obvious.",
+      variant: "timeline",
+      accent: "info",
       items: tripTimeline.map((stop) => ({
         title: stop.event,
         description: stop.time,
+        icon: <Map className="h-4 w-4" />,
+        badge: stop.event.includes("Flight") ? "Airport" : undefined,
       })),
     },
     {
       title: "Food holds",
-      description: "Reservations and waitlists Arlo is tracking.",
+      description: "Reservations and waitlists rendered as signals, not paragraphs.",
       items: restaurants.map((restaurant) => ({
         title: restaurant.name,
         description: restaurant.time,
         badge: restaurant.status,
+        tone: restaurant.status === "Confirmed" ? "positive" : "info",
+        icon: <Utensils className="h-4 w-4" />,
+        visual:
+          restaurant.status === "Confirmed"
+            ? { type: "pill", label: "Saved to wallet", tone: "positive" }
+            : { type: "progress", value: 35, label: "Waitlist" },
       })),
     },
     {
       title: "Packing essentials",
-      description: "The minimum list so you never repack from scratch.",
+      description: "A minimal kit so you only see the things that break the trip if forgotten.",
       items: packingChecklist.map((item) => ({
         title: item.item,
         badge: item.required ? "Required" : "Optional",
+        tone: item.required ? "positive" : "neutral",
+        icon: <Backpack className="h-4 w-4" />,
+        visual: { type: "progress", value: item.required ? 100 : 60, label: "Check" },
       })),
     },
   ];
@@ -85,6 +136,7 @@ export default function Travel() {
       description="A light trip board: confirmed holds, a simple timeline, and the essentials you shouldn’t forget."
       primaryAction="Add booking"
       secondaryAction="Share itinerary"
+      accent="cyan"
       stats={stats}
       sections={sections}
     />

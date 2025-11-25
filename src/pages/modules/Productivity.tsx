@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { ModuleTemplate, type ModuleSection, type ModuleStat } from "@/components/ModuleTemplate";
-import { CalendarCheck } from "lucide-react";
+import { CalendarCheck, CheckSquare, Clock3, Flame, GaugeCircle, MailCheck } from "lucide-react";
 
 const tasks = [
   { id: 1, label: "Ship design review summary", done: true },
@@ -34,46 +34,71 @@ export default function Productivity() {
   }, []);
 
   const stats: ModuleStat[] = [
-    { label: "Focus mode", value: "On", helper: "90 minutes", tone: "positive" },
-    { label: "Today’s completion", value: "62%", helper: "2 tasks left", tone: "neutral" },
-    { label: "Next event", value: "Design critique", helper: "Apr 28 · 09:30", tone: "neutral" },
-    { label: "Active habits", value: "3", helper: "+12 day streak", tone: "positive" },
+    { label: "Focus mode", value: "On", helper: "90 minutes", tone: "positive", trend: [30, 45, 60, 90] },
+    { label: "Today’s completion", value: "62%", helper: "2 tasks left", tone: "neutral", trend: [30, 52, 62] },
+    { label: "Next event", value: "Design critique", helper: "Apr 28 · 09:30", tone: "neutral", trend: [1, 1.5, 2] },
+    { label: "Active habits", value: "3", helper: "+12 day streak", tone: "positive", trend: [1, 2, 3, 3] },
   ];
 
   const sections: ModuleSection[] = [
     {
       title: "Today’s priorities",
-      description: "A short list that stays focused on what must move today.",
-      items: tasks.map((task) => ({
-        title: task.label,
-        badge: task.done ? "Done" : "Next",
-        meta: task.done ? "Completed" : "Unstarted",
-      })),
+      description: "A calm stack: what moves, where the time is, and which rituals keep you steady.",
+      variant: "split",
+      items: [
+        {
+          title: "Deep work lane",
+          description: "One focus block is locked. Arlo will buffer pings for 90 minutes.",
+          badge: "Active",
+          tone: "positive",
+          icon: <GaugeCircle className="h-5 w-5" />,
+          visual: { type: "progress", value: 62, label: "Block progress" },
+          spotlight: true,
+        },
+        ...tasks.map((task) => ({
+          title: task.label,
+          badge: task.done ? "Done" : "Next",
+          tone: task.done ? "positive" : "info",
+          meta: task.done ? "Completed" : "Unstarted",
+          icon: <CheckSquare className="h-4 w-4" />,
+          visual: task.done ? { type: "pill", label: "Logged" } : { type: "progress", value: 40 },
+        })),
+      ],
     },
     {
-      title: "Schedule",
-      description: "Time blocks already held so you know where to focus.",
+      title: "Schedule rail",
+      description: "A slim, glanceable timeline that keeps the day ordered without stealing attention.",
+      variant: "timeline",
+      accent: "info",
       items: schedule.map((item) => ({
         title: item.label,
         description: item.time,
         badge: "On calendar",
+        icon: <Clock3 className="h-4 w-4" />,
       })),
     },
     {
-      title: "Inbox",
-      description: "Messages Arlo surfaced as actionable today.",
+      title: "Inbox surfaces",
+      description: "Only messages with clear, prepped actions. Each badge is the suggested path.",
       items: inboxPreview.map((item) => ({
         title: item.subject,
         description: item.snippet,
         badge: item.source,
+        tone: "info",
+        icon: <MailCheck className="h-4 w-4" />,
+        visual: { type: "pill", label: "Reply draft", tone: "info" },
       })),
     },
     {
       title: "Habits",
-      description: "Streaks that anchor your day.",
+      description: "Streaks that anchor your day and keep Arlo calibrated to your rhythm.",
       items: habits.map((habit) => ({
         title: habit.label,
         description: `${habit.streak}-day streak`,
+        badge: "Keep warm",
+        tone: "positive",
+        icon: <Flame className="h-4 w-4" />,
+        visual: { type: "progress", value: Math.min(100, habit.streak * 5), label: "Momentum" },
       })),
     },
   ];
@@ -85,6 +110,7 @@ export default function Productivity() {
       description="A calm view of what matters now—focus blocks, the next tasks, and a few rituals to keep you steady."
       primaryAction="Add a task"
       secondaryAction="Start focus mode"
+      accent="violet"
       stats={stats}
       sections={sections}
     />
