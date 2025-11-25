@@ -1,64 +1,38 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
-  Activity,
-  ArrowLeft,
   CalendarDays,
-  CheckCircle2,
   CircleDashed,
   CreditCard,
   Gift,
   Link2,
   LineChart,
-  PiggyBank,
   Receipt,
   ShieldCheck,
   Sparkles,
-  TrendingUp,
-  Upload,
-  Wallet
+  TrendingUp
 } from "lucide-react";
 import { FloatingChatBar } from "@/components/FloatingChatBar";
-
-const linkedAccounts = [
-  { name: "Chase Checking", type: "Primary", balance: "$4,820", status: "connected", lastSync: "2m ago" },
-  { name: "Amex Gold", type: "Credit", balance: "-$1,240", status: "connected", lastSync: "5m ago" },
-  { name: "Robinhood", type: "Investments", balance: "$12,450", status: "connect", lastSync: "Connect with Plaid" },
-  { name: "Venmo", type: "Wallet", balance: "$180", status: "relink", lastSync: "Relink required" }
-];
-
-const recurringWatchlist = [
-  { merchant: "Apple One", amount: "$31.90/mo", status: "Due Apr 29", action: "Pause suggestion" },
-  { merchant: "Notion", amount: "$18.00/mo", status: "Annual save $24", action: "Switch billing" },
-  { merchant: "Hulu", amount: "$12.99/mo", status: "Unused 3 weeks", action: "Cancel in-app" }
-];
-
-const cashFlowSignals = [
-  { label: "Cash on hand", value: "$18,230", delta: "+$620", tone: "good" },
-  { label: "MTD spending", value: "$3,420", delta: "-8% vs last month", tone: "good" },
-  { label: "Upcoming bills", value: "$2,140", delta: "$640 due this week", tone: "warn" }
-];
-
-const upcomingBills = [
-  { vendor: "Workspace Lease", amount: "$1,280.00", due: "May 1", status: "Auto-pay" },
-  { vendor: "Cloud Services", amount: "$310.00", due: "May 3", status: "Review" },
-  { vendor: "Design Tools", amount: "$42.00", due: "Apr 28", status: "Scheduled" }
-];
-
-const spendingInsights = [
-  { label: "Essentials", value: 38, color: "var(--primary)" },
-  { label: "Growth", value: 22, color: "var(--chart-1, #34d399)" },
-  { label: "Lifestyle", value: 18, color: "var(--chart-2, #60a5fa)" },
-  { label: "Savings", value: 22, color: "var(--chart-3, #fbbf24)" }
-];
-
-const monthlySpending = [620, 540, 580, 610, 560, 640, 590, 630, 670, 610, 580, 550];
+import { AccountsList } from "./finance/components/AccountsList";
+import { FinanceHeaderCard } from "./finance/components/FinanceHeaderCard";
+import { NetWorthChart } from "./finance/components/NetWorthChart";
+import { SpendingSummaryCard } from "./finance/components/SpendingSummaryCard";
+import { TimeRangeTabs } from "./finance/components/TimeRangeTabs";
+import {
+  cashFlowSignals,
+  linkedAccounts,
+  monthlySpending,
+  recurringWatchlist,
+  spendingInsights,
+  timeRanges,
+  upcomingBills
+} from "./finance/finance-data";
 
 const timeframes = ["Week", "Month", "Quarter", "Year"] as const;
 
@@ -90,39 +64,9 @@ export default function Finance() {
     <div className="min-h-screen bg-background relative overflow-hidden">
       <div className="absolute inset-0 spatial-grid opacity-30" />
 
-      <motion.header
-        initial={{ y: -20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        className="relative z-10 p-6 flex items-center justify-between"
-      >
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate("/dashboard")}
-            className="glass rounded-full"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center">
-              <Wallet className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold text-foreground">Finance</h1>
-              <p className="text-sm text-muted-foreground">Rocket Money-inspired clarity with Plaid-powered syncing.</p>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <Badge className="glass border-emerald-500/30 text-emerald-400 bg-emerald-500/10 flex items-center gap-1">
-            <CheckCircle2 className="w-3.5 h-3.5" /> Live sync
-          </Badge>
-          <Button className="glass-intense" size="sm">
-            <Upload className="w-4 h-4 mr-2" /> Link with Plaid
-          </Button>
-        </div>
-      </motion.header>
+      <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
+        <FinanceHeaderCard />
+      </motion.div>
 
       <main className="relative z-10 p-6 pb-32">
         <div className="max-w-6xl mx-auto space-y-6">
@@ -218,6 +162,8 @@ export default function Finance() {
             ))}
           </div>
 
+          <SpendingSummaryCard signals={cashFlowSignals} />
+
           <div className="grid gap-6 lg:grid-cols-3">
             <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={0}>
               <Card className="glass-intense p-6 space-y-4">
@@ -266,52 +212,7 @@ export default function Finance() {
             </motion.div>
 
             <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={1} className="lg:col-span-2">
-              <Card className="glass p-6 space-y-4 h-full">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-primary/12 flex items-center justify-center">
-                      <Activity className="w-5 h-5 text-primary" />
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-semibold text-foreground">Accounts at a glance</h2>
-                      <p className="text-sm text-muted-foreground">Clean, Rocket Money-style rollup of every balance.</p>
-                    </div>
-                  </div>
-                  <Badge variant="outline" className="border-primary/30 text-primary flex items-center gap-1">
-                    <TrendingUp className="w-4 h-4" /> Net worth +4.2%
-                  </Badge>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-3">
-                  {linkedAccounts.map((account) => (
-                    <div
-                      key={account.name}
-                      className="rounded-lg border border-border/40 p-4 bg-muted/30 flex flex-col gap-1"
-                    >
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-foreground font-medium">{account.name}</span>
-                        <Badge
-                          variant="outline"
-                          className={
-                            account.status === "connected"
-                              ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10"
-                              : account.status === "relink"
-                                ? "border-amber-500/40 text-amber-400 bg-amber-500/10"
-                                : "border-primary/40 text-primary bg-primary/10"
-                          }
-                        >
-                          {account.status === "connected" ? "Synced" : account.status === "relink" ? "Relink" : "Connect"}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground">{account.type} • {account.lastSync}</p>
-                      <p className="text-lg font-semibold text-foreground">{account.balance}</p>
-                      <Button variant="outline" size="sm" className="mt-2">
-                        <Link2 className="w-4 h-4 mr-2" /> {account.status === "connected" ? "Resync" : "Link with Plaid"}
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </Card>
+              <AccountsList accounts={linkedAccounts} />
             </motion.div>
           </div>
 
@@ -445,38 +346,7 @@ export default function Finance() {
           </div>
 
           <motion.div variants={cardVariants} initial="hidden" animate="visible" custom={4}>
-            <Card className="glass p-6 space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <PiggyBank className="w-5 h-5 text-primary" />
-                  <div>
-                    <h2 className="text-xl font-semibold text-foreground">Spending pace</h2>
-                    <p className="text-xs text-muted-foreground">Month-over-month bar view inspired by Rocket Money.</p>
-                  </div>
-                </div>
-                <Badge variant="outline" className="border-primary/30 text-primary flex items-center gap-1">
-                  <TrendingUp className="w-4 h-4" /> +12% savings
-                </Badge>
-              </div>
-
-              <div className="h-32 grid grid-cols-12 gap-1">
-                {monthlySpending.map((value, index) => (
-                  <motion.div
-                    key={index}
-                    initial={{ height: 0 }}
-                    animate={{ height: `${Math.min(100, (value / 700) * 100)}%` }}
-                    transition={{ delay: index * 0.04, type: "spring", stiffness: 120 }}
-                    className={`rounded-sm ${index >= 9 ? "bg-primary" : "bg-primary/50"}`}
-                    title={`Month ${index + 1}: $${value}`}
-                  />
-                ))}
-              </div>
-
-              <div className="rounded-lg border border-dashed border-primary/30 p-3 text-xs text-muted-foreground flex items-center gap-2">
-                <CircleDashed className="w-4 h-4 text-primary" />
-                Rocket-style digest: no surprises detected; next best action is to move $420 to savings.
-              </div>
-            </Card>
+            <NetWorthChart data={monthlySpending} />
           </motion.div>
         </div>
       </main>
