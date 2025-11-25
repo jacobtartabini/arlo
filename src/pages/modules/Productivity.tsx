@@ -49,7 +49,6 @@ export default function Productivity() {
         badge: task.done ? "Done" : "Next",
         meta: task.done ? "Completed" : "Unstarted",
       })),
-      span: 7,
     },
     {
       title: "Schedule",
@@ -59,7 +58,6 @@ export default function Productivity() {
         description: item.time,
         badge: "On calendar",
       })),
-      span: 5,
     },
     {
       title: "Inbox",
@@ -69,7 +67,6 @@ export default function Productivity() {
         description: item.snippet,
         badge: item.source,
       })),
-      span: 6,
     },
     {
       title: "Habits",
@@ -78,7 +75,6 @@ export default function Productivity() {
         title: habit.label,
         description: `${habit.streak}-day streak`,
       })),
-      span: 6,
     },
   ];
 
@@ -94,4 +90,3 @@ export default function Productivity() {
     />
   );
 }
-
