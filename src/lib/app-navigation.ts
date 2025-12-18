@@ -10,6 +10,7 @@ import {
   Home,
   Library,
   MessageCircle,
+  NotebookPen,
   PenTool,
   Plane,
   Settings,
@@ -178,6 +179,14 @@ export const APP_PAGES: NavigationItem[] = [
     route: "/calendar",
     icon: Calendar,
     keywords: ["events", "availability", "meetings"]
+  },
+  {
+    id: "notes",
+    title: "Smart Notes",
+    description: "Canvas-based notes with drawing tools",
+    route: "/notes",
+    icon: NotebookPen,
+    keywords: ["notes", "drawing", "canvas", "writing", "handwriting"]
   },
   {
     id: "settings",

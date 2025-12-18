@@ -29,6 +29,7 @@ import Knowledge from "./pages/modules/Knowledge";
 import Automations from "./pages/modules/Automations";
 import AIInsights from "./pages/modules/AIInsights";
 import Notifications from "./pages/modules/Notifications";
+import Notes from "./pages/Notes";
 
 const queryClient = new QueryClient();
 
@@ -131,6 +132,11 @@ const App = () => (
                 <Route path="/notifications" element={
                   <ProtectedRoute>
                     <Notifications />
+                  </ProtectedRoute>
+                } />
+                <Route path="/notes" element={
+                  <ProtectedRoute>
+                    <Notes />
                   </ProtectedRoute>
                 } />
 
