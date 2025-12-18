@@ -103,7 +103,7 @@ const GlobalSearch = () => {
   );
 
   return (
-    <CommandDialog open={open} onOpenChange={setOpen} label="Global search">
+    <CommandDialog open={open} onOpenChange={setOpen}>
       <CommandInput placeholder="Search pages, modules, and resources..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>

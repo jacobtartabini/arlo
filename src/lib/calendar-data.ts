@@ -1,6 +1,6 @@
 import { format } from "date-fns";
 
-export type CalendarCategory = "personal" | "work" | "school" | "meeting" | "project";
+export type CalendarCategory = "personal" | "work" | "school" | "meeting" | "project" | "custom";
 
 export type RecurrenceFrequency = "daily" | "weekly" | "monthly" | "yearly";
 
@@ -70,7 +70,9 @@ export interface BookingSlot {
   date: string;
   available: boolean;
   title?: string;
-  bookedBy?: string;
+  bookedBy?: string | null;
+  description?: string;
+  [key: string]: unknown;
 }
 
 export const EVENT_STORAGE_KEY = "arlo-calendar-events";

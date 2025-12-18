@@ -25,7 +25,7 @@ export default function Finance() {
       label: signal.label,
       value: signal.value,
       helper: signal.delta,
-      tone: signal.tone === "good" ? "positive" : "negative",
+      tone: (signal.tone === "good" ? "positive" : "negative") as "positive" | "negative",
       trend: signal.tone === "good" ? [12, 13, 14, 15] : [8, 7.5, 7],
     })),
   ];

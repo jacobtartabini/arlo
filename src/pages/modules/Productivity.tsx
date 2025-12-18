@@ -58,10 +58,10 @@ export default function Productivity() {
         ...tasks.map((task) => ({
           title: task.label,
           badge: task.done ? "Done" : "Next",
-          tone: task.done ? "positive" : "info",
+          tone: (task.done ? "positive" : "info") as "positive" | "info",
           meta: task.done ? "Completed" : "Unstarted",
           icon: <CheckSquare className="h-4 w-4" />,
-          visual: task.done ? { type: "pill", label: "Logged" } : { type: "progress", value: 40 },
+          visual: task.done ? { type: "pill" as const, label: "Logged" } : { type: "progress" as const, value: 40 },
         })),
       ],
     },

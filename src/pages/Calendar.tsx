@@ -57,7 +57,7 @@ import {
   EVENT_STORAGE_KEY,
   formatSlotLabel,
 } from "@/lib/calendar-data";
-import type { BookingSlot, CalendarEvent, Task } from "@/lib/calendar-data";
+import type { BookingSlot, CalendarEvent, EventRecurrence, Task } from "@/lib/calendar-data";
 
 import { CalendarTimeline } from "./calendar/components/CalendarTimeline";
 import { CalendarMonthGrid } from "./calendar/components/CalendarMonthGrid";
@@ -505,18 +505,18 @@ const CalendarPage: React.FC = () => {
         .map(entry => entry.trim())
         .filter(Boolean);
 
-      const recurrence = draft.recurrenceFrequency === "none"
+      const recurrence: EventRecurrence | undefined = draft.recurrenceFrequency === "none"
         ? undefined
         : {
             frequency: draft.recurrenceFrequency,
             interval: Math.max(1, draft.recurrenceInterval || 1),
             end:
               draft.recurrenceEnd.type === "onDate" && draft.recurrenceEnd.date
-                ? { type: "onDate", date: draft.recurrenceEnd.date as string }
+                ? { type: "onDate" as const, date: draft.recurrenceEnd.date }
                 : draft.recurrenceEnd.type === "after" && Number(draft.recurrenceEnd.count) > 0
-                  ? { type: "after", count: Number(draft.recurrenceEnd.count) }
+                  ? { type: "after" as const, count: Number(draft.recurrenceEnd.count) }
                   : draft.recurrenceEnd.type === "never"
-                    ? { type: "never" }
+                    ? { type: "never" as const }
                     : undefined
           };
 

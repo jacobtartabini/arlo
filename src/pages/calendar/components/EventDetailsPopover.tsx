@@ -173,7 +173,7 @@ export const EventDetailsPopover: React.FC<EventDetailsPopoverProps> = ({ block,
     ? String(block.meta.description)
     : undefined;
 
-  const inviteUrl = slot ? getPublicBookingUrl(slot) : undefined;
+  const inviteUrl = slot?.title ? getPublicBookingUrl(slot.title) : undefined;
 
   const handleEditClick = () => {
     if (!onEdit) return;
