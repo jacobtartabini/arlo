@@ -20,7 +20,7 @@ export type ModuleSectionItem = {
   description?: string;
   badge?: string;
   icon?: ReactNode;
-  tone?: ModuleStat["tone"];
+  tone?: ModuleStat["tone"] | "info";
   visual?: ModuleVisual;
   density?: "compact" | "open";
   spotlight?: boolean;
