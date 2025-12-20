@@ -7,82 +7,88 @@ import { ArrowLeft, PanelLeftClose, PanelLeft } from "lucide-react";
 import { NotesSidebar } from "@/components/notes/NotesSidebar";
 import { NoteCanvas } from "@/components/notes/NoteCanvas";
 import type { Note } from "@/types/notes";
-import {
-  createNote,
-  deleteNote,
-  duplicateNote,
-  getStoredNotes,
-  renameNote,
-  saveNote,
-  sortNotesByRecent,
-  togglePinNote,
-} from "@/lib/notes-data";
+import { useNotes } from "@/hooks/use-notes";
 import { toast } from "sonner";
 
 export default function Notes() {
   const navigate = useNavigate();
-  const [notes, setNotes] = useState<Note[]>([]);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Load notes on mount
+  const {
+    notes,
+    loading,
+    createNote,
+    saveNote,
+    deleteNote,
+    duplicateNote,
+    togglePinNote,
+    renameNote,
+  } = useNotes();
+
+  // Set page title
   useEffect(() => {
     document.title = "Smart Notes — Arlo";
-    const storedNotes = sortNotesByRecent(getStoredNotes());
-    setNotes(storedNotes);
-    
-    // Auto-select first note or create one
-    if (storedNotes.length > 0) {
-      setSelectedNoteId(storedNotes[0].id);
-    }
   }, []);
+
+  // Auto-select first note when notes load
+  useEffect(() => {
+    if (!loading && notes.length > 0 && !selectedNoteId) {
+      setSelectedNoteId(notes[0].id);
+    }
+  }, [loading, notes, selectedNoteId]);
 
   const selectedNote = notes.find((n) => n.id === selectedNoteId) || null;
 
-  const handleCreateNote = useCallback(() => {
-    const newNote = createNote();
-    const updatedNotes = saveNote(newNote);
-    setNotes(sortNotesByRecent(updatedNotes));
-    setSelectedNoteId(newNote.id);
-    toast.success("New note created");
-  }, []);
+  const handleCreateNote = useCallback(async () => {
+    const newNote = await createNote();
+    if (newNote) {
+      setSelectedNoteId(newNote.id);
+      toast.success("New note created");
+    }
+  }, [createNote]);
 
   const handleDeleteNote = useCallback(
-    (noteId: string) => {
+    async (noteId: string) => {
       const noteToDelete = notes.find((n) => n.id === noteId);
-      const updatedNotes = deleteNote(noteId);
-      setNotes(sortNotesByRecent(updatedNotes));
-      
-      // Select another note if the deleted one was selected
+      await deleteNote(noteId);
+
       if (selectedNoteId === noteId) {
-        setSelectedNoteId(updatedNotes.length > 0 ? updatedNotes[0].id : null);
+        const remaining = notes.filter((n) => n.id !== noteId);
+        setSelectedNoteId(remaining.length > 0 ? remaining[0].id : null);
       }
-      
+
       toast.success(`"${noteToDelete?.title}" deleted`);
     },
-    [notes, selectedNoteId]
+    [notes, selectedNoteId, deleteNote]
   );
 
-  const handleDuplicateNote = useCallback((noteId: string) => {
-    const updatedNotes = duplicateNote(noteId);
-    setNotes(sortNotesByRecent(updatedNotes));
-    toast.success("Note duplicated");
-  }, []);
+  const handleDuplicateNote = useCallback(
+    async (noteId: string) => {
+      await duplicateNote(noteId);
+      toast.success("Note duplicated");
+    },
+    [duplicateNote]
+  );
 
-  const handleTogglePin = useCallback((noteId: string) => {
-    const updatedNotes = togglePinNote(noteId);
-    setNotes(sortNotesByRecent(updatedNotes));
-  }, []);
+  const handleTogglePin = useCallback(
+    async (noteId: string) => {
+      await togglePinNote(noteId);
+    },
+    [togglePinNote]
+  );
 
-  const handleRenameNote = useCallback((noteId: string, title: string) => {
-    const updatedNotes = renameNote(noteId, title);
-    setNotes(sortNotesByRecent(updatedNotes));
-  }, []);
+  const handleRenameNote = useCallback(
+    async (noteId: string, title: string) => {
+      await renameNote(noteId, title);
+    },
+    [renameNote]
+  );
 
   const handleSaveCanvas = useCallback(
-    (canvasState: string, zoom: number, panX: number, panY: number) => {
+    async (canvasState: string, zoom: number, panX: number, panY: number) => {
       if (!selectedNote) return;
-      
+
       const updatedNote: Note = {
         ...selectedNote,
         canvasState,
@@ -90,12 +96,19 @@ export default function Notes() {
         panX,
         panY,
       };
-      
-      const updatedNotes = saveNote(updatedNote);
-      setNotes(sortNotesByRecent(updatedNotes));
+
+      await saveNote(updatedNote);
     },
-    [selectedNote]
+    [selectedNote, saveNote]
   );
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="text-muted-foreground">Loading notes...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-background">
@@ -140,13 +153,13 @@ export default function Notes() {
               Dashboard
             </Button>
           </div>
-          
+
           {selectedNote && (
             <h1 className="text-sm font-medium text-foreground truncate max-w-[300px]">
               {selectedNote.title}
             </h1>
           )}
-          
+
           <div className="w-24" /> {/* Spacer for balance */}
         </header>
 

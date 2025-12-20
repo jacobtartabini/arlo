@@ -14,7 +14,173 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      booking_slots: {
+        Row: {
+          created_at: string
+          day_of_week: number
+          description: string | null
+          duration_minutes: number
+          enabled: boolean
+          end_time: string
+          id: string
+          start_time: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          day_of_week: number
+          description?: string | null
+          duration_minutes?: number
+          enabled?: boolean
+          end_time: string
+          id?: string
+          start_time: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          day_of_week?: number
+          description?: string | null
+          duration_minutes?: number
+          enabled?: boolean
+          end_time?: string
+          id?: string
+          start_time?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      calendar_events: {
+        Row: {
+          category: string
+          color: string | null
+          created_at: string
+          description: string | null
+          end_time: string
+          id: string
+          is_all_day: boolean
+          location: string | null
+          recurrence: Json | null
+          start_time: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          end_time: string
+          id?: string
+          is_all_day?: boolean
+          location?: string | null
+          recurrence?: Json | null
+          start_time: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          end_time?: string
+          id?: string
+          is_all_day?: boolean
+          location?: string | null
+          recurrence?: Json | null
+          start_time?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      note_folders: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          name: string
+          user_id: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notes: {
+        Row: {
+          canvas_state: string | null
+          created_at: string
+          elements: Json | null
+          folder_id: string | null
+          id: string
+          pan_x: number
+          pan_y: number
+          pinned: boolean
+          tags: string[] | null
+          title: string
+          updated_at: string
+          user_id: string
+          zoom: number
+        }
+        Insert: {
+          canvas_state?: string | null
+          created_at?: string
+          elements?: Json | null
+          folder_id?: string | null
+          id?: string
+          pan_x?: number
+          pan_y?: number
+          pinned?: boolean
+          tags?: string[] | null
+          title?: string
+          updated_at?: string
+          user_id: string
+          zoom?: number
+        }
+        Update: {
+          canvas_state?: string | null
+          created_at?: string
+          elements?: Json | null
+          folder_id?: string | null
+          id?: string
+          pan_x?: number
+          pan_y?: number
+          pinned?: boolean
+          tags?: string[] | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+          zoom?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notes_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "note_folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
