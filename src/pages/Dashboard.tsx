@@ -128,8 +128,8 @@ export default function Dashboard() {
 
 
   useEffect(() => {
-    document.title = "Arlo Dashboard — Your Personal Operating System";
-    const desc = "Infinite bento-grid dashboard for Arlo — your personal OS with modular tiles for habits, budget, nutrition, and more.";
+    document.title = "Arlo";
+    const desc = "By Jacob Tartabini";
     let meta = document.querySelector('meta[name="description"]') as HTMLMetaElement | null;
     if (!meta) {
       meta = document.createElement("meta");
