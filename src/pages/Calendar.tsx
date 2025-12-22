@@ -50,11 +50,8 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import {
-  BOOKING_STORAGE_KEY,
   DEFAULT_BOOKINGS,
-  DEFAULT_EVENTS,
   DEFAULT_TASKS,
-  EVENT_STORAGE_KEY,
   formatSlotLabel,
 } from "@/lib/calendar-data";
 import type { BookingSlot, CalendarEvent, EventRecurrence, Task } from "@/lib/calendar-data";
@@ -64,7 +61,7 @@ import { CalendarMonthGrid } from "./calendar/components/CalendarMonthGrid";
 import { CalendarMiniMonth } from "./calendar/components/CalendarMiniMonth";
 import { EventDetailsPopover } from "./calendar/components/EventDetailsPopover";
 import { COLOR_PRESETS } from "./calendar/constants";
-import { useStoredState } from "./calendar/hooks";
+import { useCalendarDatabase } from "./calendar/hooks";
 import {
   CalendarBlock,
   CalendarDayBlocks,
@@ -103,8 +100,7 @@ const CalendarPage: React.FC = () => {
   const { toast } = useToast();
   const [view, setView] = React.useState<CalendarView>("week");
   const [selectedDate, setSelectedDate] = React.useState(new Date());
-  const [events, setEvents] = useStoredState(EVENT_STORAGE_KEY, DEFAULT_EVENTS);
-  const [bookings, setBookings] = useStoredState(BOOKING_STORAGE_KEY, DEFAULT_BOOKINGS);
+  const [events, setEvents, bookings, setBookings, isCalendarLoading, isCalendarAuthenticated] = useCalendarDatabase();
   const [draft, setDraft] = React.useState<DraftState>(DEFAULT_DRAFT);
   const [isDialogOpen, setDialogOpen] = React.useState(false);
   const [showAdvanced, setShowAdvanced] = React.useState(false);

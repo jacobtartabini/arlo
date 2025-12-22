@@ -3,84 +3,87 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, PanelLeftClose, PanelLeft } from "lucide-react";
+import { ArrowLeft, PanelLeftClose, PanelLeft, LogIn, Loader2 } from "lucide-react";
 import { NotesSidebar } from "@/components/notes/NotesSidebar";
 import { NoteCanvas } from "@/components/notes/NoteCanvas";
 import type { Note } from "@/types/notes";
-import {
-  createNote,
-  deleteNote,
-  duplicateNote,
-  getStoredNotes,
-  renameNote,
-  saveNote,
-  sortNotesByRecent,
-  togglePinNote,
-} from "@/lib/notes-data";
+import { useNotesPersistence } from "@/hooks/useNotesPersistence";
 import { toast } from "sonner";
 
 export default function Notes() {
   const navigate = useNavigate();
-  const [notes, setNotes] = useState<Note[]>([]);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Load notes on mount
+  const {
+    notes,
+    isLoading,
+    isAuthenticated,
+    createNote,
+    deleteNote,
+    duplicateNote,
+    togglePinNote,
+    renameNote,
+    saveNote,
+  } = useNotesPersistence();
+
+  // Set page title
   useEffect(() => {
     document.title = "Smart Notes — Arlo";
-    const storedNotes = sortNotesByRecent(getStoredNotes());
-    setNotes(storedNotes);
-    
-    // Auto-select first note or create one
-    if (storedNotes.length > 0) {
-      setSelectedNoteId(storedNotes[0].id);
-    }
   }, []);
+
+  // Auto-select first note when notes load
+  useEffect(() => {
+    if (!isLoading && notes.length > 0 && !selectedNoteId) {
+      setSelectedNoteId(notes[0].id);
+    }
+  }, [isLoading, notes, selectedNoteId]);
 
   const selectedNote = notes.find((n) => n.id === selectedNoteId) || null;
 
-  const handleCreateNote = useCallback(() => {
-    const newNote = createNote();
-    const updatedNotes = saveNote(newNote);
-    setNotes(sortNotesByRecent(updatedNotes));
-    setSelectedNoteId(newNote.id);
-    toast.success("New note created");
-  }, []);
+  const handleCreateNote = useCallback(async () => {
+    const newNote = await createNote();
+    if (newNote) {
+      setSelectedNoteId(newNote.id);
+      toast.success("New note created");
+    }
+  }, [createNote]);
 
   const handleDeleteNote = useCallback(
-    (noteId: string) => {
+    async (noteId: string) => {
       const noteToDelete = notes.find((n) => n.id === noteId);
-      const updatedNotes = deleteNote(noteId);
-      setNotes(sortNotesByRecent(updatedNotes));
+      const success = await deleteNote(noteId);
       
-      // Select another note if the deleted one was selected
-      if (selectedNoteId === noteId) {
-        setSelectedNoteId(updatedNotes.length > 0 ? updatedNotes[0].id : null);
+      if (success) {
+        // Select another note if the deleted one was selected
+        if (selectedNoteId === noteId) {
+          const remainingNotes = notes.filter(n => n.id !== noteId);
+          setSelectedNoteId(remainingNotes.length > 0 ? remainingNotes[0].id : null);
+        }
+        toast.success(`"${noteToDelete?.title}" deleted`);
       }
-      
-      toast.success(`"${noteToDelete?.title}" deleted`);
     },
-    [notes, selectedNoteId]
+    [notes, selectedNoteId, deleteNote]
   );
 
-  const handleDuplicateNote = useCallback((noteId: string) => {
-    const updatedNotes = duplicateNote(noteId);
-    setNotes(sortNotesByRecent(updatedNotes));
-    toast.success("Note duplicated");
-  }, []);
+  const handleDuplicateNote = useCallback(async (noteId: string) => {
+    const duplicated = await duplicateNote(noteId);
+    if (duplicated) {
+      setSelectedNoteId(duplicated.id);
+      toast.success("Note duplicated");
+    }
+  }, [duplicateNote]);
 
-  const handleTogglePin = useCallback((noteId: string) => {
-    const updatedNotes = togglePinNote(noteId);
-    setNotes(sortNotesByRecent(updatedNotes));
-  }, []);
+  const handleTogglePin = useCallback(async (noteId: string) => {
+    await togglePinNote(noteId);
+  }, [togglePinNote]);
 
-  const handleRenameNote = useCallback((noteId: string, title: string) => {
-    const updatedNotes = renameNote(noteId, title);
-    setNotes(sortNotesByRecent(updatedNotes));
-  }, []);
+  const handleRenameNote = useCallback(async (noteId: string, title: string) => {
+    await renameNote(noteId, title);
+  }, [renameNote]);
 
   const handleSaveCanvas = useCallback(
-    (canvasState: string, zoom: number, panX: number, panY: number) => {
+    async (canvasState: string, zoom: number, panX: number, panY: number) => {
       if (!selectedNote) return;
       
       const updatedNote: Note = {
@@ -91,11 +94,45 @@ export default function Notes() {
         panY,
       };
       
-      const updatedNotes = saveNote(updatedNote);
-      setNotes(sortNotesByRecent(updatedNotes));
+      await saveNote(updatedNote);
     },
-    [selectedNote]
+    [selectedNote, saveNote]
   );
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading notes...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4 text-center max-w-md px-4">
+          <LogIn className="h-12 w-12 text-muted-foreground" />
+          <h2 className="text-xl font-semibold">Sign in to access Notes</h2>
+          <p className="text-muted-foreground">
+            Your notes are securely stored in the cloud and sync across all your devices.
+          </p>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => navigate("/dashboard")}>
+              Back to Dashboard
+            </Button>
+            <Button onClick={() => navigate("/login")}>
+              Sign In
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-background">
@@ -161,7 +198,9 @@ export default function Notes() {
           ) : (
             <div className="flex h-full items-center justify-center">
               <div className="text-center">
-                <p className="text-muted-foreground mb-4">No note selected</p>
+                <p className="text-muted-foreground mb-4">
+                  {notes.length === 0 ? "No notes yet" : "No note selected"}
+                </p>
                 <Button onClick={handleCreateNote}>Create a note</Button>
               </div>
             </div>
