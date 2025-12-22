@@ -152,6 +152,16 @@ export const APP_MODULES: Module[] = [
     size: "small",
     summary: "3 alerts • Snooze active",
     keywords: ["alerts", "inbox", "updates", "reminders"]
+  },
+  {
+    id: "notes",
+    title: "Smart Notes",
+    icon: NotebookPen,
+    route: "/notes",
+    color: "primary",
+    size: "large",
+    summary: "Canvas notes • Embedded modules",
+    keywords: ["notes", "drawing", "handwriting", "canvas", "sketches"]
   }
 ];
 
