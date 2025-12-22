@@ -13,6 +13,7 @@ import { ThemeProvider } from "./providers/ThemeProvider";
 import { AuthProvider } from "./providers/AuthProvider";
 import { ArloProvider } from "./providers/ArloProvider";
 import { ChatHistoryProvider } from "./providers/ChatHistoryProvider";
+import { UserSettingsProvider } from "./providers/UserSettingsProvider";
 import ConditionalNavBar from "./components/ConditionalNavBar";
 import Chat from "./pages/Chat";
 import CalendarPage from "./pages/Calendar";
@@ -37,119 +38,121 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider defaultTheme="dark" storageKey="arlo-ui-theme">
       <AuthProvider>
-        <ChatHistoryProvider>
-          <ArloProvider>
-            <TooltipProvider>
-              <Toaster />
-              <Sonner />
-              <BrowserRouter>
-                <GlobalSearch />
-              <ConditionalNavBar />
-              <Routes>
-                {/* Public routes */}
-                <Route path="/login" element={<TailscaleAuth />} />
-                <Route path="/book/:handle" element={<PublicBookingPage />} />
-                <Route path="/book" element={<PublicBookingPage />} />
+        <UserSettingsProvider>
+          <ChatHistoryProvider>
+            <ArloProvider>
+              <TooltipProvider>
+                <Toaster />
+                <Sonner />
+                <BrowserRouter>
+                  <GlobalSearch />
+                <ConditionalNavBar />
+                <Routes>
+                  {/* Public routes */}
+                  <Route path="/login" element={<TailscaleAuth />} />
+                  <Route path="/book/:handle" element={<PublicBookingPage />} />
+                  <Route path="/book" element={<PublicBookingPage />} />
 
-                {/* Protected routes */}
-                <Route path="/" element={
-                  <ProtectedRoute>
-                    <Dashboard />
-                  </ProtectedRoute>
-                } />
-                <Route path="/dashboard" element={
-                  <ProtectedRoute>
-                    <Dashboard />
-                  </ProtectedRoute>
-                } />
-                <Route path="/chat" element={
-                  <ProtectedRoute>
-                    <Chat />
-                  </ProtectedRoute>
-                } />
-                <Route path="/calendar" element={
-                  <ProtectedRoute>
-                    <CalendarPage />
-                  </ProtectedRoute>
-                } />
-                <Route path="/settings" element={
-                  <ProtectedRoute>
-                    <Settings />
-                  </ProtectedRoute>
-                } />
+                  {/* Protected routes */}
+                  <Route path="/" element={
+                    <ProtectedRoute>
+                      <Dashboard />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/dashboard" element={
+                    <ProtectedRoute>
+                      <Dashboard />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/chat" element={
+                    <ProtectedRoute>
+                      <Chat />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/calendar" element={
+                    <ProtectedRoute>
+                      <CalendarPage />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/settings" element={
+                    <ProtectedRoute>
+                      <Settings />
+                    </ProtectedRoute>
+                  } />
 
-                {/* Module routes */}
-                <Route path="/finance" element={
-                  <ProtectedRoute>
-                    <Finance />
-                  </ProtectedRoute>
-                } />
-                <Route path="/productivity" element={
-                  <ProtectedRoute>
-                    <Productivity />
-                  </ProtectedRoute>
-                } />
-                <Route path="/travel" element={
-                  <ProtectedRoute>
-                    <Travel />
-                  </ProtectedRoute>
-                } />
-                <Route path="/system" element={
-                  <ProtectedRoute>
-                    <SystemSecurity />
-                  </ProtectedRoute>
-                } />
-                <Route path="/files" element={
-                  <ProtectedRoute>
-                    <Files />
-                  </ProtectedRoute>
-                } />
-                <Route path="/health" element={
-                  <ProtectedRoute>
-                    <Health />
-                  </ProtectedRoute>
-                } />
-                <Route path="/creation" element={
-                  <ProtectedRoute>
-                    <Creation />
-                  </ProtectedRoute>
-                } />
-                <Route path="/knowledge" element={
-                  <ProtectedRoute>
-                    <Knowledge />
-                  </ProtectedRoute>
-                } />
-                <Route path="/automations" element={
-                  <ProtectedRoute>
-                    <Automations />
-                  </ProtectedRoute>
-                } />
-                <Route path="/insights" element={
-                  <ProtectedRoute>
-                    <AIInsights />
-                  </ProtectedRoute>
-                } />
-                <Route path="/notifications" element={
-                  <ProtectedRoute>
-                    <Notifications />
-                  </ProtectedRoute>
-                } />
-                <Route path="/notes" element={
-                  <ProtectedRoute>
-                    <Notes />
-                  </ProtectedRoute>
-                } />
+                  {/* Module routes */}
+                  <Route path="/finance" element={
+                    <ProtectedRoute>
+                      <Finance />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/productivity" element={
+                    <ProtectedRoute>
+                      <Productivity />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/travel" element={
+                    <ProtectedRoute>
+                      <Travel />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/system" element={
+                    <ProtectedRoute>
+                      <SystemSecurity />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/files" element={
+                    <ProtectedRoute>
+                      <Files />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/health" element={
+                    <ProtectedRoute>
+                      <Health />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/creation" element={
+                    <ProtectedRoute>
+                      <Creation />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/knowledge" element={
+                    <ProtectedRoute>
+                      <Knowledge />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/automations" element={
+                    <ProtectedRoute>
+                      <Automations />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/insights" element={
+                    <ProtectedRoute>
+                      <AIInsights />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/notifications" element={
+                    <ProtectedRoute>
+                      <Notifications />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/notes" element={
+                    <ProtectedRoute>
+                      <Notes />
+                    </ProtectedRoute>
+                  } />
 
-                {/* Network/connection issues (separate from auth) */}
-                <Route path="/unauthorized" element={<Unauthorized />} />
+                  {/* Network/connection issues (separate from auth) */}
+                  <Route path="/unauthorized" element={<Unauthorized />} />
 
-                {/* Catch-all route */}
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </BrowserRouter>
-          </TooltipProvider>
-          </ArloProvider>
-        </ChatHistoryProvider>
+                  {/* Catch-all route */}
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </BrowserRouter>
+            </TooltipProvider>
+            </ArloProvider>
+          </ChatHistoryProvider>
+        </UserSettingsProvider>
       </AuthProvider>
     </ThemeProvider>
   </QueryClientProvider>
