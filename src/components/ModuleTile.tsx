@@ -20,7 +20,11 @@ import {
   Clock3,
   HardDrive,
   UploadCloud,
-  Link
+  Link,
+  PenLine,
+  Calculator,
+  FileText,
+  Bot
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -437,6 +441,100 @@ d">
             </div>
             <div className="text-xs text-muted-foreground leading-relaxed">
               Fun fact: The archivist indexed 1.2M documents with AI citations this week.
+            </div>
+          </div>
+        );
+
+      case "notes":
+        return (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Smart Notes</p>
+                <p className="text-lg font-semibold text-foreground">Canvas workspace</p>
+              </div>
+              <Badge variant="secondary" className="text-[10px] bg-primary/15 text-primary border-primary/20">
+                Infinite canvas
+              </Badge>
+            </div>
+            
+            {/* Mini canvas preview with strokes */}
+            <div className="rounded-lg border border-border/40 bg-muted/10 p-3 h-20 relative overflow-hidden">
+              <div className="absolute inset-0 opacity-20" style={{
+                backgroundImage: 'radial-gradient(circle, hsl(var(--muted-foreground)) 1px, transparent 1px)',
+                backgroundSize: '12px 12px'
+              }} />
+              {/* Simulated ink strokes */}
+              <motion.svg 
+                className="absolute inset-0 w-full h-full"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.2 }}
+              >
+                <motion.path
+                  d="M 15 25 Q 35 15, 55 30 T 95 25"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth="2"
+                  fill="none"
+                  strokeLinecap="round"
+                  initial={{ pathLength: 0 }}
+                  animate={{ pathLength: 1 }}
+                  transition={{ duration: 0.8, delay: 0.3 }}
+                />
+                <motion.path
+                  d="M 20 45 Q 50 35, 80 50 T 130 40"
+                  stroke="hsl(var(--accent))"
+                  strokeWidth="2"
+                  fill="none"
+                  strokeLinecap="round"
+                  initial={{ pathLength: 0 }}
+                  animate={{ pathLength: 1 }}
+                  transition={{ duration: 0.8, delay: 0.5 }}
+                />
+                <motion.rect
+                  x="110"
+                  y="15"
+                  width="35"
+                  height="25"
+                  rx="4"
+                  stroke="hsl(var(--muted-foreground))"
+                  strokeWidth="1.5"
+                  fill="hsl(var(--muted) / 0.3)"
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ duration: 0.4, delay: 0.7 }}
+                />
+              </motion.svg>
+            </div>
+
+            {/* Embedded modules preview */}
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { icon: PenLine, label: "Draw" },
+                { icon: Calculator, label: "Calc" },
+                { icon: FileText, label: "PDF" },
+                { icon: Bot, label: "AI" }
+              ].map((tool, index) => (
+                <motion.div
+                  key={tool.label}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.2 + index * 0.08 }}
+                  className="flex flex-col items-center gap-1 p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                >
+                  <tool.icon className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-[9px] text-muted-foreground">{tool.label}</span>
+                </motion.div>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <Button size="sm" className="flex-1" onClick={(event) => event.stopPropagation()}>
+                New Note
+              </Button>
+              <Button size="sm" variant="outline" className="flex-1" onClick={(event) => event.stopPropagation()}>
+                Recent
+              </Button>
             </div>
           </div>
         );
