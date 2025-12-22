@@ -1,11 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { ModuleTemplate, type ModuleSection, type ModuleStat } from "@/components/ModuleTemplate";
 import { CalendarCheck, CheckSquare, Clock3, Flame, GaugeCircle, MailCheck } from "lucide-react";
 import { useTasksPersistence } from "@/hooks/useTasksPersistence";
 import { useHabitsPersistence } from "@/hooks/useHabitsPersistence";
+import { useNotificationsPersistence } from "@/hooks/useNotificationsPersistence";
+import { useProductivityRealtime } from "@/hooks/useRealtimeSubscription";
 import { supabase } from "@/integrations/supabase/client";
 import type { Task } from "@/types/tasks";
 import type { HabitWithStreak } from "@/types/habits";
+import type { Notification } from "@/types/notifications";
 
 const schedule = [
   { time: "08:30", label: "Inbox triage" },
@@ -14,24 +17,43 @@ const schedule = [
   { time: "16:30", label: "Lecture recording" },
 ];
 
-const inboxPreview = [
-  { source: "Email", subject: "Design QA sign-off", snippet: "Final tweaks applied to hero." },
-  { source: "SMS", subject: "Courier", snippet: "Package arriving at 6 PM." },
-  { source: "Email", subject: "Team Daily", snippet: "Notes and action items compiled." },
-];
-
 export default function Productivity() {
   const { fetchTasks, toggleTask } = useTasksPersistence();
   const { fetchHabitsWithStreaks } = useHabitsPersistence();
+  const { fetchNotifications } = useNotificationsPersistence();
   
   const [tasks, setTasks] = useState<Task[]>([]);
   const [habits, setHabits] = useState<HabitWithStreak[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
     document.title = "Productivity — Arlo";
   }, []);
+
+  const loadTasks = useCallback(async () => {
+    const fetchedTasks = await fetchTasks();
+    setTasks(fetchedTasks);
+  }, [fetchTasks]);
+
+  const loadHabits = useCallback(async () => {
+    const fetchedHabits = await fetchHabitsWithStreaks();
+    setHabits(fetchedHabits.filter(h => h.category === "routine" && h.enabled));
+  }, [fetchHabitsWithStreaks]);
+
+  const loadNotifications = useCallback(async () => {
+    const fetchedNotifications = await fetchNotifications();
+    setNotifications(fetchedNotifications.filter(n => !n.read).slice(0, 3));
+  }, [fetchNotifications]);
+
+  // Subscribe to realtime updates
+  useProductivityRealtime({
+    onTaskChange: loadTasks,
+    onHabitChange: loadHabits,
+    onNotificationChange: loadNotifications,
+    enabled: isAuthenticated,
+  });
 
   useEffect(() => {
     const checkAuthAndLoad = async () => {
@@ -44,12 +66,7 @@ export default function Productivity() {
       }
 
       setLoading(true);
-      const [fetchedTasks, fetchedHabits] = await Promise.all([
-        fetchTasks(),
-        fetchHabitsWithStreaks(),
-      ]);
-      setTasks(fetchedTasks);
-      setHabits(fetchedHabits.filter(h => h.category === "routine" && h.enabled));
+      await Promise.all([loadTasks(), loadHabits(), loadNotifications()]);
       setLoading(false);
     };
 
@@ -119,14 +136,18 @@ export default function Productivity() {
     {
       title: "Inbox surfaces",
       description: "Only messages with clear, prepped actions. Each badge is the suggested path.",
-      items: inboxPreview.map((item) => ({
-        title: item.subject,
-        description: item.snippet,
-        badge: item.source,
-        tone: "info",
-        icon: <MailCheck className="h-4 w-4" />,
-        visual: { type: "pill", label: "Reply draft", tone: "info" },
-      })),
+      items: notifications.length > 0 
+        ? notifications.map((notif) => ({
+            title: notif.title,
+            description: notif.content ?? "",
+            badge: notif.source,
+            tone: "info" as const,
+            icon: <MailCheck className="h-4 w-4" />,
+            visual: { type: "pill" as const, label: "View", tone: "info" as const },
+          }))
+        : [
+            { title: "No new notifications", description: "You're all caught up!", badge: "Clear", tone: "positive" as const, icon: <MailCheck className="h-4 w-4" /> },
+          ],
     },
     {
       title: "Habits",
