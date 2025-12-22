@@ -10,47 +10,72 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import {
+  ChevronDown,
   Copy,
   FileText,
+  FolderOpen,
+  FolderPlus,
   MoreHorizontal,
+  PenLine,
   Pin,
   PinOff,
   Plus,
   Search,
   Trash2,
 } from "lucide-react";
-import type { Note } from "@/types/notes";
+import type { Note, NoteFolder } from "@/types/notes";
 
 interface NotesSidebarProps {
   notes: Note[];
+  folders: NoteFolder[];
   selectedNoteId: string | null;
+  selectedFolderId: string | null;
   onSelectNote: (noteId: string) => void;
+  onSelectFolder: (folderId: string | null) => void;
   onCreateNote: () => void;
+  onCreateFolder: () => void;
   onDeleteNote: (noteId: string) => void;
   onDuplicateNote: (noteId: string) => void;
   onTogglePin: (noteId: string) => void;
   onRenameNote: (noteId: string, title: string) => void;
+  onMoveToFolder: (noteId: string, folderId: string | null) => void;
+  onDeleteFolder: (folderId: string) => void;
 }
 
 export function NotesSidebar({
   notes,
+  folders,
   selectedNoteId,
+  selectedFolderId,
   onSelectNote,
+  onSelectFolder,
   onCreateNote,
+  onCreateFolder,
   onDeleteNote,
   onDuplicateNote,
   onTogglePin,
   onRenameNote,
+  onMoveToFolder,
+  onDeleteFolder,
 }: NotesSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
+  const [foldersExpanded, setFoldersExpanded] = useState(true);
 
-  const filteredNotes = notes.filter((note) =>
-    note.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filter notes based on search and selected folder
+  const filteredNotes = notes.filter((note) => {
+    const matchesSearch = note.title.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesFolder = selectedFolderId === null || note.folderId === selectedFolderId;
+    return matchesSearch && matchesFolder;
+  });
 
   const pinnedNotes = filteredNotes.filter((n) => n.pinned);
   const unpinnedNotes = filteredNotes.filter((n) => !n.pinned);
@@ -68,9 +93,18 @@ export function NotesSidebar({
     setEditingTitle("");
   };
 
+  const getNoteIcon = (note: Note) => {
+    return note.noteType === "page" ? (
+      <FileText className="h-4 w-4" />
+    ) : (
+      <PenLine className="h-4 w-4" />
+    );
+  };
+
   const renderNoteItem = (note: Note) => {
     const isSelected = note.id === selectedNoteId;
     const isEditing = editingId === note.id;
+    const noteFolder = folders.find(f => f.id === note.folderId);
 
     return (
       <div
@@ -83,8 +117,11 @@ export function NotesSidebar({
         )}
         onClick={() => !isEditing && onSelectNote(note.id)}
       >
-        <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-muted/60 text-muted-foreground">
-          <FileText className="h-4 w-4" />
+        <div className={cn(
+          "flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-muted-foreground",
+          note.noteType === "canvas" ? "bg-violet-500/10 text-violet-500" : "bg-muted/60"
+        )}>
+          {getNoteIcon(note)}
         </div>
         <div className="flex-1 min-w-0 space-y-1">
           {isEditing ? (
@@ -101,7 +138,25 @@ export function NotesSidebar({
               onClick={(e) => e.stopPropagation()}
             />
           ) : (
-            <p className="truncate text-sm font-medium text-foreground">{note.title}</p>
+            <>
+              <p className="truncate text-sm font-medium text-foreground">{note.title}</p>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                  {note.noteType}
+                </span>
+                {noteFolder && !selectedFolderId && (
+                  <>
+                    <span className="text-muted-foreground/40">·</span>
+                    <span 
+                      className="text-[10px] font-medium"
+                      style={{ color: noteFolder.color }}
+                    >
+                      {noteFolder.name}
+                    </span>
+                  </>
+                )}
+              </div>
+            </>
           )}
           <p className="text-xs text-muted-foreground">
             {format(new Date(note.updatedAt), "MMM d, h:mm a")}
@@ -145,6 +200,27 @@ export function NotesSidebar({
               <Copy className="mr-2 h-4 w-4" />
               Duplicate
             </DropdownMenuItem>
+            {folders.length > 0 && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => onMoveToFolder(note.id, null)}>
+                  <FolderOpen className="mr-2 h-4 w-4" />
+                  Remove from folder
+                </DropdownMenuItem>
+                {folders.map(folder => (
+                  <DropdownMenuItem 
+                    key={folder.id}
+                    onClick={() => onMoveToFolder(note.id, folder.id)}
+                  >
+                    <span 
+                      className="mr-2 h-3 w-3 rounded-full inline-block"
+                      style={{ backgroundColor: folder.color }}
+                    />
+                    Move to {folder.name}
+                  </DropdownMenuItem>
+                ))}
+              </>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => onDeleteNote(note.id)}
@@ -164,14 +240,26 @@ export function NotesSidebar({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border/40 px-4 py-4">
         <h2 className="text-lg font-semibold text-foreground">Notes</h2>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-8 w-8 rounded-lg"
-          onClick={onCreateNote}
-        >
-          <Plus className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 rounded-lg"
+            onClick={onCreateFolder}
+            title="New folder"
+          >
+            <FolderPlus className="h-4 w-4" />
+          </Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8 rounded-lg"
+            onClick={onCreateNote}
+            title="New note"
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {/* Search */}
@@ -186,6 +274,68 @@ export function NotesSidebar({
           />
         </div>
       </div>
+
+      {/* Folders section */}
+      {folders.length > 0 && (
+        <div className="px-3 pb-2">
+          <Collapsible open={foldersExpanded} onOpenChange={setFoldersExpanded}>
+            <CollapsibleTrigger className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground/70 hover:text-muted-foreground">
+              <span>Folders</span>
+              <ChevronDown className={cn("h-3 w-3 transition-transform", foldersExpanded && "rotate-180")} />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-1">
+              <button
+                onClick={() => onSelectFolder(null)}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+                  selectedFolderId === null
+                    ? "bg-primary/10 text-primary font-medium"
+                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                )}
+              >
+                <FolderOpen className="h-4 w-4" />
+                All Notes
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {notes.length}
+                </span>
+              </button>
+              {folders.map((folder) => {
+                const count = notes.filter(n => n.folderId === folder.id).length;
+                return (
+                  <div key={folder.id} className="group flex items-center">
+                    <button
+                      onClick={() => onSelectFolder(folder.id)}
+                      className={cn(
+                        "flex flex-1 items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+                        selectedFolderId === folder.id
+                          ? "bg-primary/10 text-primary font-medium"
+                          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                      )}
+                    >
+                      <span 
+                        className="h-3 w-3 rounded-full"
+                        style={{ backgroundColor: folder.color }}
+                      />
+                      {folder.name}
+                      <span className="ml-auto text-xs text-muted-foreground">
+                        {count}
+                      </span>
+                    </button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => onDeleteFolder(folder.id)}
+                    >
+                      <Trash2 className="h-3 w-3 text-muted-foreground" />
+                    </Button>
+                  </div>
+                );
+              })}
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
+      )}
 
       {/* Notes list */}
       <ScrollArea className="flex-1 px-3">
@@ -217,7 +367,7 @@ export function NotesSidebar({
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <FileText className="h-10 w-10 text-muted-foreground/40 mb-3" />
             <p className="text-sm text-muted-foreground">
-              {searchQuery ? "No notes found" : "No notes yet"}
+              {searchQuery ? "No notes found" : selectedFolderId ? "No notes in this folder" : "No notes yet"}
             </p>
             {!searchQuery && (
               <Button

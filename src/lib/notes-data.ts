@@ -1,4 +1,4 @@
-import type { Note, NoteFolder, NoteId } from "@/types/notes";
+import type { Note, NoteFolder, NoteId, NoteType } from "@/types/notes";
 
 export const NOTES_STORAGE_KEY = "arlo-smart-notes";
 export const FOLDERS_STORAGE_KEY = "arlo-notes-folders";
@@ -12,6 +12,7 @@ export function createNote(overrides: Partial<Note> = {}): Note {
   return {
     id: generateId(),
     title: "Untitled Note",
+    noteType: "canvas",
     canvasState: "",
     elements: [],
     tags: [],

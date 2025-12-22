@@ -5,7 +5,8 @@ import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { useNotesPersistence } from "@/hooks/useNotesPersistence";
-import type { Note, NoteFolder } from "@/types/notes";
+import { CreateNoteDialog } from "@/components/notes/CreateNoteDialog";
+import type { Note, NoteFolder, NoteType } from "@/types/notes";
 import {
   ArrowLeft,
   FileText,
@@ -24,6 +25,7 @@ export default function NotesDashboard() {
   const navigate = useNavigate();
   const { notes, folders, isLoading, isAuthenticated, createNote } = useNotesPersistence();
   const [hoveredNoteId, setHoveredNoteId] = useState<string | null>(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   useEffect(() => {
     document.title = "Notes — Arlo";
@@ -84,11 +86,15 @@ export default function NotesDashboard() {
   const recentNotes = useMemo(() => notes.slice(0, 5), [notes]);
   const pinnedNotes = useMemo(() => notes.filter(n => n.pinned).slice(0, 3), [notes]);
 
-  const handleNewNote = async () => {
-    const note = await createNote();
+  const handleNewNote = async (noteType: NoteType, folderId?: string) => {
+    const note = await createNote({ noteType, folderId });
     if (note) {
       navigate("/notes", { state: { openNoteId: note.id } });
     }
+  };
+
+  const handleOpenCreateDialog = () => {
+    setCreateDialogOpen(true);
   };
 
   const handleResumeNote = () => {
@@ -162,7 +168,7 @@ export default function NotesDashboard() {
               </Button>
               <Button 
                 className="min-w-[150px] shadow-sm transition-all hover:scale-[1.02] hover:shadow-md"
-                onClick={handleNewNote}
+                onClick={handleOpenCreateDialog}
               >
                 <Plus className="mr-2 h-4 w-4" />
                 New Note
@@ -241,7 +247,7 @@ export default function NotesDashboard() {
 
               {/* New Blank Note */}
               <button
-                onClick={handleNewNote}
+                onClick={handleOpenCreateDialog}
                 className="group w-full relative flex items-center gap-4 rounded-2xl border border-border/60 bg-muted/30 p-4 text-left transition-all hover:border-border hover:bg-muted/50 hover:scale-[1.01]"
               >
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-background/80 text-muted-foreground transition-transform group-hover:scale-110 group-hover:text-foreground">
@@ -316,7 +322,7 @@ export default function NotesDashboard() {
                 </div>
                 <p className="font-medium text-foreground">No notes yet</p>
                 <p className="text-sm text-muted-foreground mt-1">Create your first note to get started</p>
-                <Button onClick={handleNewNote} className="mt-4" size="sm">
+                <Button onClick={handleOpenCreateDialog} className="mt-4" size="sm">
                   <Plus className="mr-2 h-4 w-4" />
                   Create Note
                 </Button>
@@ -517,3 +523,5 @@ function NotePreviewRow({
     </button>
   );
 }
+
+// Add CreateNoteDialog at the end of NotesDashboard component - need to update the return statement

@@ -7,6 +7,7 @@ interface DbNote {
   id: string;
   user_id: string;
   title: string;
+  note_type: string;
   canvas_state: string | null;
   elements: unknown;
   tags: string[] | null;
@@ -31,6 +32,7 @@ interface DbNoteFolder {
 const dbToNote = (dbNote: DbNote): Note => ({
   id: dbNote.id,
   title: dbNote.title,
+  noteType: (dbNote.note_type as Note['noteType']) ?? 'canvas',
   canvasState: dbNote.canvas_state ?? '',
   elements: Array.isArray(dbNote.elements) ? dbNote.elements as Note['elements'] : [],
   tags: dbNote.tags ?? [],
@@ -46,6 +48,7 @@ const dbToNote = (dbNote: DbNote): Note => ({
 // Transform app Note to DB format
 const noteToDb = (note: Partial<Note> & { id?: string }) => ({
   title: note.title,
+  note_type: note.noteType ?? 'canvas',
   canvas_state: note.canvasState,
   elements: JSON.parse(JSON.stringify(note.elements ?? [])),
   tags: note.tags ?? [],
@@ -157,6 +160,7 @@ export function useNotesPersistence() {
     const now = new Date().toISOString();
     const newNote: Partial<Note> = {
       title: 'Untitled Note',
+      noteType: 'canvas',
       canvasState: '',
       elements: [],
       tags: [],
@@ -174,6 +178,7 @@ export function useNotesPersistence() {
         .insert({
           user_id: userId,
           title: dbData.title,
+          note_type: dbData.note_type,
           canvas_state: dbData.canvas_state,
           elements: dbData.elements,
           tags: dbData.tags,
@@ -182,7 +187,7 @@ export function useNotesPersistence() {
           zoom: dbData.zoom,
           pan_x: dbData.pan_x,
           pan_y: dbData.pan_y,
-        })
+        } as any)
         .select()
         .single();
 
@@ -215,6 +220,7 @@ export function useNotesPersistence() {
         .from('notes')
         .update({
           title: dbData.title,
+          note_type: dbData.note_type,
           canvas_state: dbData.canvas_state,
           elements: dbData.elements,
           tags: dbData.tags,
@@ -223,7 +229,7 @@ export function useNotesPersistence() {
           zoom: dbData.zoom,
           pan_x: dbData.pan_x,
           pan_y: dbData.pan_y,
-        })
+        } as any)
         .eq('id', note.id)
         .eq('user_id', userId);
 
