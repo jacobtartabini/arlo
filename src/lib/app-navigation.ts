@@ -157,7 +157,7 @@ export const APP_MODULES: Module[] = [
     id: "notes",
     title: "Smart Notes",
     icon: NotebookPen,
-    route: "/notes",
+    route: "/notes-dashboard",
     color: "primary",
     size: "large",
     summary: "Canvas notes • Embedded modules",
@@ -194,7 +194,7 @@ export const APP_PAGES: NavigationItem[] = [
     id: "notes",
     title: "Smart Notes",
     description: "Canvas-based notes with drawing tools",
-    route: "/notes",
+    route: "/notes-dashboard",
     icon: NotebookPen,
     keywords: ["notes", "drawing", "canvas", "writing", "handwriting"]
   },
