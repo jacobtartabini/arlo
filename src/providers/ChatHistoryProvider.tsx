@@ -5,6 +5,7 @@ import React, {
   useEffect,
   useMemo,
   useState,
+  useRef,
 } from "react";
 import {
   Conversation,
@@ -12,6 +13,8 @@ import {
   ChatMessageStatus,
   ChatSender,
 } from "@/types/chat";
+import { supabase } from "@/integrations/supabase/client";
+import { useChatPersistence } from "@/hooks/useChatPersistence";
 
 interface InitialMessageInput {
   id?: string;
@@ -47,6 +50,7 @@ interface ChatHistoryContextValue {
   activeConversationId: string | null;
   activeConversation: Conversation | null;
   hasPendingPersistence: boolean;
+  isLoading: boolean;
   createConversation: (options?: CreateConversationOptions) => Conversation;
   ensureActiveConversation: () => string;
   appendMessage: (input: AppendMessageInput) => ConversationMessage;
@@ -76,42 +80,24 @@ const generateId = () => {
   return Math.random().toString(36).slice(2);
 };
 
-const loadConversations = (): Conversation[] => {
-  if (typeof window === "undefined") {
-    return [];
-  }
-
+// LocalStorage helpers for fallback
+const loadLocalConversations = (): Conversation[] => {
+  if (typeof window === "undefined") return [];
   const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    return [];
-  }
-
+  if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as Conversation[];
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    return parsed
-      .map((conversation) => ({
-        ...conversation,
-        messages: (conversation.messages ?? []).map((message) => ({
-          ...message,
-        })),
-      }))
-      .sort((a, b) =>
-        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-      );
-  } catch (error) {
-    console.error("Failed to parse chat history from storage", error);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.sort((a, b) =>
+      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    );
+  } catch {
     return [];
   }
 };
 
 const loadActiveConversationId = (): string | null => {
-  if (typeof window === "undefined") {
-    return null;
-  }
+  if (typeof window === "undefined") return null;
   return window.localStorage.getItem(ACTIVE_STORAGE_KEY);
 };
 
@@ -127,9 +113,7 @@ const sortMessages = (messages: ConversationMessage[]) =>
 
 const generateConversationTitle = (text: string) => {
   const trimmed = text.trim();
-  if (!trimmed) {
-    return "New Chat";
-  }
+  if (!trimmed) return "New Chat";
   return trimmed.length > 40 ? `${trimmed.slice(0, 40)}...` : trimmed;
 };
 
@@ -138,23 +122,82 @@ export function ChatHistoryProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const [conversations, setConversations] = useState<Conversation[]>(
-    () => loadConversations(),
-  );
-  const [activeConversationId, setActiveConversationIdState] =
-    useState<string | null>(() => loadActiveConversationId());
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationIdState] = useState<string | null>(null);
   const [hasPendingPersistence, setHasPendingPersistence] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  
+  const pendingDbOperationsRef = useRef<Set<string>>(new Set());
+  const dbPersistence = useChatPersistence(userId);
 
-  const persistConversations = useCallback((data: Conversation[]) => {
-    if (typeof window === "undefined") {
-      return true;
-    }
+  // Check for authenticated user
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setUserId(session?.user?.id ?? null);
+    };
+    
+    checkAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const newUserId = session?.user?.id ?? null;
+      if (newUserId !== userId) {
+        setUserId(newUserId);
+        setIsInitialized(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [userId]);
+
+  // Load conversations based on auth state
+  useEffect(() => {
+    if (isInitialized) return;
+
+    const loadData = async () => {
+      setIsLoading(true);
+
+      if (userId) {
+        // Load from database
+        const dbConversations = await dbPersistence.fetchConversations();
+        setConversations(dbConversations);
+        
+        // Load active conversation from localStorage (for session persistence)
+        const savedActiveId = loadActiveConversationId();
+        if (savedActiveId && dbConversations.some(c => c.id === savedActiveId)) {
+          setActiveConversationIdState(savedActiveId);
+        } else if (dbConversations.length > 0) {
+          setActiveConversationIdState(dbConversations[0].id);
+        }
+      } else {
+        // Fallback to localStorage for unauthenticated users
+        const localConversations = loadLocalConversations();
+        setConversations(localConversations);
+        
+        const savedActiveId = loadActiveConversationId();
+        if (savedActiveId && localConversations.some(c => c.id === savedActiveId)) {
+          setActiveConversationIdState(savedActiveId);
+        } else if (localConversations.length > 0) {
+          setActiveConversationIdState(localConversations[0].id);
+        }
+      }
+
+      setIsLoading(false);
+      setIsInitialized(true);
+    };
+
+    loadData();
+  }, [userId, isInitialized, dbPersistence]);
+
+  // LocalStorage persistence for fallback
+  const persistToLocalStorage = useCallback((data: Conversation[]) => {
+    if (typeof window === "undefined") return true;
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       return true;
-    } catch (error) {
-      console.error("Failed to persist chat history", error);
+    } catch {
       return false;
     }
   }, []);
@@ -162,9 +205,7 @@ export function ChatHistoryProvider({
   const setActiveConversationInternal = useCallback(
     (conversationId: string | null) => {
       setActiveConversationIdState(conversationId);
-      if (typeof window === "undefined") {
-        return;
-      }
+      if (typeof window === "undefined") return;
       if (conversationId) {
         window.localStorage.setItem(ACTIVE_STORAGE_KEY, conversationId);
       } else {
@@ -184,22 +225,22 @@ export function ChatHistoryProvider({
     (options?: CreateConversationOptions) => {
       const id = options?.id ?? generateId();
       const now = new Date().toISOString();
-      const preparedMessages: ConversationMessage[] = (options?.initialMessages
-        ?.map((message) => ({
-          id: message.id ?? generateId(),
-          conversationId: id,
-          text: message.text,
-          sender: message.sender,
-          timestamp: message.timestamp ?? now,
-          status: message.status ?? "sent",
-        })) ?? []) as ConversationMessage[];
+      const title = options?.title ?? "New Chat";
+      
+      const preparedMessages: ConversationMessage[] = (options?.initialMessages?.map((message) => ({
+        id: message.id ?? generateId(),
+        conversationId: id,
+        text: message.text,
+        sender: message.sender,
+        timestamp: message.timestamp ?? now,
+        status: message.status ?? "sent",
+      })) ?? []) as ConversationMessage[];
 
-      const updatedAt =
-        preparedMessages[preparedMessages.length - 1]?.timestamp ?? now;
+      const updatedAt = preparedMessages[preparedMessages.length - 1]?.timestamp ?? now;
 
       const conversation: Conversation = {
         id,
-        title: options?.title ?? "New Chat",
+        title,
         createdAt: now,
         updatedAt,
         messages: sortMessages(preparedMessages),
@@ -207,14 +248,28 @@ export function ChatHistoryProvider({
 
       setConversations((previous) => {
         const next = sortConversations([...previous, conversation]);
-        const persisted = persistConversations(next);
-        if (!persisted) {
-          setHasPendingPersistence(true);
-        } else {
-          setHasPendingPersistence(false);
+        if (!userId) {
+          persistToLocalStorage(next);
         }
         return next;
       });
+
+      // Persist to database if authenticated
+      if (userId) {
+        dbPersistence.createConversation(title).then((dbConv) => {
+          if (dbConv) {
+            // Update local state with DB-assigned ID if different
+            setConversations((prev) => {
+              return prev.map((c) => 
+                c.id === id ? { ...c, id: dbConv.id } : c
+              );
+            });
+            if (options?.setActive !== false) {
+              setActiveConversationInternal(dbConv.id);
+            }
+          }
+        });
+      }
 
       if (options?.setActive !== false) {
         setActiveConversationInternal(id);
@@ -222,7 +277,7 @@ export function ChatHistoryProvider({
 
       return conversation;
     },
-    [persistConversations, setActiveConversationInternal],
+    [userId, persistToLocalStorage, setActiveConversationInternal, dbPersistence],
   );
 
   const ensureActiveConversation = useCallback(() => {
@@ -230,9 +285,7 @@ export function ChatHistoryProvider({
       const exists = conversations.some(
         (conversation) => conversation.id === activeConversationId,
       );
-      if (exists) {
-        return activeConversationId;
-      }
+      if (exists) return activeConversationId;
     }
 
     if (conversations.length > 0) {
@@ -268,9 +321,7 @@ export function ChatHistoryProvider({
       setConversations((previous) => {
         let conversationFound = false;
         const updated = previous.map((conversation) => {
-          if (conversation.id !== conversationId) {
-            return conversation;
-          }
+          if (conversation.id !== conversationId) return conversation;
           conversationFound = true;
 
           const updatedMessages = sortMessages([...conversation.messages, message]);
@@ -306,23 +357,57 @@ export function ChatHistoryProvider({
             ];
 
         const sortedConversations = sortConversations(next);
-        const persisted = persistConversations(sortedConversations);
-        if (!persisted) {
-          setHasPendingPersistence(true);
-        } else {
-          setHasPendingPersistence(false);
+        if (!userId) {
+          persistToLocalStorage(sortedConversations);
         }
         return sortedConversations;
       });
 
-      setActiveConversationInternal(conversationId);
+      // Persist to database
+      if (userId) {
+        pendingDbOperationsRef.current.add(messageId);
+        dbPersistence.addMessage(
+          conversationId,
+          input.text,
+          input.sender,
+          input.status ?? "pending"
+        ).then((dbMsg) => {
+          pendingDbOperationsRef.current.delete(messageId);
+          if (dbMsg && dbMsg.id !== messageId) {
+            // Update local message with DB ID
+            setConversations((prev) =>
+              prev.map((conv) =>
+                conv.id === conversationId
+                  ? {
+                      ...conv,
+                      messages: conv.messages.map((m) =>
+                        m.id === messageId ? { ...m, id: dbMsg.id } : m
+                      ),
+                    }
+                  : conv
+              )
+            );
+          }
+        });
 
+        // Update conversation title if needed
+        const conversation = conversations.find(c => c.id === conversationId);
+        if (conversation?.title === "New Chat" && input.sender === "user") {
+          const newTitle = generateConversationTitle(input.text);
+          dbPersistence.updateConversationTitle(conversationId, newTitle);
+        }
+      }
+
+      setActiveConversationInternal(conversationId);
       return message;
     },
     [
       ensureActiveConversation,
-      persistConversations,
+      userId,
+      persistToLocalStorage,
       setActiveConversationInternal,
+      dbPersistence,
+      conversations,
     ],
   );
 
@@ -335,15 +420,11 @@ export function ChatHistoryProvider({
     ) => {
       setConversations((previous) => {
         const updated = previous.map((conversation) => {
-          if (conversation.id !== conversationId) {
-            return conversation;
-          }
+          if (conversation.id !== conversationId) return conversation;
 
           let didUpdate = false;
           const updatedMessages = conversation.messages.map((message) => {
-            if (message.id !== messageId) {
-              return message;
-            }
+            if (message.id !== messageId) return message;
             didUpdate = true;
             return {
               ...message,
@@ -353,9 +434,7 @@ export function ChatHistoryProvider({
             };
           });
 
-          if (!didUpdate) {
-            return conversation;
-          }
+          if (!didUpdate) return conversation;
 
           return {
             ...conversation,
@@ -364,16 +443,18 @@ export function ChatHistoryProvider({
           };
         });
 
-        const persisted = persistConversations(updated);
-        if (!persisted) {
-          setHasPendingPersistence(true);
-        } else {
-          setHasPendingPersistence(false);
+        if (!userId) {
+          persistToLocalStorage(updated);
         }
         return sortConversations(updated);
       });
+
+      // Persist to database
+      if (userId) {
+        dbPersistence.updateMessageStatus(messageId, status, overrides?.text);
+      }
     },
-    [persistConversations],
+    [userId, persistToLocalStorage, dbPersistence],
   );
 
   const updateConversationTitle = useCallback(
@@ -384,16 +465,18 @@ export function ChatHistoryProvider({
             ? { ...conversation, title }
             : conversation,
         );
-        const persisted = persistConversations(updated);
-        if (!persisted) {
-          setHasPendingPersistence(true);
-        } else {
-          setHasPendingPersistence(false);
+        if (!userId) {
+          persistToLocalStorage(updated);
         }
         return sortConversations(updated);
       });
+
+      // Persist to database
+      if (userId) {
+        dbPersistence.updateConversationTitle(conversationId, title);
+      }
     },
-    [persistConversations],
+    [userId, persistToLocalStorage, dbPersistence],
   );
 
   const deleteConversation = useCallback(
@@ -402,25 +485,29 @@ export function ChatHistoryProvider({
         const next = previous.filter(
           (conversation) => conversation.id !== conversationId,
         );
-        const persisted = persistConversations(next);
-        if (!persisted) {
-          setHasPendingPersistence(true);
-        } else {
-          setHasPendingPersistence(false);
+        if (!userId) {
+          persistToLocalStorage(next);
         }
 
         if (activeConversationId === conversationId) {
           const fallbackId = next[0]?.id ?? null;
-          setActiveConversationInternal(fallbackId ?? null);
+          setActiveConversationInternal(fallbackId);
         }
 
         return sortConversations(next);
       });
+
+      // Persist to database
+      if (userId) {
+        dbPersistence.deleteConversation(conversationId);
+      }
     },
     [
       activeConversationId,
-      persistConversations,
+      userId,
+      persistToLocalStorage,
       setActiveConversationInternal,
+      dbPersistence,
     ],
   );
 
@@ -440,59 +527,17 @@ export function ChatHistoryProvider({
     [conversations, setActiveConversationInternal],
   );
 
+  // Create initial conversation if none exist
   useEffect(() => {
-    if (isInitialized) {
-      return;
-    }
+    if (!isInitialized || isLoading) return;
+    
     if (conversations.length === 0) {
       createConversation({ setActive: true });
-      setIsInitialized(true);
-      return;
     }
-
-    const activeExists = activeConversationId
-      ? conversations.some(
-          (conversation) => conversation.id === activeConversationId,
-        )
-      : false;
-    if (!activeExists) {
-      setActiveConversationInternal(conversations[0].id);
-    }
-    setIsInitialized(true);
-  }, [
-    activeConversationId,
-    conversations,
-    createConversation,
-    isInitialized,
-    setActiveConversationInternal,
-  ]);
-
-  useEffect(() => {
-    if (!hasPendingPersistence) {
-      return;
-    }
-
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const timeout = window.setTimeout(() => {
-      setConversations((previous) => {
-        const success = persistConversations(previous);
-        if (success) {
-          setHasPendingPersistence(false);
-        }
-        return previous;
-      });
-    }, 2000);
-
-    return () => window.clearTimeout(timeout);
-  }, [hasPendingPersistence, persistConversations]);
+  }, [isInitialized, isLoading, conversations.length, createConversation]);
 
   const activeConversation = useMemo(() => {
-    if (!activeConversationId) {
-      return null;
-    }
+    if (!activeConversationId) return null;
     return (
       conversations.find(
         (conversation) => conversation.id === activeConversationId,
@@ -506,6 +551,7 @@ export function ChatHistoryProvider({
       activeConversationId,
       activeConversation,
       hasPendingPersistence,
+      isLoading,
       createConversation,
       ensureActiveConversation,
       appendMessage,
@@ -525,6 +571,7 @@ export function ChatHistoryProvider({
       ensureActiveConversation,
       getConversationById,
       hasPendingPersistence,
+      isLoading,
       setActiveConversation,
       updateConversationTitle,
       updateMessageStatus,

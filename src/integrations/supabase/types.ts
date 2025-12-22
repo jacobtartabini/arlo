@@ -101,6 +101,68 @@ export type Database = {
         }
         Relationships: []
       }
+      conversation_messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          sender: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          sender: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          sender?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conversations: {
+        Row: {
+          created_at: string
+          id: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       note_folders: {
         Row: {
           color: string
@@ -180,6 +242,63 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_settings: {
+        Row: {
+          analytics_enabled: boolean
+          api_endpoint: string | null
+          api_token: string | null
+          created_at: string
+          data_collection_enabled: boolean
+          email_notifications_enabled: boolean
+          encryption_enabled: boolean
+          id: string
+          learning_mode_enabled: boolean
+          proactive_suggestions_enabled: boolean
+          push_notifications_enabled: boolean
+          sound_enabled: boolean
+          theme: string
+          updated_at: string
+          user_id: string
+          voice_responses_enabled: boolean
+        }
+        Insert: {
+          analytics_enabled?: boolean
+          api_endpoint?: string | null
+          api_token?: string | null
+          created_at?: string
+          data_collection_enabled?: boolean
+          email_notifications_enabled?: boolean
+          encryption_enabled?: boolean
+          id?: string
+          learning_mode_enabled?: boolean
+          proactive_suggestions_enabled?: boolean
+          push_notifications_enabled?: boolean
+          sound_enabled?: boolean
+          theme?: string
+          updated_at?: string
+          user_id: string
+          voice_responses_enabled?: boolean
+        }
+        Update: {
+          analytics_enabled?: boolean
+          api_endpoint?: string | null
+          api_token?: string | null
+          created_at?: string
+          data_collection_enabled?: boolean
+          email_notifications_enabled?: boolean
+          encryption_enabled?: boolean
+          id?: string
+          learning_mode_enabled?: boolean
+          proactive_suggestions_enabled?: boolean
+          push_notifications_enabled?: boolean
+          sound_enabled?: boolean
+          theme?: string
+          updated_at?: string
+          user_id?: string
+          voice_responses_enabled?: boolean
+        }
+        Relationships: []
       }
     }
     Views: {

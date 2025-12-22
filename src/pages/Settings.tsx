@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { useArlo } from '@/providers/ArloProvider';
+import { useUserSettings } from '@/providers/UserSettingsProvider';
 import EnhancedThemeToggle from '@/components/EnhancedThemeToggle';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -7,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import { 
   Settings as SettingsIcon, 
   Palette, 
@@ -15,14 +16,16 @@ import {
   Shield, 
   Server, 
   Bell,
-  Globe,
-  Database,
-  Cpu
+  Cpu,
+  LogIn
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 
 export default function Settings() {
   const { config, setConfig, status, isConnected } = useArlo();
+  const { settings, isLoading, isAuthenticated, updateSettings } = useUserSettings();
+  const navigate = useNavigate();
 
   // SEO
   useEffect(() => {
@@ -44,8 +47,309 @@ export default function Settings() {
     }
   }, []);
 
-  const handleSaveConfig = () => {
-    toast.success('Configuration saved successfully');
+  const handleSaveConnectionConfig = async () => {
+    if (isAuthenticated && settings) {
+      await updateSettings({
+        api_endpoint: config.apiEndpoint,
+        api_token: config.apiToken,
+      });
+    }
+    toast.success('Connection settings saved');
+  };
+
+  const handleSettingToggle = async (key: keyof typeof settings, value: boolean) => {
+    if (!isAuthenticated) {
+      toast.error('Please log in to save settings');
+      return;
+    }
+    await updateSettings({ [key]: value });
+  };
+
+  const renderSettingsContent = () => {
+    if (isLoading) {
+      return (
+        <div className="space-y-8">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i} className="bg-background/40 backdrop-blur-md border border-border/30">
+              <CardHeader>
+                <Skeleton className="h-6 w-48" />
+                <Skeleton className="h-4 w-72 mt-2" />
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {[1, 2, 3, 4].map((j) => (
+                    <Skeleton key={j} className="h-20 w-full" />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      );
+    }
+
+    if (!isAuthenticated) {
+      return (
+        <Card className="bg-background/40 backdrop-blur-md border border-border/30">
+          <CardContent className="flex flex-col items-center justify-center py-12 space-y-4">
+            <LogIn className="h-12 w-12 text-muted-foreground" />
+            <h3 className="text-xl font-semibold">Sign in to access settings</h3>
+            <p className="text-muted-foreground text-center max-w-md">
+              Your settings will be saved to your account and sync across all your devices.
+            </p>
+            <Button onClick={() => navigate('/login')}>
+              Sign In
+            </Button>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    return (
+      <>
+        {/* Appearance Settings */}
+        <section>
+          <Card className="bg-background/40 backdrop-blur-md border border-border/30">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Palette className="h-5 w-5 text-primary" />
+                Appearance
+              </CardTitle>
+              <CardDescription>
+                Customize the visual appearance and theme of the interface
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <EnhancedThemeToggle />
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* AI Assistant Settings */}
+        <section>
+          <Card className="bg-background/40 backdrop-blur-md border border-border/30">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bot className="h-5 w-5 text-primary" />
+                AI Assistant
+              </CardTitle>
+              <CardDescription>
+                Configure how Arlo AI behaves and responds to your queries
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
+                  <div className="space-y-1">
+                    <Label className="text-sm font-medium">Voice Responses</Label>
+                    <p className="text-xs text-muted-foreground">Enable audio responses from Arlo</p>
+                  </div>
+                  <Switch 
+                    checked={settings?.voice_responses_enabled ?? true}
+                    onCheckedChange={(checked) => handleSettingToggle('voice_responses_enabled', checked)}
+                  />
+                </div>
+                
+                <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
+                  <div className="space-y-1">
+                    <Label className="text-sm font-medium">Proactive Suggestions</Label>
+                    <p className="text-xs text-muted-foreground">Show contextual suggestions</p>
+                  </div>
+                  <Switch 
+                    checked={settings?.proactive_suggestions_enabled ?? true}
+                    onCheckedChange={(checked) => handleSettingToggle('proactive_suggestions_enabled', checked)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
+                  <div className="space-y-1">
+                    <Label className="text-sm font-medium">Learning Mode</Label>
+                    <p className="text-xs text-muted-foreground">Allow Arlo to learn from interactions</p>
+                  </div>
+                  <Switch 
+                    checked={settings?.learning_mode_enabled ?? true}
+                    onCheckedChange={(checked) => handleSettingToggle('learning_mode_enabled', checked)}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* Connection & API Settings */}
+        <section>
+          <Card className="bg-background/40 backdrop-blur-md border border-border/30">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Server className="h-5 w-5 text-primary" />
+                Connection Settings
+              </CardTitle>
+              <CardDescription>
+                Configure your connection to the Arlo AI backend services
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="endpoint">API Endpoint</Label>
+                  <Input
+                    id="endpoint"
+                    placeholder="http://100.64.0.1:8080"
+                    value={config.apiEndpoint}
+                    onChange={(e) => setConfig({ ...config, apiEndpoint: e.target.value })}
+                    className="bg-background/60 backdrop-blur-md border-border/30"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="token">API Token</Label>
+                  <Input
+                    id="token"
+                    type="password"
+                    placeholder="Enter your API token"
+                    value={config.apiToken}
+                    onChange={(e) => setConfig({ ...config, apiToken: e.target.value })}
+                    className="bg-background/60 backdrop-blur-md border-border/30"
+                  />
+                </div>
+              </div>
+              
+              {status && (
+                <div className="mt-6 p-4 rounded-lg bg-muted/20 border border-border/20">
+                  <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                    <Cpu className="h-4 w-4" />
+                    System Status
+                  </h4>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-primary">{Math.floor(status.uptime / 3600)}h</div>
+                      <div className="text-muted-foreground">Uptime</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-primary">{status.memory}%</div>
+                      <div className="text-muted-foreground">Memory</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-primary">{status.cpu}%</div>
+                      <div className="text-muted-foreground">CPU</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-primary">{status.modules.length}</div>
+                      <div className="text-muted-foreground">Modules</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <Button onClick={handleSaveConnectionConfig} className="w-full">
+                Save Connection Settings
+              </Button>
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* Privacy & Security */}
+        <section>
+          <Card className="bg-background/40 backdrop-blur-md border border-border/30">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-primary" />
+                Privacy & Security
+              </CardTitle>
+              <CardDescription>
+                Control your data privacy and security preferences
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
+                  <div className="space-y-1">
+                    <Label className="text-sm font-medium">Data Collection</Label>
+                    <p className="text-xs text-muted-foreground">Allow usage data collection</p>
+                  </div>
+                  <Switch 
+                    checked={settings?.data_collection_enabled ?? true}
+                    onCheckedChange={(checked) => handleSettingToggle('data_collection_enabled', checked)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
+                  <div className="space-y-1">
+                    <Label className="text-sm font-medium">Analytics</Label>
+                    <p className="text-xs text-muted-foreground">Help improve Arlo with analytics</p>
+                  </div>
+                  <Switch 
+                    checked={settings?.analytics_enabled ?? true}
+                    onCheckedChange={(checked) => handleSettingToggle('analytics_enabled', checked)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
+                  <div className="space-y-1">
+                    <Label className="text-sm font-medium">End-to-End Encryption</Label>
+                    <p className="text-xs text-muted-foreground">Encrypt all communications</p>
+                  </div>
+                  <Switch 
+                    checked={settings?.encryption_enabled ?? true}
+                    onCheckedChange={(checked) => handleSettingToggle('encryption_enabled', checked)}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        {/* Notifications */}
+        <section>
+          <Card className="bg-background/40 backdrop-blur-md border border-border/30">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bell className="h-5 w-5 text-primary" />
+                Notifications
+              </CardTitle>
+              <CardDescription>
+                Manage how and when you receive notifications
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
+                  <div className="space-y-1">
+                    <Label className="text-sm font-medium">Push Notifications</Label>
+                    <p className="text-xs text-muted-foreground">Receive push notifications</p>
+                  </div>
+                  <Switch 
+                    checked={settings?.push_notifications_enabled ?? true}
+                    onCheckedChange={(checked) => handleSettingToggle('push_notifications_enabled', checked)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
+                  <div className="space-y-1">
+                    <Label className="text-sm font-medium">Email Notifications</Label>
+                    <p className="text-xs text-muted-foreground">Receive email updates</p>
+                  </div>
+                  <Switch 
+                    checked={settings?.email_notifications_enabled ?? false}
+                    onCheckedChange={(checked) => handleSettingToggle('email_notifications_enabled', checked)}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
+                  <div className="space-y-1">
+                    <Label className="text-sm font-medium">Sound</Label>
+                    <p className="text-xs text-muted-foreground">Play sound for notifications</p>
+                  </div>
+                  <Switch 
+                    checked={settings?.sound_enabled ?? true}
+                    onCheckedChange={(checked) => handleSettingToggle('sound_enabled', checked)}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+      </>
+    );
   };
 
   return (
@@ -76,242 +380,7 @@ export default function Settings() {
         </header>
 
         <main className="space-y-8">
-          {/* Appearance Settings */}
-          <section>
-            <Card className="bg-background/40 backdrop-blur-md border border-border/30">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Palette className="h-5 w-5 text-primary" />
-                  Appearance
-                </CardTitle>
-                <CardDescription>
-                  Customize the visual appearance and theme of the interface
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <EnhancedThemeToggle />
-              </CardContent>
-            </Card>
-          </section>
-
-          {/* AI Assistant Settings */}
-          <section>
-            <Card className="bg-background/40 backdrop-blur-md border border-border/30">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Bot className="h-5 w-5 text-primary" />
-                  AI Assistant
-                </CardTitle>
-                <CardDescription>
-                  Configure how Arlo AI behaves and responds to your queries
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
-                    <div className="space-y-1">
-                      <Label className="text-sm font-medium">Voice Responses</Label>
-                      <p className="text-xs text-muted-foreground">Enable audio responses from Arlo</p>
-                    </div>
-                    <Switch />
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
-                    <div className="space-y-1">
-                      <Label className="text-sm font-medium">Auto Suggestions</Label>
-                      <p className="text-xs text-muted-foreground">Show contextual suggestions</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
-                    <div className="space-y-1">
-                      <Label className="text-sm font-medium">Smart Completion</Label>
-                      <p className="text-xs text-muted-foreground">Auto-complete commands and queries</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
-                    <div className="space-y-1">
-                      <Label className="text-sm font-medium">Learning Mode</Label>
-                      <p className="text-xs text-muted-foreground">Allow Arlo to learn from interactions</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </section>
-
-          {/* Connection & API Settings */}
-          <section>
-            <Card className="bg-background/40 backdrop-blur-md border border-border/30">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Server className="h-5 w-5 text-primary" />
-                  Connection Settings
-                </CardTitle>
-                <CardDescription>
-                  Configure your connection to the Arlo AI backend services
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="endpoint">API Endpoint</Label>
-                    <Input
-                      id="endpoint"
-                      placeholder="http://100.64.0.1:8080"
-                      value={config.apiEndpoint}
-                      className="bg-background/60 backdrop-blur-md border-border/30"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="token">API Token</Label>
-                    <Input
-                      id="token"
-                      type="password"
-                      placeholder="Enter your API token"
-                      value={config.apiToken}
-                      className="bg-background/60 backdrop-blur-md border-border/30"
-                    />
-                  </div>
-                </div>
-                
-                {status && (
-                  <div className="mt-6 p-4 rounded-lg bg-muted/20 border border-border/20">
-                    <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
-                      <Cpu className="h-4 w-4" />
-                      System Status
-                    </h4>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                      <div className="text-center">
-                        <div className="text-lg font-bold text-primary">{Math.floor(status.uptime / 3600)}h</div>
-                        <div className="text-muted-foreground">Uptime</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-lg font-bold text-primary">{status.memory}%</div>
-                        <div className="text-muted-foreground">Memory</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-lg font-bold text-primary">{status.cpu}%</div>
-                        <div className="text-muted-foreground">CPU</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-lg font-bold text-primary">{status.modules.length}</div>
-                        <div className="text-muted-foreground">Modules</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <Button onClick={handleSaveConfig} className="w-full">
-                  Save Connection Settings
-                </Button>
-              </CardContent>
-            </Card>
-          </section>
-
-          {/* Privacy & Security */}
-          <section>
-            <Card className="bg-background/40 backdrop-blur-md border border-border/30">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-primary" />
-                  Privacy & Security
-                </CardTitle>
-                <CardDescription>
-                  Control your data privacy and security preferences
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
-                    <div className="space-y-1">
-                      <Label className="text-sm font-medium">Data Collection</Label>
-                      <p className="text-xs text-muted-foreground">Allow usage data collection</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
-                    <div className="space-y-1">
-                      <Label className="text-sm font-medium">Analytics</Label>
-                      <p className="text-xs text-muted-foreground">Help improve Arlo with analytics</p>
-                    </div>
-                    <Switch />
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
-                    <div className="space-y-1">
-                      <Label className="text-sm font-medium">Chat History</Label>
-                      <p className="text-xs text-muted-foreground">Store conversation history</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
-                    <div className="space-y-1">
-                      <Label className="text-sm font-medium">End-to-End Encryption</Label>
-                      <p className="text-xs text-muted-foreground">Encrypt all communications</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </section>
-
-          {/* Notifications */}
-          <section>
-            <Card className="bg-background/40 backdrop-blur-md border border-border/30">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Bell className="h-5 w-5 text-primary" />
-                  Notifications
-                </CardTitle>
-                <CardDescription>
-                  Manage how and when you receive notifications
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
-                    <div className="space-y-1">
-                      <Label className="text-sm font-medium">Push Notifications</Label>
-                      <p className="text-xs text-muted-foreground">Receive push notifications</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
-                    <div className="space-y-1">
-                      <Label className="text-sm font-medium">Email Notifications</Label>
-                      <p className="text-xs text-muted-foreground">Receive email updates</p>
-                    </div>
-                    <Switch />
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
-                    <div className="space-y-1">
-                      <Label className="text-sm font-medium">System Alerts</Label>
-                      <p className="text-xs text-muted-foreground">Critical system notifications</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
-                    <div className="space-y-1">
-                      <Label className="text-sm font-medium">Update Notifications</Label>
-                      <p className="text-xs text-muted-foreground">Notify about updates</p>
-                    </div>
-                    <Switch defaultChecked />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </section>
+          {renderSettingsContent()}
         </main>
       </div>
     </div>
