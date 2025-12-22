@@ -259,6 +259,7 @@ export type Database = {
           elements: Json | null
           folder_id: string | null
           id: string
+          note_type: string
           pan_x: number
           pan_y: number
           pinned: boolean
@@ -274,6 +275,7 @@ export type Database = {
           elements?: Json | null
           folder_id?: string | null
           id?: string
+          note_type?: string
           pan_x?: number
           pan_y?: number
           pinned?: boolean
@@ -289,6 +291,7 @@ export type Database = {
           elements?: Json | null
           folder_id?: string | null
           id?: string
+          note_type?: string
           pan_x?: number
           pan_y?: number
           pinned?: boolean

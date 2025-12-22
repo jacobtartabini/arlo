@@ -1,6 +1,7 @@
 // Smart Notes Types
 
 export type NoteId = string;
+export type NoteType = "canvas" | "page";
 
 export interface NoteElement {
   id: string;
@@ -56,6 +57,7 @@ export interface ModuleElement extends NoteElement {
 export interface Note {
   id: NoteId;
   title: string;
+  noteType: NoteType;
   thumbnail?: string;
   canvasState: string; // Serialized Fabric.js canvas JSON
   elements: NoteElement[];
