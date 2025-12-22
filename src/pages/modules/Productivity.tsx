@@ -1,13 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ModuleTemplate, type ModuleSection, type ModuleStat } from "@/components/ModuleTemplate";
 import { CalendarCheck, CheckSquare, Clock3, Flame, GaugeCircle, MailCheck } from "lucide-react";
-
-const tasks = [
-  { id: 1, label: "Ship design review summary", done: true },
-  { id: 2, label: "Respond to research thread", done: false },
-  { id: 3, label: "Plan Q2 roadmap milestones", done: false },
-  { id: 4, label: "Prep investor update outline", done: true },
-];
+import { useTasksPersistence } from "@/hooks/useTasksPersistence";
+import { useHabitsPersistence } from "@/hooks/useHabitsPersistence";
+import { supabase } from "@/integrations/supabase/client";
+import type { Task } from "@/types/tasks";
+import type { HabitWithStreak } from "@/types/habits";
 
 const schedule = [
   { time: "08:30", label: "Inbox triage" },
@@ -22,27 +20,68 @@ const inboxPreview = [
   { source: "Email", subject: "Team Daily", snippet: "Notes and action items compiled." },
 ];
 
-const habits = [
-  { label: "Morning routine", streak: 12 },
-  { label: "Evening shutdown", streak: 9 },
-  { label: "Read 20 pages", streak: 6 },
-];
-
 export default function Productivity() {
+  const { fetchTasks, toggleTask } = useTasksPersistence();
+  const { fetchHabitsWithStreaks } = useHabitsPersistence();
+  
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [habits, setHabits] = useState<HabitWithStreak[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
   useEffect(() => {
     document.title = "Productivity — Arlo";
   }, []);
 
+  useEffect(() => {
+    const checkAuthAndLoad = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setIsAuthenticated(!!user);
+      
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      const [fetchedTasks, fetchedHabits] = await Promise.all([
+        fetchTasks(),
+        fetchHabitsWithStreaks(),
+      ]);
+      setTasks(fetchedTasks);
+      setHabits(fetchedHabits.filter(h => h.category === "routine" && h.enabled));
+      setLoading(false);
+    };
+
+    checkAuthAndLoad();
+  }, []);
+
+  const handleToggleTask = async (taskId: string, done: boolean) => {
+    // Optimistic update
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, done } : t));
+    const success = await toggleTask(taskId, done);
+    if (!success) {
+      // Revert on failure
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, done: !done } : t));
+    }
+  };
+
+  const completedCount = tasks.filter(t => t.done).length;
+  const totalCount = tasks.length;
+  const completionPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+  const tasksLeft = totalCount - completedCount;
+  const maxStreak = habits.length > 0 ? Math.max(...habits.map(h => h.streak)) : 0;
+
   const stats: ModuleStat[] = [
     { label: "Focus mode", value: "On", helper: "90 minutes", tone: "positive", trend: [30, 45, 60, 90] },
-    { label: "Today’s completion", value: "62%", helper: "2 tasks left", tone: "neutral", trend: [30, 52, 62] },
+    { label: "Today's completion", value: `${completionPercent}%`, helper: `${tasksLeft} tasks left`, tone: "neutral", trend: [30, 52, completionPercent] },
     { label: "Next event", value: "Design critique", helper: "Apr 28 · 09:30", tone: "neutral", trend: [1, 1.5, 2] },
-    { label: "Active habits", value: "3", helper: "+12 day streak", tone: "positive", trend: [1, 2, 3, 3] },
+    { label: "Active habits", value: String(habits.length), helper: `+${maxStreak} day streak`, tone: "positive", trend: [1, 2, 3, habits.length] },
   ];
 
   const sections: ModuleSection[] = [
     {
-      title: "Today’s priorities",
+      title: "Today's priorities",
       description: "A calm stack: what moves, where the time is, and which rituals keep you steady.",
       variant: "split",
       items: [
@@ -55,8 +94,8 @@ export default function Productivity() {
           visual: { type: "progress", value: 62, label: "Block progress" },
           spotlight: true,
         },
-        ...tasks.map((task) => ({
-          title: task.label,
+        ...tasks.slice(0, 4).map((task) => ({
+          title: task.title,
           badge: task.done ? "Done" : "Next",
           tone: (task.done ? "positive" : "info") as "positive" | "info",
           meta: task.done ? "Completed" : "Unstarted",
@@ -92,8 +131,8 @@ export default function Productivity() {
     {
       title: "Habits",
       description: "Streaks that anchor your day and keep Arlo calibrated to your rhythm.",
-      items: habits.map((habit) => ({
-        title: habit.label,
+      items: habits.slice(0, 3).map((habit) => ({
+        title: habit.title,
         description: `${habit.streak}-day streak`,
         badge: "Keep warm",
         tone: "positive",

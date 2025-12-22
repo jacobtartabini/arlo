@@ -1,46 +1,97 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ModuleTemplate, type ModuleSection, type ModuleStat } from "@/components/ModuleTemplate";
 import { Flame } from "lucide-react";
-
-const routines = [
-  { title: "Morning routine", description: "Wake, hydrate, stretch", badge: "12 day streak" },
-  { title: "Evening shutdown", description: "Plan tomorrow + tidy", badge: "9 day streak" },
-  { title: "Read 20 pages", description: "Track in Kindle", badge: "6 day streak" },
-];
-
-const experiments = [
-  { title: "No-meeting mornings", description: "Block 9–11 AM", badge: "Testing" },
-  { title: "Screen-free hour", description: "After 9 PM", badge: "New" },
-];
-
-const reflections = [
-  { title: "Last week", description: "5/7 habits kept", badge: "Recap" },
-  { title: "This week", description: "Adjust evening wind-down", badge: "Note" },
-];
+import { useHabitsPersistence } from "@/hooks/useHabitsPersistence";
+import { supabase } from "@/integrations/supabase/client";
+import type { HabitWithStreak } from "@/types/habits";
 
 export default function Habits() {
+  const { fetchHabitsWithStreaks } = useHabitsPersistence();
+  
+  const [habits, setHabits] = useState<HabitWithStreak[]>([]);
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
     document.title = "Habits — Arlo";
   }, []);
 
+  useEffect(() => {
+    const checkAuthAndLoad = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      const fetchedHabits = await fetchHabitsWithStreaks();
+      setHabits(fetchedHabits);
+      setLoading(false);
+    };
+
+    checkAuthAndLoad();
+  }, []);
+
+  const routines = habits.filter(h => h.category === "routine" && h.enabled);
+  const experiments = habits.filter(h => h.category === "experiment" && h.enabled);
+  const reflections = habits.filter(h => h.category === "reflection");
+
+  const longestStreak = habits.length > 0 ? Math.max(...habits.map(h => h.streak)) : 0;
+  const longestStreakHabit = habits.find(h => h.streak === longestStreak);
+  
+  // Count missed (habits not completed today)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const missedToday = routines.filter(h => {
+    if (!h.lastCompleted) return true;
+    const lastDate = new Date(h.lastCompleted);
+    lastDate.setHours(0, 0, 0, 0);
+    return lastDate.getTime() < today.getTime();
+  }).length;
+
   const stats: ModuleStat[] = [
-    { label: "Active habits", value: "3", helper: "Balanced", tone: "positive" },
-    { label: "Longest streak", value: "12 days", helper: "Morning", tone: "positive" },
-    { label: "Experiments", value: "2", helper: "Review Friday", tone: "neutral" },
-    { label: "Missed", value: "1", helper: "Yesterday", tone: "neutral" },
+    { label: "Active habits", value: String(routines.length), helper: "Balanced", tone: "positive" },
+    { label: "Longest streak", value: `${longestStreak} days`, helper: longestStreakHabit?.title ?? "None", tone: "positive" },
+    { label: "Experiments", value: String(experiments.length), helper: "Review Friday", tone: "neutral" },
+    { label: "Missed", value: String(missedToday), helper: "Today", tone: missedToday > 0 ? "neutral" : "positive" },
   ];
 
   const sections: ModuleSection[] = [
-    { title: "Routines", description: "Keep it short and repeatable.", items: routines },
-    { title: "Experiments", description: "Trials you’re running this week.", items: experiments },
-    { title: "Reflections", description: "Learnings Arlo captured for you.", items: reflections },
+    { 
+      title: "Routines", 
+      description: "Keep it short and repeatable.", 
+      items: routines.map(h => ({
+        title: h.title,
+        description: h.description ?? "Daily habit",
+        badge: `${h.streak} day streak`,
+      }))
+    },
+    { 
+      title: "Experiments", 
+      description: "Trials you're running this week.", 
+      items: experiments.map(h => ({
+        title: h.title,
+        description: h.description ?? "Testing",
+        badge: h.streak > 0 ? `${h.streak} days` : "New",
+      }))
+    },
+    { 
+      title: "Reflections", 
+      description: "Learnings Arlo captured for you.", 
+      items: reflections.map(h => ({
+        title: h.title,
+        description: h.description ?? "Reflection",
+        badge: "Note",
+      }))
+    },
   ];
 
   return (
     <ModuleTemplate
       icon={Flame}
       title="Habits"
-      description="Just the rituals you’re working on, the experiments you’re testing, and a quick reflection to adjust."
+      description="Just the rituals you're working on, the experiments you're testing, and a quick reflection to adjust."
       primaryAction="Add habit"
       secondaryAction="Log reflection"
       stats={stats}
@@ -48,4 +99,3 @@ export default function Habits() {
     />
   );
 }
-
