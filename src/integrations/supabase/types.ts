@@ -308,6 +308,42 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          action_data: Json | null
+          action_type: string | null
+          content: string | null
+          created_at: string
+          id: string
+          read: boolean
+          source: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          action_data?: Json | null
+          action_type?: string | null
+          content?: string | null
+          created_at?: string
+          id?: string
+          read?: boolean
+          source?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          action_data?: Json | null
+          action_type?: string | null
+          content?: string | null
+          created_at?: string
+          id?: string
+          read?: boolean
+          source?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       tasks: {
         Row: {
           category: string | null
