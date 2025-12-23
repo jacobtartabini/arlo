@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, PanelLeftClose, PanelLeft, LogIn, Loader2 } from "lucide-react";
 import { NotesSidebar } from "@/components/notes/NotesSidebar";
 import { NoteCanvas } from "@/components/notes/NoteCanvas";
+import { PageNoteEditor } from "@/components/notes/PageNoteEditor";
 import { CreateNoteDialog } from "@/components/notes/CreateNoteDialog";
 import type { Note, NoteType } from "@/types/notes";
 import { useNotesPersistence } from "@/hooks/useNotesPersistence";
@@ -152,6 +153,20 @@ export default function Notes() {
     [selectedNote, saveNote]
   );
 
+  const handleSavePageContent = useCallback(
+    async (content: string) => {
+      if (!selectedNote) return;
+      
+      const updatedNote: Note = {
+        ...selectedNote,
+        canvasState: content,
+      };
+      
+      await saveNote(updatedNote);
+    },
+    [selectedNote, saveNote]
+  );
+
   // Loading state
   if (isLoading) {
     return (
@@ -251,14 +266,22 @@ export default function Notes() {
           <div className="w-24" /> {/* Spacer for balance */}
         </header>
 
-        {/* Canvas area */}
+        {/* Editor area */}
         <div className="flex-1 relative">
           {selectedNote ? (
-            <NoteCanvas
-              key={selectedNote.id}
-              note={selectedNote}
-              onSave={handleSaveCanvas}
-            />
+            selectedNote.noteType === "page" ? (
+              <PageNoteEditor
+                key={selectedNote.id}
+                note={selectedNote}
+                onSave={handleSavePageContent}
+              />
+            ) : (
+              <NoteCanvas
+                key={selectedNote.id}
+                note={selectedNote}
+                onSave={handleSaveCanvas}
+              />
+            )
           ) : (
             <div className="flex h-full items-center justify-center">
               <div className="text-center">

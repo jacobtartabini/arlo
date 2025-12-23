@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, DragEvent } from "react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ import {
   FileText,
   FolderOpen,
   FolderPlus,
+  GripVertical,
   MoreHorizontal,
   PenLine,
   Pin,
@@ -69,6 +70,8 @@ export function NotesSidebar({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const [foldersExpanded, setFoldersExpanded] = useState(true);
+  const [draggedNoteId, setDraggedNoteId] = useState<string | null>(null);
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null | "none">(null);
 
   // Filter notes based on search and selected folder
   const filteredNotes = notes.filter((note) => {
@@ -101,25 +104,73 @@ export function NotesSidebar({
     );
   };
 
+  // Drag and drop handlers
+  const handleDragStart = useCallback((e: DragEvent<HTMLDivElement>, noteId: string) => {
+    setDraggedNoteId(noteId);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", noteId);
+    // Add drag ghost styling
+    if (e.currentTarget) {
+      e.currentTarget.style.opacity = "0.5";
+    }
+  }, []);
+
+  const handleDragEnd = useCallback((e: DragEvent<HTMLDivElement>) => {
+    setDraggedNoteId(null);
+    setDragOverFolderId(null);
+    if (e.currentTarget) {
+      e.currentTarget.style.opacity = "1";
+    }
+  }, []);
+
+  const handleDragOver = useCallback((e: DragEvent<HTMLButtonElement>, folderId: string | null) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverFolderId(folderId === null ? "none" : folderId);
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverFolderId(null);
+  }, []);
+
+  const handleDrop = useCallback((e: DragEvent<HTMLButtonElement>, folderId: string | null) => {
+    e.preventDefault();
+    const noteId = e.dataTransfer.getData("text/plain");
+    if (noteId && draggedNoteId) {
+      onMoveToFolder(noteId, folderId);
+    }
+    setDraggedNoteId(null);
+    setDragOverFolderId(null);
+  }, [draggedNoteId, onMoveToFolder]);
+
   const renderNoteItem = (note: Note) => {
     const isSelected = note.id === selectedNoteId;
     const isEditing = editingId === note.id;
     const noteFolder = folders.find(f => f.id === note.folderId);
+    const isDragging = draggedNoteId === note.id;
 
     return (
       <div
         key={note.id}
+        draggable={!isEditing}
+        onDragStart={(e) => handleDragStart(e, note.id)}
+        onDragEnd={handleDragEnd}
         className={cn(
-          "group relative flex items-start gap-3 rounded-xl px-3 py-3 transition-colors cursor-pointer",
+          "group relative flex items-start gap-2 rounded-xl px-3 py-3 transition-all cursor-pointer",
           isSelected
             ? "bg-primary/10 border border-primary/20"
-            : "hover:bg-muted/50 border border-transparent"
+            : "hover:bg-muted/50 border border-transparent",
+          isDragging && "opacity-50 scale-[0.98]"
         )}
         onClick={() => !isEditing && onSelectNote(note.id)}
       >
+        {/* Drag handle */}
+        <div className="flex-shrink-0 opacity-0 group-hover:opacity-50 cursor-grab active:cursor-grabbing pt-2">
+          <GripVertical className="h-4 w-4 text-muted-foreground" />
+        </div>
         <div className={cn(
           "flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-muted-foreground",
-          note.noteType === "canvas" ? "bg-violet-500/10 text-violet-500" : "bg-muted/60"
+          note.noteType === "canvas" ? "bg-violet-500/10 text-violet-500" : "bg-blue-500/10 text-blue-500"
         )}>
           {getNoteIcon(note)}
         </div>
@@ -286,11 +337,15 @@ export function NotesSidebar({
             <CollapsibleContent className="space-y-1">
               <button
                 onClick={() => onSelectFolder(null)}
+                onDragOver={(e) => handleDragOver(e, null)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, null)}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+                  "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-all",
                   selectedFolderId === null
                     ? "bg-primary/10 text-primary font-medium"
-                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                  dragOverFolderId === "none" && "ring-2 ring-primary ring-offset-2 ring-offset-background"
                 )}
               >
                 <FolderOpen className="h-4 w-4" />
@@ -301,15 +356,20 @@ export function NotesSidebar({
               </button>
               {folders.map((folder) => {
                 const count = notes.filter(n => n.folderId === folder.id).length;
+                const isDragOver = dragOverFolderId === folder.id;
                 return (
                   <div key={folder.id} className="group flex items-center">
                     <button
                       onClick={() => onSelectFolder(folder.id)}
+                      onDragOver={(e) => handleDragOver(e, folder.id)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDrop(e, folder.id)}
                       className={cn(
-                        "flex flex-1 items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+                        "flex flex-1 items-center gap-2 rounded-lg px-3 py-2 text-sm transition-all",
                         selectedFolderId === folder.id
                           ? "bg-primary/10 text-primary font-medium"
-                          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                        isDragOver && "ring-2 ring-primary ring-offset-2 ring-offset-background"
                       )}
                     >
                       <span 
