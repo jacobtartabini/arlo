@@ -404,6 +404,14 @@ export default function NotesDashboard() {
           )}
         </div>
       </div>
+
+      {/* Create Note Dialog */}
+      <CreateNoteDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        onCreateNote={handleNewNote}
+        folders={folders}
+      />
     </div>
   );
 }
@@ -523,5 +531,3 @@ function NotePreviewRow({
     </button>
   );
 }
-
-// Add CreateNoteDialog at the end of NotesDashboard component - need to update the return statement
