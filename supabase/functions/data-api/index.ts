@@ -11,8 +11,9 @@ const supabase = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 )
 
-// Static user ID for Tailscale-authenticated users (single-user system)
-const ARLO_USER_ID = 'arlo-tailscale-user'
+// Static UUID for Tailscale-authenticated users (single-user system)
+// This is a fixed UUID that represents the Tailscale-verified user
+const ARLO_USER_ID = '00000000-0000-0000-0000-000000000001'
 
 interface RequestBody {
   action: string

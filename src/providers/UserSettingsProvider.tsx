@@ -24,8 +24,8 @@ function isTailscaleVerified(): boolean {
   return verified && !!expiry && Date.now() < parseInt(expiry);
 }
 
-// Static user ID for Tailscale-authenticated users
-const ARLO_USER_ID = 'arlo-tailscale-user';
+// Static UUID for Tailscale-authenticated users
+const ARLO_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 interface DbUserSettings {
   id: string;
