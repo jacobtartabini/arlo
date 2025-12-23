@@ -179,24 +179,19 @@ export default function Notes() {
     );
   }
 
-  // Not authenticated
+  // Not authenticated - redirect to login
   if (!isAuthenticated) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4 text-center max-w-md px-4">
           <LogIn className="h-12 w-12 text-muted-foreground" />
-          <h2 className="text-xl font-semibold">Sign in to access Notes</h2>
+          <h2 className="text-xl font-semibold">Tailscale login required</h2>
           <p className="text-muted-foreground">
-            Your notes are securely stored in the cloud and sync across all your devices.
+            Please connect via Tailscale to access your notes.
           </p>
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={() => navigate("/dashboard")}>
-              Back to Dashboard
-            </Button>
-            <Button onClick={() => navigate("/login")}>
-              Sign In
-            </Button>
-          </div>
+          <Button onClick={() => navigate("/login")}>
+            Connect
+          </Button>
         </div>
       </div>
     );

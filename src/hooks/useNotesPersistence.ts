@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { dataApiHelpers } from '@/lib/data-api';
 import type { Note, NoteFolder } from '@/types/notes';
 import { toast } from 'sonner';
 
@@ -67,31 +67,38 @@ const dbToFolder = (dbFolder: DbNoteFolder): NoteFolder => ({
   createdAt: dbFolder.created_at,
 });
 
+/**
+ * Check if Tailscale is verified
+ */
+function isTailscaleVerified(): boolean {
+  if (typeof window === 'undefined') return false;
+  const verified = sessionStorage.getItem('arlo_access_verified') === 'true';
+  const expiry = sessionStorage.getItem('arlo_access_verified_expiry');
+  return verified && !!expiry && Date.now() < parseInt(expiry);
+}
+
 export function useNotesPersistence() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [folders, setFolders] = useState<NoteFolder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Check for authenticated user
+  // Check Tailscale auth status
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setUserId(session?.user?.id ?? null);
+    const checkAuth = () => {
+      setIsAuthenticated(isTailscaleVerified());
     };
     
     checkAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUserId(session?.user?.id ?? null);
-    });
-
-    return () => subscription.unsubscribe();
+    
+    // Re-check periodically in case session expires
+    const interval = setInterval(checkAuth, 30000);
+    return () => clearInterval(interval);
   }, []);
 
-  // Fetch notes and folders when userId changes
+  // Fetch notes and folders
   const fetchNotes = useCallback(async () => {
-    if (!userId) {
+    if (!isTailscaleVerified()) {
       setNotes([]);
       setFolders([]);
       setIsLoading(false);
@@ -102,22 +109,18 @@ export function useNotesPersistence() {
       setIsLoading(true);
 
       const [notesResult, foldersResult] = await Promise.all([
-        supabase
-          .from('notes')
-          .select('*')
-          .eq('user_id', userId)
-          .order('updated_at', { ascending: false }),
-        supabase
-          .from('note_folders')
-          .select('*')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false }),
+        dataApiHelpers.select<DbNote[]>('notes', {
+          order: { column: 'updated_at', ascending: false },
+        }),
+        dataApiHelpers.select<DbNoteFolder[]>('note_folders', {
+          order: { column: 'created_at', ascending: false },
+        }),
       ]);
 
       if (notesResult.error) {
         console.error('Error fetching notes:', notesResult.error);
-      } else {
-        const transformedNotes = (notesResult.data ?? []).map(dbToNote);
+      } else if (notesResult.data) {
+        const transformedNotes = notesResult.data.map(dbToNote);
         // Sort: pinned first, then by updated_at
         const sorted = transformedNotes.sort((a, b) => {
           if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
@@ -128,15 +131,15 @@ export function useNotesPersistence() {
 
       if (foldersResult.error) {
         console.error('Error fetching folders:', foldersResult.error);
-      } else {
-        setFolders((foldersResult.data ?? []).map(dbToFolder));
+      } else if (foldersResult.data) {
+        setFolders(foldersResult.data.map(dbToFolder));
       }
     } catch (error) {
       console.error('Error in fetchNotes:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [userId]);
+  }, []);
 
   useEffect(() => {
     fetchNotes();
@@ -152,12 +155,11 @@ export function useNotesPersistence() {
 
   // Create a new note
   const createNote = useCallback(async (overrides: Partial<Note> = {}): Promise<Note | null> => {
-    if (!userId) {
+    if (!isTailscaleVerified()) {
       toast.error('Please log in to create notes');
       return null;
     }
 
-    const now = new Date().toISOString();
     const newNote: Partial<Note> = {
       title: 'Untitled Note',
       noteType: 'canvas',
@@ -173,25 +175,9 @@ export function useNotesPersistence() {
 
     try {
       const dbData = noteToDb(newNote);
-      const { data, error } = await supabase
-        .from('notes')
-        .insert({
-          user_id: userId,
-          title: dbData.title,
-          note_type: dbData.note_type,
-          canvas_state: dbData.canvas_state,
-          elements: dbData.elements,
-          tags: dbData.tags,
-          folder_id: dbData.folder_id,
-          pinned: dbData.pinned,
-          zoom: dbData.zoom,
-          pan_x: dbData.pan_x,
-          pan_y: dbData.pan_y,
-        } as any)
-        .select()
-        .single();
+      const { data, error } = await dataApiHelpers.insert<DbNote>('notes', dbData);
 
-      if (error) {
+      if (error || !data) {
         console.error('Error creating note:', error);
         toast.error('Failed to create note');
         return null;
@@ -205,33 +191,18 @@ export function useNotesPersistence() {
       toast.error('Failed to create note');
       return null;
     }
-  }, [userId]);
+  }, []);
 
   // Save/update a note
   const saveNote = useCallback(async (note: Note): Promise<boolean> => {
-    if (!userId) return false;
+    if (!isTailscaleVerified()) return false;
 
     // Optimistic update
     setNotes(prev => sortNotes(prev.map(n => n.id === note.id ? note : n)));
 
     try {
       const dbData = noteToDb(note);
-      const { error } = await supabase
-        .from('notes')
-        .update({
-          title: dbData.title,
-          note_type: dbData.note_type,
-          canvas_state: dbData.canvas_state,
-          elements: dbData.elements,
-          tags: dbData.tags,
-          folder_id: dbData.folder_id,
-          pinned: dbData.pinned,
-          zoom: dbData.zoom,
-          pan_x: dbData.pan_x,
-          pan_y: dbData.pan_y,
-        } as any)
-        .eq('id', note.id)
-        .eq('user_id', userId);
+      const { error } = await dataApiHelpers.update('notes', note.id, dbData);
 
       if (error) {
         console.error('Error saving note:', error);
@@ -246,22 +217,18 @@ export function useNotesPersistence() {
       await fetchNotes();
       return false;
     }
-  }, [userId, fetchNotes]);
+  }, [fetchNotes]);
 
   // Delete a note
   const deleteNote = useCallback(async (noteId: string): Promise<boolean> => {
-    if (!userId) return false;
+    if (!isTailscaleVerified()) return false;
 
     // Optimistic update
     const previousNotes = notes;
     setNotes(prev => prev.filter(n => n.id !== noteId));
 
     try {
-      const { error } = await supabase
-        .from('notes')
-        .delete()
-        .eq('id', noteId)
-        .eq('user_id', userId);
+      const { error } = await dataApiHelpers.delete('notes', noteId);
 
       if (error) {
         console.error('Error deleting note:', error);
@@ -276,54 +243,46 @@ export function useNotesPersistence() {
       setNotes(previousNotes);
       return false;
     }
-  }, [userId, notes]);
+  }, [notes]);
 
   // Duplicate a note
   const duplicateNote = useCallback(async (noteId: string): Promise<Note | null> => {
     const original = notes.find(n => n.id === noteId);
-    if (!original || !userId) return null;
+    if (!original || !isTailscaleVerified()) return null;
 
     return createNote({
       ...original,
       title: `${original.title} (Copy)`,
       pinned: false,
     });
-  }, [notes, userId, createNote]);
+  }, [notes, createNote]);
 
   // Toggle pin
   const togglePinNote = useCallback(async (noteId: string): Promise<boolean> => {
     const note = notes.find(n => n.id === noteId);
-    if (!note || !userId) return false;
+    if (!note || !isTailscaleVerified()) return false;
 
     const updatedNote = { ...note, pinned: !note.pinned };
     return saveNote(updatedNote);
-  }, [notes, userId, saveNote]);
+  }, [notes, saveNote]);
 
   // Rename note
   const renameNote = useCallback(async (noteId: string, title: string): Promise<boolean> => {
     const note = notes.find(n => n.id === noteId);
-    if (!note || !userId) return false;
+    if (!note || !isTailscaleVerified()) return false;
 
     const updatedNote = { ...note, title };
     return saveNote(updatedNote);
-  }, [notes, userId, saveNote]);
+  }, [notes, saveNote]);
 
   // Create folder
   const createFolder = useCallback(async (name: string, color: string = '#3b82f6'): Promise<NoteFolder | null> => {
-    if (!userId) return null;
+    if (!isTailscaleVerified()) return null;
 
     try {
-      const { data, error } = await supabase
-        .from('note_folders')
-        .insert({
-          user_id: userId,
-          name,
-          color,
-        })
-        .select()
-        .single();
+      const { data, error } = await dataApiHelpers.insert<DbNoteFolder>('note_folders', { name, color });
 
-      if (error) {
+      if (error || !data) {
         console.error('Error creating folder:', error);
         toast.error('Failed to create folder');
         return null;
@@ -336,25 +295,17 @@ export function useNotesPersistence() {
       console.error('Error in createFolder:', error);
       return null;
     }
-  }, [userId]);
+  }, []);
 
   // Delete folder
   const deleteFolder = useCallback(async (folderId: string): Promise<boolean> => {
-    if (!userId) return false;
+    if (!isTailscaleVerified()) return false;
 
     try {
       // First, remove folder reference from notes
-      await supabase
-        .from('notes')
-        .update({ folder_id: null })
-        .eq('folder_id', folderId)
-        .eq('user_id', userId);
+      await dataApiHelpers.updateWhere('notes', { folder_id: folderId }, { folder_id: null });
 
-      const { error } = await supabase
-        .from('note_folders')
-        .delete()
-        .eq('id', folderId)
-        .eq('user_id', userId);
+      const { error } = await dataApiHelpers.delete('note_folders', folderId);
 
       if (error) {
         console.error('Error deleting folder:', error);
@@ -368,13 +319,13 @@ export function useNotesPersistence() {
       console.error('Error in deleteFolder:', error);
       return false;
     }
-  }, [userId]);
+  }, []);
 
   return {
     notes,
     folders,
     isLoading,
-    isAuthenticated: !!userId,
+    isAuthenticated,
     createNote,
     saveNote,
     deleteNote,

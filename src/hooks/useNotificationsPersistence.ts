@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { dataApiHelpers } from "@/lib/data-api";
 import type { Notification } from "@/types/notifications";
 
 interface DbNotification {
@@ -24,34 +24,44 @@ const dbToNotification = (db: DbNotification): Notification => ({
   createdAt: new Date(db.created_at),
 });
 
+/**
+ * Check if Tailscale is verified
+ */
+function isTailscaleVerified(): boolean {
+  if (typeof window === 'undefined') return false;
+  const verified = sessionStorage.getItem('arlo_access_verified') === 'true';
+  const expiry = sessionStorage.getItem('arlo_access_verified_expiry');
+  return verified && !!expiry && Date.now() < parseInt(expiry);
+}
+
 export function useNotificationsPersistence() {
   const fetchNotifications = async (): Promise<Notification[]> => {
-    const { data, error } = await supabase
-      .from("notifications")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(50);
+    if (!isTailscaleVerified()) return [];
 
-    if (error) {
+    const { data, error } = await dataApiHelpers.select<DbNotification[]>('notifications', {
+      order: { column: 'created_at', ascending: false },
+      limit: 50,
+    });
+
+    if (error || !data) {
       console.error("Error fetching notifications:", error);
       return [];
     }
 
-    return (data as DbNotification[]).map(dbToNotification);
+    return data.map(dbToNotification);
   };
 
   const fetchUnreadCount = async (): Promise<number> => {
-    const { count, error } = await supabase
-      .from("notifications")
-      .select("*", { count: "exact", head: true })
-      .eq("read", false);
+    if (!isTailscaleVerified()) return 0;
+
+    const { count, error } = await dataApiHelpers.count('notifications', { read: false });
 
     if (error) {
       console.error("Error fetching unread count:", error);
       return 0;
     }
 
-    return count ?? 0;
+    return count;
   };
 
   const createNotification = async (
@@ -61,37 +71,28 @@ export function useNotificationsPersistence() {
     actionType?: string,
     actionData?: Record<string, unknown>
   ): Promise<Notification | null> => {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return null;
+    if (!isTailscaleVerified()) return null;
 
-    const insertData = {
-      user_id: userData.user.id,
+    const { data, error } = await dataApiHelpers.insert<DbNotification>('notifications', {
       title,
       content: content ?? null,
       source: source ?? "system",
       action_type: actionType ?? null,
       action_data: actionData ?? null,
-    };
+    });
 
-    const { data, error } = await supabase
-      .from("notifications")
-      .insert(insertData as any)
-      .select()
-      .single();
-
-    if (error) {
+    if (error || !data) {
       console.error("Error creating notification:", error);
       return null;
     }
 
-    return dbToNotification(data as DbNotification);
+    return dbToNotification(data);
   };
 
   const markAsRead = async (id: string): Promise<boolean> => {
-    const { error } = await supabase
-      .from("notifications")
-      .update({ read: true })
-      .eq("id", id);
+    if (!isTailscaleVerified()) return false;
+
+    const { error } = await dataApiHelpers.update('notifications', id, { read: true });
 
     if (error) {
       console.error("Error marking notification as read:", error);
@@ -102,14 +103,13 @@ export function useNotificationsPersistence() {
   };
 
   const markAllAsRead = async (): Promise<boolean> => {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return false;
+    if (!isTailscaleVerified()) return false;
 
-    const { error } = await supabase
-      .from("notifications")
-      .update({ read: true })
-      .eq("user_id", userData.user.id)
-      .eq("read", false);
+    const { error } = await dataApiHelpers.updateWhere(
+      'notifications',
+      { read: false },
+      { read: true }
+    );
 
     if (error) {
       console.error("Error marking all notifications as read:", error);
@@ -120,7 +120,9 @@ export function useNotificationsPersistence() {
   };
 
   const deleteNotification = async (id: string): Promise<boolean> => {
-    const { error } = await supabase.from("notifications").delete().eq("id", id);
+    if (!isTailscaleVerified()) return false;
+
+    const { error } = await dataApiHelpers.delete('notifications', id);
 
     if (error) {
       console.error("Error deleting notification:", error);

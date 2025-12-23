@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { dataApiHelpers } from "@/lib/data-api";
 import type { Habit, HabitLog, HabitWithStreak } from "@/types/habits";
 
 interface DbHabit {
@@ -70,19 +70,30 @@ const calculateStreak = (logs: HabitLog[]): number => {
   return streak;
 };
 
+/**
+ * Check if Tailscale is verified
+ */
+function isTailscaleVerified(): boolean {
+  if (typeof window === 'undefined') return false;
+  const verified = sessionStorage.getItem('arlo_access_verified') === 'true';
+  const expiry = sessionStorage.getItem('arlo_access_verified_expiry');
+  return verified && !!expiry && Date.now() < parseInt(expiry);
+}
+
 export function useHabitsPersistence() {
   const fetchHabits = async (): Promise<Habit[]> => {
-    const { data, error } = await supabase
-      .from("habits")
-      .select("*")
-      .order("created_at", { ascending: false });
+    if (!isTailscaleVerified()) return [];
 
-    if (error) {
+    const { data, error } = await dataApiHelpers.select<DbHabit[]>('habits', {
+      order: { column: 'created_at', ascending: false },
+    });
+
+    if (error || !data) {
       console.error("Error fetching habits:", error);
       return [];
     }
 
-    return (data as DbHabit[]).map(dbToHabit);
+    return data.map(dbToHabit);
   };
 
   const fetchHabitsWithStreaks = async (): Promise<HabitWithStreak[]> => {
@@ -101,17 +112,18 @@ export function useHabitsPersistence() {
   };
 
   const fetchAllHabitLogs = async (): Promise<HabitLog[]> => {
-    const { data, error } = await supabase
-      .from("habit_logs")
-      .select("*")
-      .order("completed_at", { ascending: false });
+    if (!isTailscaleVerified()) return [];
 
-    if (error) {
+    const { data, error } = await dataApiHelpers.select<DbHabitLog[]>('habit_logs', {
+      order: { column: 'completed_at', ascending: false },
+    });
+
+    if (error || !data) {
       console.error("Error fetching habit logs:", error);
       return [];
     }
 
-    return (data as DbHabitLog[]).map(dbToHabitLog);
+    return data.map(dbToHabitLog);
   };
 
   const createHabit = async (
@@ -119,42 +131,35 @@ export function useHabitsPersistence() {
     description?: string,
     category: Habit["category"] = "routine"
   ): Promise<Habit | null> => {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return null;
+    if (!isTailscaleVerified()) return null;
 
-    const { data, error } = await supabase
-      .from("habits")
-      .insert({
-        user_id: userData.user.id,
-        title,
-        description: description ?? null,
-        category,
-      })
-      .select()
-      .single();
+    const { data, error } = await dataApiHelpers.insert<DbHabit>('habits', {
+      title,
+      description: description ?? null,
+      category,
+    });
 
-    if (error) {
+    if (error || !data) {
       console.error("Error creating habit:", error);
       return null;
     }
 
-    return dbToHabit(data as DbHabit);
+    return dbToHabit(data);
   };
 
   const updateHabit = async (
     id: string,
     updates: Partial<Omit<Habit, "id" | "createdAt" | "updatedAt">>
   ): Promise<boolean> => {
+    if (!isTailscaleVerified()) return false;
+
     const dbUpdates: Record<string, unknown> = {};
     if (updates.title !== undefined) dbUpdates.title = updates.title;
     if (updates.description !== undefined) dbUpdates.description = updates.description;
     if (updates.category !== undefined) dbUpdates.category = updates.category;
     if (updates.enabled !== undefined) dbUpdates.enabled = updates.enabled;
 
-    const { error } = await supabase
-      .from("habits")
-      .update(dbUpdates)
-      .eq("id", id);
+    const { error } = await dataApiHelpers.update('habits', id, dbUpdates);
 
     if (error) {
       console.error("Error updating habit:", error);
@@ -165,7 +170,9 @@ export function useHabitsPersistence() {
   };
 
   const deleteHabit = async (id: string): Promise<boolean> => {
-    const { error } = await supabase.from("habits").delete().eq("id", id);
+    if (!isTailscaleVerified()) return false;
+
+    const { error } = await dataApiHelpers.delete('habits', id);
 
     if (error) {
       console.error("Error deleting habit:", error);
@@ -179,29 +186,25 @@ export function useHabitsPersistence() {
     habitId: string,
     notes?: string
   ): Promise<HabitLog | null> => {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return null;
+    if (!isTailscaleVerified()) return null;
 
-    const { data, error } = await supabase
-      .from("habit_logs")
-      .insert({
-        habit_id: habitId,
-        user_id: userData.user.id,
-        notes: notes ?? null,
-      })
-      .select()
-      .single();
+    const { data, error } = await dataApiHelpers.insert<DbHabitLog>('habit_logs', {
+      habit_id: habitId,
+      notes: notes ?? null,
+    });
 
-    if (error) {
+    if (error || !data) {
       console.error("Error logging habit completion:", error);
       return null;
     }
 
-    return dbToHabitLog(data as DbHabitLog);
+    return dbToHabitLog(data);
   };
 
   const deleteHabitLog = async (logId: string): Promise<boolean> => {
-    const { error } = await supabase.from("habit_logs").delete().eq("id", logId);
+    if (!isTailscaleVerified()) return false;
+
+    const { error } = await dataApiHelpers.delete('habit_logs', logId);
 
     if (error) {
       console.error("Error deleting habit log:", error);

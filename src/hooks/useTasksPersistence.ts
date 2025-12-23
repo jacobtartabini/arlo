@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { dataApiHelpers } from "@/lib/data-api";
 import type { Task } from "@/types/tasks";
 
 interface DbTask {
@@ -26,20 +26,30 @@ const dbToTask = (db: DbTask): Task => ({
   updatedAt: new Date(db.updated_at),
 });
 
+/**
+ * Check if Tailscale is verified
+ */
+function isTailscaleVerified(): boolean {
+  if (typeof window === 'undefined') return false;
+  const verified = sessionStorage.getItem('arlo_access_verified') === 'true';
+  const expiry = sessionStorage.getItem('arlo_access_verified_expiry');
+  return verified && !!expiry && Date.now() < parseInt(expiry);
+}
+
 export function useTasksPersistence() {
   const fetchTasks = async (): Promise<Task[]> => {
-    const { data, error } = await supabase
-      .from("tasks")
-      .select("*")
-      .order("priority", { ascending: false })
-      .order("created_at", { ascending: false });
+    if (!isTailscaleVerified()) return [];
 
-    if (error) {
+    const { data, error } = await dataApiHelpers.select<DbTask[]>('tasks', {
+      order: { column: 'priority', ascending: false },
+    });
+
+    if (error || !data) {
       console.error("Error fetching tasks:", error);
       return [];
     }
 
-    return (data as DbTask[]).map(dbToTask);
+    return data.map(dbToTask);
   };
 
   const createTask = async (
@@ -48,33 +58,29 @@ export function useTasksPersistence() {
     category?: string,
     dueDate?: Date
   ): Promise<Task | null> => {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return null;
+    if (!isTailscaleVerified()) return null;
 
-    const { data, error } = await supabase
-      .from("tasks")
-      .insert({
-        user_id: userData.user.id,
-        title,
-        description: description ?? null,
-        category: category ?? "general",
-        due_date: dueDate?.toISOString() ?? null,
-      })
-      .select()
-      .single();
+    const { data, error } = await dataApiHelpers.insert<DbTask>('tasks', {
+      title,
+      description: description ?? null,
+      category: category ?? "general",
+      due_date: dueDate?.toISOString() ?? null,
+    });
 
-    if (error) {
+    if (error || !data) {
       console.error("Error creating task:", error);
       return null;
     }
 
-    return dbToTask(data as DbTask);
+    return dbToTask(data);
   };
 
   const updateTask = async (
     id: string,
     updates: Partial<Omit<Task, "id" | "createdAt" | "updatedAt">>
   ): Promise<boolean> => {
+    if (!isTailscaleVerified()) return false;
+
     const dbUpdates: Record<string, unknown> = {};
     if (updates.title !== undefined) dbUpdates.title = updates.title;
     if (updates.description !== undefined) dbUpdates.description = updates.description;
@@ -83,10 +89,7 @@ export function useTasksPersistence() {
     if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate?.toISOString() ?? null;
     if (updates.category !== undefined) dbUpdates.category = updates.category;
 
-    const { error } = await supabase
-      .from("tasks")
-      .update(dbUpdates)
-      .eq("id", id);
+    const { error } = await dataApiHelpers.update('tasks', id, dbUpdates);
 
     if (error) {
       console.error("Error updating task:", error);
@@ -97,7 +100,9 @@ export function useTasksPersistence() {
   };
 
   const deleteTask = async (id: string): Promise<boolean> => {
-    const { error } = await supabase.from("tasks").delete().eq("id", id);
+    if (!isTailscaleVerified()) return false;
+
+    const { error } = await dataApiHelpers.delete('tasks', id);
 
     if (error) {
       console.error("Error deleting task:", error);
