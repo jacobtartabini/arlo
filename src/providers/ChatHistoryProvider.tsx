@@ -13,7 +13,6 @@ import {
   ChatMessageStatus,
   ChatSender,
 } from "@/types/chat";
-import { supabase } from "@/integrations/supabase/client";
 import { useChatPersistence } from "@/hooks/useChatPersistence";
 
 interface InitialMessageInput {
@@ -80,6 +79,16 @@ const generateId = () => {
   return Math.random().toString(36).slice(2);
 };
 
+/**
+ * Check if Tailscale is verified
+ */
+function isTailscaleVerified(): boolean {
+  if (typeof window === 'undefined') return false;
+  const verified = sessionStorage.getItem('arlo_access_verified') === 'true';
+  const expiry = sessionStorage.getItem('arlo_access_verified_expiry');
+  return verified && !!expiry && Date.now() < parseInt(expiry);
+}
+
 // LocalStorage helpers for fallback
 const loadLocalConversations = (): Conversation[] => {
   if (typeof window === "undefined") return [];
@@ -126,31 +135,26 @@ export function ChatHistoryProvider({
   const [activeConversationId, setActiveConversationIdState] = useState<string | null>(null);
   const [hasPendingPersistence, setHasPendingPersistence] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   
   const pendingDbOperationsRef = useRef<Set<string>>(new Set());
-  const dbPersistence = useChatPersistence(userId);
+  const dbPersistence = useChatPersistence(isAuthenticated ? 'arlo-tailscale-user' : null);
 
-  // Check for authenticated user
+  // Check Tailscale auth status
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setUserId(session?.user?.id ?? null);
+    const checkAuth = () => {
+      const verified = isTailscaleVerified();
+      if (verified !== isAuthenticated) {
+        setIsAuthenticated(verified);
+        setIsInitialized(false);
+      }
     };
     
     checkAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      const newUserId = session?.user?.id ?? null;
-      if (newUserId !== userId) {
-        setUserId(newUserId);
-        setIsInitialized(false);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [userId]);
+    const interval = setInterval(checkAuth, 30000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated]);
 
   // Load conversations based on auth state
   useEffect(() => {
@@ -159,8 +163,8 @@ export function ChatHistoryProvider({
     const loadData = async () => {
       setIsLoading(true);
 
-      if (userId) {
-        // Load from database
+      if (isAuthenticated) {
+        // Load from database via edge function
         const dbConversations = await dbPersistence.fetchConversations();
         setConversations(dbConversations);
         
@@ -189,7 +193,7 @@ export function ChatHistoryProvider({
     };
 
     loadData();
-  }, [userId, isInitialized, dbPersistence]);
+  }, [isAuthenticated, isInitialized, dbPersistence]);
 
   // LocalStorage persistence for fallback
   const persistToLocalStorage = useCallback((data: Conversation[]) => {
@@ -248,14 +252,14 @@ export function ChatHistoryProvider({
 
       setConversations((previous) => {
         const next = sortConversations([...previous, conversation]);
-        if (!userId) {
+        if (!isAuthenticated) {
           persistToLocalStorage(next);
         }
         return next;
       });
 
       // Persist to database if authenticated
-      if (userId) {
+      if (isAuthenticated) {
         dbPersistence.createConversation(title).then((dbConv) => {
           if (dbConv) {
             // Update local state with DB-assigned ID if different
@@ -277,7 +281,7 @@ export function ChatHistoryProvider({
 
       return conversation;
     },
-    [userId, persistToLocalStorage, setActiveConversationInternal, dbPersistence],
+    [isAuthenticated, persistToLocalStorage, setActiveConversationInternal, dbPersistence],
   );
 
   const ensureActiveConversation = useCallback(() => {
@@ -357,14 +361,14 @@ export function ChatHistoryProvider({
             ];
 
         const sortedConversations = sortConversations(next);
-        if (!userId) {
+        if (!isAuthenticated) {
           persistToLocalStorage(sortedConversations);
         }
         return sortedConversations;
       });
 
       // Persist to database
-      if (userId) {
+      if (isAuthenticated) {
         pendingDbOperationsRef.current.add(messageId);
         dbPersistence.addMessage(
           conversationId,
@@ -403,7 +407,7 @@ export function ChatHistoryProvider({
     },
     [
       ensureActiveConversation,
-      userId,
+      isAuthenticated,
       persistToLocalStorage,
       setActiveConversationInternal,
       dbPersistence,
@@ -443,18 +447,18 @@ export function ChatHistoryProvider({
           };
         });
 
-        if (!userId) {
+        if (!isAuthenticated) {
           persistToLocalStorage(updated);
         }
         return sortConversations(updated);
       });
 
       // Persist to database
-      if (userId) {
+      if (isAuthenticated) {
         dbPersistence.updateMessageStatus(messageId, status, overrides?.text);
       }
     },
-    [userId, persistToLocalStorage, dbPersistence],
+    [isAuthenticated, persistToLocalStorage, dbPersistence],
   );
 
   const updateConversationTitle = useCallback(
@@ -465,18 +469,18 @@ export function ChatHistoryProvider({
             ? { ...conversation, title }
             : conversation,
         );
-        if (!userId) {
+        if (!isAuthenticated) {
           persistToLocalStorage(updated);
         }
         return sortConversations(updated);
       });
 
       // Persist to database
-      if (userId) {
+      if (isAuthenticated) {
         dbPersistence.updateConversationTitle(conversationId, title);
       }
     },
-    [userId, persistToLocalStorage, dbPersistence],
+    [isAuthenticated, persistToLocalStorage, dbPersistence],
   );
 
   const deleteConversation = useCallback(
@@ -485,7 +489,7 @@ export function ChatHistoryProvider({
         const next = previous.filter(
           (conversation) => conversation.id !== conversationId,
         );
-        if (!userId) {
+        if (!isAuthenticated) {
           persistToLocalStorage(next);
         }
 
@@ -498,97 +502,70 @@ export function ChatHistoryProvider({
       });
 
       // Persist to database
-      if (userId) {
+      if (isAuthenticated) {
         dbPersistence.deleteConversation(conversationId);
       }
     },
     [
-      activeConversationId,
-      userId,
+      isAuthenticated,
       persistToLocalStorage,
+      activeConversationId,
       setActiveConversationInternal,
       dbPersistence,
     ],
   );
 
-  const setActiveConversation = useCallback(
-    (conversationId: string | null) => {
-      if (!conversationId) {
-        setActiveConversationInternal(null);
-        return;
-      }
-      const exists = conversations.some(
-        (conversation) => conversation.id === conversationId,
-      );
-      if (exists) {
-        setActiveConversationInternal(conversationId);
-      }
-    },
-    [conversations, setActiveConversationInternal],
+  const activeConversation = useMemo(
+    () =>
+      activeConversationId
+        ? conversations.find((c) => c.id === activeConversationId) ?? null
+        : null,
+    [activeConversationId, conversations],
   );
 
-  // Create initial conversation if none exist
-  useEffect(() => {
-    if (!isInitialized || isLoading) return;
-    
-    if (conversations.length === 0) {
-      createConversation({ setActive: true });
-    }
-  }, [isInitialized, isLoading, conversations.length, createConversation]);
-
-  const activeConversation = useMemo(() => {
-    if (!activeConversationId) return null;
-    return (
-      conversations.find(
-        (conversation) => conversation.id === activeConversationId,
-      ) ?? null
-    );
-  }, [activeConversationId, conversations]);
-
-  const value = useMemo<ChatHistoryContextValue>(
+  const contextValue = useMemo<ChatHistoryContextValue>(
     () => ({
       conversations,
       activeConversationId,
       activeConversation,
-      hasPendingPersistence,
+      hasPendingPersistence: pendingDbOperationsRef.current.size > 0,
       isLoading,
       createConversation,
       ensureActiveConversation,
       appendMessage,
       updateMessageStatus,
       updateConversationTitle,
-      setActiveConversation,
+      setActiveConversation: setActiveConversationInternal,
       deleteConversation,
       getConversationById,
     }),
     [
-      appendMessage,
       conversations,
-      activeConversation,
       activeConversationId,
-      createConversation,
-      deleteConversation,
-      ensureActiveConversation,
-      getConversationById,
-      hasPendingPersistence,
+      activeConversation,
       isLoading,
-      setActiveConversation,
-      updateConversationTitle,
+      createConversation,
+      ensureActiveConversation,
+      appendMessage,
       updateMessageStatus,
+      updateConversationTitle,
+      setActiveConversationInternal,
+      deleteConversation,
+      getConversationById,
     ],
   );
 
   return (
-    <ChatHistoryContext.Provider value={value}>
+    <ChatHistoryContext.Provider value={contextValue}>
       {children}
     </ChatHistoryContext.Provider>
   );
 }
 
-export const useChatHistory = () => {
+export function useChatHistory() {
   const context = useContext(ChatHistoryContext);
   if (context === undefined) {
     throw new Error("useChatHistory must be used within a ChatHistoryProvider");
   }
   return context;
-};
+}
