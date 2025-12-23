@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { dataApiHelpers } from '@/lib/data-api';
 import { toast } from 'sonner';
 import type { CalendarEvent, BookingSlot } from '@/lib/calendar-data';
 
@@ -54,7 +54,7 @@ const dbToEvent = (dbEvent: DbCalendarEvent): CalendarEvent => {
 };
 
 // Transform app CalendarEvent to DB format
-const eventToDb = (event: Partial<CalendarEvent>, userId: string) => {
+const eventToDb = (event: Partial<CalendarEvent>) => {
   const startDateTime = event.allDay 
     ? `${event.date}T00:00:00`
     : `${event.date}T${event.startTime || '00:00'}:00`;
@@ -65,7 +65,6 @@ const eventToDb = (event: Partial<CalendarEvent>, userId: string) => {
     : `${endDateValue}T${event.endTime || '23:59'}:00`;
 
   return {
-    user_id: userId,
     title: event.title,
     description: event.description ?? null,
     start_time: startDateTime,
@@ -90,31 +89,36 @@ const dbToBooking = (dbSlot: DbBookingSlot): BookingSlot => ({
   bookedBy: null,
 });
 
+/**
+ * Check if Tailscale is verified
+ */
+function isTailscaleVerified(): boolean {
+  if (typeof window === 'undefined') return false;
+  const verified = sessionStorage.getItem('arlo_access_verified') === 'true';
+  const expiry = sessionStorage.getItem('arlo_access_verified_expiry');
+  return verified && !!expiry && Date.now() < parseInt(expiry);
+}
+
 export function useCalendarPersistence() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [bookingSlots, setBookingSlots] = useState<BookingSlot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Check for authenticated user
+  // Check Tailscale auth status
   useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setUserId(session?.user?.id ?? null);
+    const checkAuth = () => {
+      setIsAuthenticated(isTailscaleVerified());
     };
     
     checkAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUserId(session?.user?.id ?? null);
-    });
-
-    return () => subscription.unsubscribe();
+    const interval = setInterval(checkAuth, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   // Fetch events and bookings
   const fetchData = useCallback(async () => {
-    if (!userId) {
+    if (!isTailscaleVerified()) {
       setEvents([]);
       setBookingSlots([]);
       setIsLoading(false);
@@ -125,35 +129,31 @@ export function useCalendarPersistence() {
       setIsLoading(true);
 
       const [eventsResult, bookingsResult] = await Promise.all([
-        supabase
-          .from('calendar_events')
-          .select('*')
-          .eq('user_id', userId)
-          .order('start_time', { ascending: true }),
-        supabase
-          .from('booking_slots')
-          .select('*')
-          .eq('user_id', userId)
-          .order('start_time', { ascending: true }),
+        dataApiHelpers.select<DbCalendarEvent[]>('calendar_events', {
+          order: { column: 'start_time', ascending: true },
+        }),
+        dataApiHelpers.select<DbBookingSlot[]>('booking_slots', {
+          order: { column: 'start_time', ascending: true },
+        }),
       ]);
 
       if (eventsResult.error) {
         console.error('Error fetching events:', eventsResult.error);
-      } else {
-        setEvents((eventsResult.data ?? []).map(dbToEvent));
+      } else if (eventsResult.data) {
+        setEvents(eventsResult.data.map(dbToEvent));
       }
 
       if (bookingsResult.error) {
         console.error('Error fetching bookings:', bookingsResult.error);
-      } else {
-        setBookingSlots((bookingsResult.data ?? []).map(dbToBooking));
+      } else if (bookingsResult.data) {
+        setBookingSlots(bookingsResult.data.map(dbToBooking));
       }
     } catch (error) {
       console.error('Error in fetchData:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [userId]);
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -161,19 +161,15 @@ export function useCalendarPersistence() {
 
   // Create event
   const createEvent = useCallback(async (event: Omit<CalendarEvent, 'id'>): Promise<CalendarEvent | null> => {
-    if (!userId) {
+    if (!isTailscaleVerified()) {
       toast.error('Please log in to create events');
       return null;
     }
 
     try {
-      const { data, error } = await supabase
-        .from('calendar_events')
-        .insert(eventToDb(event, userId))
-        .select()
-        .single();
+      const { data, error } = await dataApiHelpers.insert<DbCalendarEvent>('calendar_events', eventToDb(event));
 
-      if (error) {
+      if (error || !data) {
         console.error('Error creating event:', error);
         toast.error('Failed to create event');
         return null;
@@ -188,11 +184,11 @@ export function useCalendarPersistence() {
       console.error('Error in createEvent:', error);
       return null;
     }
-  }, [userId]);
+  }, []);
 
   // Update event
   const updateEvent = useCallback(async (eventId: string, updates: Partial<CalendarEvent>): Promise<boolean> => {
-    if (!userId) return false;
+    if (!isTailscaleVerified()) return false;
 
     const currentEvent = events.find(e => e.id === eventId);
     if (!currentEvent) return false;
@@ -203,11 +199,7 @@ export function useCalendarPersistence() {
     setEvents(prev => prev.map(e => e.id === eventId ? mergedEvent : e));
 
     try {
-      const { error } = await supabase
-        .from('calendar_events')
-        .update(eventToDb(mergedEvent, userId))
-        .eq('id', eventId)
-        .eq('user_id', userId);
+      const { error } = await dataApiHelpers.update('calendar_events', eventId, eventToDb(mergedEvent));
 
       if (error) {
         console.error('Error updating event:', error);
@@ -221,22 +213,18 @@ export function useCalendarPersistence() {
       await fetchData();
       return false;
     }
-  }, [userId, events, fetchData]);
+  }, [events, fetchData]);
 
   // Delete event
   const deleteEvent = useCallback(async (eventId: string): Promise<boolean> => {
-    if (!userId) return false;
+    if (!isTailscaleVerified()) return false;
 
     // Optimistic update
     const previousEvents = events;
     setEvents(prev => prev.filter(e => e.id !== eventId));
 
     try {
-      const { error } = await supabase
-        .from('calendar_events')
-        .delete()
-        .eq('id', eventId)
-        .eq('user_id', userId);
+      const { error } = await dataApiHelpers.delete('calendar_events', eventId);
 
       if (error) {
         console.error('Error deleting event:', error);
@@ -250,7 +238,7 @@ export function useCalendarPersistence() {
       setEvents(previousEvents);
       return false;
     }
-  }, [userId, events]);
+  }, [events]);
 
   // Create booking slot
   const createBookingSlot = useCallback(async (
@@ -260,7 +248,7 @@ export function useCalendarPersistence() {
     dayOfWeek: number,
     description?: string
   ): Promise<BookingSlot | null> => {
-    if (!userId) {
+    if (!isTailscaleVerified()) {
       toast.error('Please log in to create booking slots');
       return null;
     }
@@ -271,22 +259,17 @@ export function useCalendarPersistence() {
     const durationMinutes = (endHour * 60 + endMin) - (startHour * 60 + startMin);
 
     try {
-      const { data, error } = await supabase
-        .from('booking_slots')
-        .insert({
-          user_id: userId,
-          title,
-          description: description ?? null,
-          start_time: startTime,
-          end_time: endTime,
-          day_of_week: dayOfWeek,
-          duration_minutes: durationMinutes,
-          enabled: true,
-        })
-        .select()
-        .single();
+      const { data, error } = await dataApiHelpers.insert<DbBookingSlot>('booking_slots', {
+        title,
+        description: description ?? null,
+        start_time: startTime,
+        end_time: endTime,
+        day_of_week: dayOfWeek,
+        duration_minutes: durationMinutes,
+        enabled: true,
+      });
 
-      if (error) {
+      if (error || !data) {
         console.error('Error creating booking slot:', error);
         toast.error('Failed to create booking slot');
         return null;
@@ -299,24 +282,20 @@ export function useCalendarPersistence() {
       console.error('Error in createBookingSlot:', error);
       return null;
     }
-  }, [userId]);
+  }, []);
 
   // Update booking slot
   const updateBookingSlot = useCallback(async (slotId: string, updates: Partial<BookingSlot>): Promise<boolean> => {
-    if (!userId) return false;
+    if (!isTailscaleVerified()) return false;
 
     try {
-      const { error } = await supabase
-        .from('booking_slots')
-        .update({
-          title: updates.title,
-          description: updates.description ?? null,
-          start_time: updates.startTime,
-          end_time: updates.endTime,
-          enabled: updates.available,
-        })
-        .eq('id', slotId)
-        .eq('user_id', userId);
+      const { error } = await dataApiHelpers.update('booking_slots', slotId, {
+        title: updates.title,
+        description: updates.description ?? null,
+        start_time: updates.startTime,
+        end_time: updates.endTime,
+        enabled: updates.available,
+      });
 
       if (error) {
         console.error('Error updating booking slot:', error);
@@ -329,21 +308,17 @@ export function useCalendarPersistence() {
       console.error('Error in updateBookingSlot:', error);
       return false;
     }
-  }, [userId]);
+  }, []);
 
   // Delete booking slot
   const deleteBookingSlot = useCallback(async (slotId: string): Promise<boolean> => {
-    if (!userId) return false;
+    if (!isTailscaleVerified()) return false;
 
     const previousSlots = bookingSlots;
     setBookingSlots(prev => prev.filter(s => s.id !== slotId));
 
     try {
-      const { error } = await supabase
-        .from('booking_slots')
-        .delete()
-        .eq('id', slotId)
-        .eq('user_id', userId);
+      const { error } = await dataApiHelpers.delete('booking_slots', slotId);
 
       if (error) {
         console.error('Error deleting booking slot:', error);
@@ -357,7 +332,7 @@ export function useCalendarPersistence() {
       setBookingSlots(previousSlots);
       return false;
     }
-  }, [userId, bookingSlots]);
+  }, [bookingSlots]);
 
   // Wrapper to provide React setState-like interface for backwards compatibility
   const setEventsWrapper = useCallback((updater: CalendarEvent[] | ((prev: CalendarEvent[]) => CalendarEvent[])) => {
@@ -367,12 +342,10 @@ export function useCalendarPersistence() {
         // Sync to database
         next.forEach(event => {
           if (!prev.find(e => e.id === event.id)) {
-            // New event
             createEvent(event);
           } else {
             const existing = prev.find(e => e.id === event.id);
             if (existing && JSON.stringify(existing) !== JSON.stringify(event)) {
-              // Updated event
               updateEvent(event.id, event);
             }
           }
@@ -411,7 +384,7 @@ export function useCalendarPersistence() {
     events,
     bookingSlots,
     isLoading,
-    isAuthenticated: !!userId,
+    isAuthenticated,
     setEvents: setEventsWrapper,
     setBookings: setBookingsWrapper,
     createEvent,

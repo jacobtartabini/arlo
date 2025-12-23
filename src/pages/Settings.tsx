@@ -93,12 +93,12 @@ export default function Settings() {
         <Card className="bg-background/40 backdrop-blur-md border border-border/30">
           <CardContent className="flex flex-col items-center justify-center py-12 space-y-4">
             <LogIn className="h-12 w-12 text-muted-foreground" />
-            <h3 className="text-xl font-semibold">Sign in to access settings</h3>
+            <h3 className="text-xl font-semibold">Tailscale login required</h3>
             <p className="text-muted-foreground text-center max-w-md">
-              Your settings will be saved to your account and sync across all your devices.
+              Please connect via Tailscale to access settings.
             </p>
             <Button onClick={() => navigate('/login')}>
-              Sign In
+              Connect
             </Button>
           </CardContent>
         </Card>

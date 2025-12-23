@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { dataApiHelpers } from '@/lib/data-api';
 import { Conversation, ConversationMessage, ChatSender, ChatMessageStatus } from '@/types/chat';
 
 export interface DbConversation {
@@ -45,35 +45,38 @@ export const dbToMessage = (dbMsg: DbMessage): ConversationMessage => ({
   status: dbMsg.status as ChatMessageStatus,
 });
 
+/**
+ * Check if Tailscale is verified
+ */
+function isTailscaleVerified(): boolean {
+  if (typeof window === 'undefined') return false;
+  const verified = sessionStorage.getItem('arlo_access_verified') === 'true';
+  const expiry = sessionStorage.getItem('arlo_access_verified_expiry');
+  return verified && !!expiry && Date.now() < parseInt(expiry);
+}
+
 export function useChatPersistence(userId: string | null) {
   // Fetch all conversations with messages
   const fetchConversations = useCallback(async (): Promise<Conversation[]> => {
-    if (!userId) return [];
+    if (!isTailscaleVerified()) return [];
 
     try {
-      // Fetch conversations
-      const { data: conversations, error: convError } = await supabase
-        .from('conversations')
-        .select('*')
-        .eq('user_id', userId)
-        .order('updated_at', { ascending: false });
+      const { data: conversations, error: convError } = await dataApiHelpers.select<DbConversation[]>('conversations', {
+        order: { column: 'updated_at', ascending: false },
+      });
 
-      if (convError) {
-        console.error('Error fetching conversations:', convError);
+      if (convError || !conversations || conversations.length === 0) {
+        if (convError) console.error('Error fetching conversations:', convError);
         return [];
       }
 
-      if (!conversations || conversations.length === 0) {
-        return [];
-      }
-
-      // Fetch all messages for these conversations
       const conversationIds = conversations.map(c => c.id);
-      const { data: messages, error: msgError } = await supabase
-        .from('conversation_messages')
-        .select('*')
-        .in('conversation_id', conversationIds)
-        .order('created_at', { ascending: true });
+      const { data: messages, error: msgError } = await dataApiHelpers.selectWithIn<DbMessage[]>(
+        'conversation_messages',
+        'conversation_id',
+        conversationIds,
+        { column: 'created_at', ascending: true }
+      );
 
       if (msgError) {
         console.error('Error fetching messages:', msgError);
@@ -85,25 +88,15 @@ export function useChatPersistence(userId: string | null) {
       console.error('Error in fetchConversations:', error);
       return [];
     }
-  }, [userId]);
+  }, []);
 
-  // Create a new conversation
-  const createConversation = useCallback(async (
-    title: string = 'New Chat'
-  ): Promise<Conversation | null> => {
-    if (!userId) return null;
+  const createConversation = useCallback(async (title: string = 'New Chat'): Promise<Conversation | null> => {
+    if (!isTailscaleVerified()) return null;
 
     try {
-      const { data, error } = await supabase
-        .from('conversations')
-        .insert({
-          user_id: userId,
-          title,
-        })
-        .select()
-        .single();
+      const { data, error } = await dataApiHelpers.insert<DbConversation>('conversations', { title });
 
-      if (error) {
+      if (error || !data) {
         console.error('Error creating conversation:', error);
         return null;
       }
@@ -113,128 +106,95 @@ export function useChatPersistence(userId: string | null) {
       console.error('Error in createConversation:', error);
       return null;
     }
-  }, [userId]);
+  }, []);
 
-  // Update conversation title
-  const updateConversationTitle = useCallback(async (
-    conversationId: string, 
-    title: string
-  ): Promise<boolean> => {
-    if (!userId) return false;
+  const updateConversationTitle = useCallback(async (conversationId: string, title: string): Promise<boolean> => {
+    if (!isTailscaleVerified()) return false;
 
     try {
-      const { error } = await supabase
-        .from('conversations')
-        .update({ title })
-        .eq('id', conversationId)
-        .eq('user_id', userId);
-
+      const { error } = await dataApiHelpers.update('conversations', conversationId, { title });
       if (error) {
         console.error('Error updating conversation:', error);
         return false;
       }
-
       return true;
     } catch (error) {
       console.error('Error in updateConversationTitle:', error);
       return false;
     }
-  }, [userId]);
+  }, []);
 
-  // Delete conversation (cascade deletes messages)
   const deleteConversation = useCallback(async (conversationId: string): Promise<boolean> => {
-    if (!userId) return false;
+    if (!isTailscaleVerified()) return false;
 
     try {
-      const { error } = await supabase
-        .from('conversations')
-        .delete()
-        .eq('id', conversationId)
-        .eq('user_id', userId);
-
+      const { error } = await dataApiHelpers.delete('conversations', conversationId);
       if (error) {
         console.error('Error deleting conversation:', error);
         return false;
       }
-
       return true;
     } catch (error) {
       console.error('Error in deleteConversation:', error);
       return false;
     }
-  }, [userId]);
+  }, []);
 
-  // Add a message to a conversation
   const addMessage = useCallback(async (
     conversationId: string,
     content: string,
     sender: ChatSender,
     status: ChatMessageStatus = 'sent'
   ): Promise<ConversationMessage | null> => {
-    if (!userId) return null;
+    if (!isTailscaleVerified()) return null;
 
     try {
-      const { data, error } = await supabase
-        .from('conversation_messages')
-        .insert({
-          conversation_id: conversationId,
-          user_id: userId,
-          content,
-          sender,
-          status,
-        })
-        .select()
-        .single();
+      const { data, error } = await dataApiHelpers.insert<DbMessage>('conversation_messages', {
+        conversation_id: conversationId,
+        content,
+        sender,
+        status,
+      });
 
-      if (error) {
+      if (error || !data) {
         console.error('Error adding message:', error);
         return null;
       }
 
       // Update conversation's updated_at
-      await supabase
-        .from('conversations')
-        .update({ updated_at: new Date().toISOString() })
-        .eq('id', conversationId);
+      await dataApiHelpers.update('conversations', conversationId, {
+        updated_at: new Date().toISOString(),
+      });
 
       return dbToMessage(data);
     } catch (error) {
       console.error('Error in addMessage:', error);
       return null;
     }
-  }, [userId]);
+  }, []);
 
-  // Update message status
   const updateMessageStatus = useCallback(async (
     messageId: string,
     status: ChatMessageStatus,
     content?: string
   ): Promise<boolean> => {
-    if (!userId) return false;
+    if (!isTailscaleVerified()) return false;
 
     try {
       const updates: { status: string; content?: string } = { status };
-      if (content !== undefined) {
-        updates.content = content;
-      }
+      if (content !== undefined) updates.content = content;
 
-      const { error } = await supabase
-        .from('conversation_messages')
-        .update(updates)
-        .eq('id', messageId)
-        .eq('user_id', userId);
-
+      const { error } = await dataApiHelpers.update('conversation_messages', messageId, updates);
       if (error) {
         console.error('Error updating message:', error);
         return false;
       }
-
       return true;
     } catch (error) {
       console.error('Error in updateMessageStatus:', error);
       return false;
     }
-  }, [userId]);
+  }, []);
 
   return {
     fetchConversations,
