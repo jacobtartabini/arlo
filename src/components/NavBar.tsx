@@ -22,8 +22,8 @@ function isNavSeparator(item: NavTab): item is NavSeparator {
 const navTabs: NavTab[] = [
   { title: "Dashboard", icon: Home, path: "/dashboard" },
   { title: "Chat", icon: MessageCircle, path: "/chat" },
-  { type: "separator" },
   { title: "Calendar", icon: CalendarIcon, path: "/calendar" },
+  { type: "separator" },
   { title: "Settings", icon: SettingsIcon, path: "/settings" },
 ];
 

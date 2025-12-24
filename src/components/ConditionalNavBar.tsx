@@ -2,12 +2,12 @@ import React from "react";
 import { useLocation } from "react-router-dom";
 import NavBar from "./NavBar";
 
-// Only show navbar on dashboard routes
-const dashboardRoutes = ["/", "/dashboard"];
+// Show navbar on main app routes
+const visibleRoutes = ["/", "/dashboard", "/chat", "/calendar", "/settings"];
 
 export default function ConditionalNavBar() {
   const location = useLocation();
-  const shouldShowNav = dashboardRoutes.includes(location.pathname);
+  const shouldShowNav = visibleRoutes.includes(location.pathname);
 
   if (!shouldShowNav) {
     return null;
