@@ -6,6 +6,7 @@ import {
   Calendar,
   CalendarCheck,
   FileText,
+  Flame,
   FolderOpen,
   Home,
   Library,
@@ -162,6 +163,16 @@ export const APP_MODULES: Module[] = [
     size: "large",
     summary: "Canvas notes • Embedded modules",
     keywords: ["notes", "drawing", "handwriting", "canvas", "sketches"]
+  },
+  {
+    id: "habits",
+    title: "Habits",
+    icon: Flame,
+    route: "/habits",
+    color: "accent",
+    size: "medium",
+    summary: "Daily alignment • Streaks & XP",
+    keywords: ["habits", "routines", "streaks", "consistency", "morning", "night"]
   }
 ];
 
@@ -205,6 +216,14 @@ export const APP_PAGES: NavigationItem[] = [
     route: "/settings",
     icon: Settings,
     keywords: ["profile", "preferences", "integrations"]
+  },
+  {
+    id: "habits",
+    title: "Habits",
+    description: "Daily alignment, routines, and streaks",
+    route: "/habits",
+    icon: Flame,
+    keywords: ["habits", "routines", "streaks", "morning", "night", "xp"]
   }
 ];
 
