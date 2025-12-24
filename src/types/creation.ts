@@ -6,19 +6,34 @@ export interface Vector3 {
   z: number;
 }
 
-export type PrimitiveType = 'box' | 'sphere' | 'cylinder' | 'cone' | 'torus';
+export type PrimitiveType = 
+  | 'box' 
+  | 'sphere' 
+  | 'cylinder' 
+  | 'cone' 
+  | 'torus'
+  | 'capsule'
+  | 'roundedBox'
+  | 'pyramid'
+  | 'plane'
+  | 'tube'
+  | 'torusKnot'
+  | 'lathe';
 
 export interface SceneObject {
   id: string;
   name: string;
-  type: 'primitive' | 'imported';
+  type: 'primitive' | 'imported' | 'group';
   primitiveType?: PrimitiveType;
   assetId?: string; // Reference to creation_assets for imported STLs
   position: Vector3;
   rotation: Vector3;
   scale: Vector3;
   visible: boolean;
+  locked: boolean;
   color: string;
+  groupId?: string; // Parent group ID if part of a group
+  children?: string[]; // Child object IDs if this is a group
 }
 
 export interface SceneState {
@@ -51,3 +66,36 @@ export interface CreationSceneState {
 
 export type TransformMode = 'translate' | 'rotate' | 'scale';
 export type ViewMode = 'solid' | 'wireframe';
+export type CameraPreset = 'top' | 'front' | 'side' | 'isometric';
+export type ExportFormat = 'stl' | 'stl-binary' | 'gltf' | 'glb';
+export type ExportScope = 'selected' | 'all';
+
+export interface SnapSettings {
+  enabled: boolean;
+  translateSnap: number; // in mm
+  rotateSnap: number; // in degrees
+}
+
+export interface MeasurePoint {
+  position: Vector3;
+  label: string;
+}
+
+export interface Measurement {
+  point1: Vector3;
+  point2: Vector3;
+  distance: number;
+}
+
+export interface HistoryEntry {
+  sceneState: SceneState;
+  description: string;
+  timestamp: number;
+}
+
+export interface BoundingBoxInfo {
+  width: number;
+  height: number;
+  depth: number;
+  center: Vector3;
+}
