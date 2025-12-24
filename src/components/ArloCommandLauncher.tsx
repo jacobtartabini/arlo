@@ -403,7 +403,7 @@ const ArloCommandLauncher = () => {
             ref={containerRef}
             onClick={() => !open && setOpen(true)}
             className={cn(
-              "fixed left-1/2 bottom-8 -translate-x-1/2 z-50 w-full bg-background shadow-2xl pointer-events-auto",
+              "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full bg-background shadow-2xl pointer-events-auto border border-border/50",
               open ? "cursor-default" : "cursor-pointer"
             )}
             initial={false}
@@ -487,8 +487,8 @@ const ArloCommandLauncher = () => {
                             className={cn(
                               "h-7 w-7 rounded-full flex items-center justify-center cursor-pointer transition-colors",
                               searchScope === scope
-                                ? "bg-primary/20 text-primary"
-                                : "bg-muted/40 text-muted-foreground/60 hover:bg-muted/70"
+                                ? "bg-foreground/10 text-foreground"
+                                : "bg-muted/40 text-muted-foreground/60 hover:bg-muted/70 hover:text-muted-foreground"
                             )}
                             whileHover={{ scale: 1.1 }}
                             whileTap={{ scale: 0.95 }}
@@ -506,7 +506,7 @@ const ArloCommandLauncher = () => {
                         e.stopPropagation();
                         handleChatSubmit();
                       }}
-                      className="h-7 w-7 rounded-full bg-primary/20 text-primary flex items-center justify-center cursor-pointer hover:bg-primary/30 transition-colors"
+                      className="h-7 w-7 rounded-full bg-foreground/10 text-foreground flex items-center justify-center cursor-pointer hover:bg-foreground/20 transition-colors"
                       whileHover={{ scale: 1.1 }}
                       whileTap={{ scale: 0.95 }}
                       title="Send"
@@ -588,8 +588,8 @@ const ArloCommandLauncher = () => {
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: currentIndex * 0.015 }}
                                   >
-                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted/50">
-                                      <Icon className="h-4 w-4 text-primary" />
+                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
+                                      <Icon className="h-4 w-4 text-foreground" />
                                     </div>
                                     <div className="flex-1 min-w-0">
                                       <p className="text-sm font-medium text-foreground truncate">
