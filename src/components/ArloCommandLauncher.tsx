@@ -4,7 +4,7 @@ import * as React from "react";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { motion, AnimatePresence } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   Search,
   Home,
@@ -54,6 +54,10 @@ type CommandItem = {
 
 type SearchScope = "all" | "actions" | "files" | "modules" | "chat";
 
+// Routes where the launcher should NOT be persistently visible
+const HIDDEN_ROUTES = ["/login", "/unauthorized", "/book"];
+const DASHBOARD_ROUTES = ["/", "/dashboard"];
+
 // Icon mapping for modules
 const moduleIconMap: Record<string, LucideIcon> = {
   finance: Wallet,
@@ -73,9 +77,10 @@ const moduleIconMap: Record<string, LucideIcon> = {
 
 const ArloCommandLauncher = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { notes } = useNotesPersistence();
   const { sendMessage } = useArlo();
-  
+
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -84,6 +89,13 @@ const ArloCommandLauncher = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const itemsRef = useRef<(HTMLDivElement | null)[]>([]);
   const hasTyped = searchQuery.length > 0;
+
+  // Determine visibility based on route
+  const isDashboard = DASHBOARD_ROUTES.includes(location.pathname);
+  const isHiddenRoute = HIDDEN_ROUTES.some((route) =>
+    location.pathname.startsWith(route)
+  );
+  const showPersistent = isDashboard && !isHiddenRoute;
 
   // Build commands from Arlo's real data
   const allCommands = useMemo((): CommandItem[] => {
@@ -166,7 +178,7 @@ const ArloCommandLauncher = () => {
 
     // Recent notes from actual data
     const recentNotes = notes.slice(0, 5);
-    recentNotes.forEach((note, index) => {
+    recentNotes.forEach((note) => {
       commands.push({
         id: `recent-note-${note.id}`,
         title: note.title || "Untitled Note",
@@ -247,20 +259,35 @@ const ArloCommandLauncher = () => {
     }
   }, [searchQuery, sendMessage, navigate]);
 
+  const handleClose = useCallback(() => {
+    setOpen(false);
+    setSearchQuery("");
+    setSelectedIndex(0);
+    setSearchScope("all");
+  }, []);
+
+  // Close launcher on route change
+  useEffect(() => {
+    handleClose();
+  }, [location.pathname, handleClose]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Check if user is in a text input (not our launcher)
       const activeElement = document.activeElement as HTMLElement | null;
-      const isInOtherInput = activeElement && 
-        (activeElement.tagName === "INPUT" || 
-         activeElement.tagName === "TEXTAREA" ||
-         activeElement.isContentEditable) &&
+      const isInOtherInput =
+        activeElement &&
+        (activeElement.tagName === "INPUT" ||
+          activeElement.tagName === "TEXTAREA" ||
+          activeElement.isContentEditable) &&
         !containerRef.current?.contains(activeElement);
 
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
-        setOpen((prev) => !prev);
-        if (!open) {
+        if (open) {
+          handleClose();
+        } else {
+          setOpen(true);
           setSearchQuery("");
           setSelectedIndex(0);
           setSearchScope("all");
@@ -276,7 +303,7 @@ const ArloCommandLauncher = () => {
           setSearchScope("all");
           setSearchQuery("");
         } else {
-          setOpen(false);
+          handleClose();
         }
       } else if (e.key === "ArrowDown") {
         e.preventDefault();
@@ -301,7 +328,15 @@ const ArloCommandLauncher = () => {
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [open, selectedIndex, filteredCommands, executeCommand, searchScope, handleChatSubmit]);
+  }, [
+    open,
+    selectedIndex,
+    filteredCommands,
+    executeCommand,
+    searchScope,
+    handleChatSubmit,
+    handleClose,
+  ]);
 
   useEffect(() => {
     if (open && selectedIndex >= 0 && itemsRef.current[selectedIndex]) {
@@ -319,13 +354,13 @@ const ArloCommandLauncher = () => {
         !containerRef.current.contains(e.target as Node) &&
         open
       ) {
-        setOpen(false);
+        handleClose();
       }
     };
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [open]);
+  }, [open, handleClose]);
 
   // Reset selected index when query changes
   useEffect(() => {
@@ -335,8 +370,27 @@ const ArloCommandLauncher = () => {
   const groups = groupedCommands();
   let globalIndex = 0;
 
+  // Don't render anything on hidden routes unless open via Cmd+K
+  if (isHiddenRoute && !open) {
+    return null;
+  }
+
+  // Determine if we should show the resting bar
+  const showRestingBar = showPersistent || open;
+
+  // Smooth spring transition config
+  const springTransition = {
+    type: "spring" as const,
+    stiffness: 400,
+    damping: 35,
+    mass: 1,
+  };
+
+  const isExpanded = hasTyped || searchScope !== "all";
+
   return (
     <>
+      {/* Backdrop */}
       <AnimatePresence>
         {open && (
           <motion.div
@@ -344,259 +398,261 @@ const ArloCommandLauncher = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
             className="fixed inset-0 z-40 bg-background/60 backdrop-blur-sm"
-            onClick={() => setOpen(false)}
+            onClick={handleClose}
           />
         )}
       </AnimatePresence>
 
-      <motion.div
-        ref={containerRef}
-        onClick={() => !open && setOpen(true)}
-        className="fixed left-1/2 bottom-8 -translate-x-1/2 z-50 w-full bg-background shadow-2xl pointer-events-auto border border-border"
-        initial={false}
-        animate={{
-          maxWidth: open
-            ? hasTyped || searchScope !== "all"
-              ? "32rem"
-              : "40rem"
-            : "28rem",
-          borderRadius: open
-            ? hasTyped || searchScope !== "all"
-              ? 16
-              : 24
-            : 24,
-          cursor: open ? "auto" : "pointer",
-          scale: open && searchScope !== "all" && !hasTyped ? 1.01 : 1,
-        }}
-        transition={{
-          maxWidth: { duration: 0.25, ease: "easeInOut" },
-          borderRadius: { duration: 0.25, ease: "easeInOut" },
-          scale: { duration: 0.2, ease: "easeOut" },
-        }}
-        whileHover={!open ? { scale: 1.02 } : {}}
-      >
-        <div className="flex flex-col">
-          <div className="flex items-center gap-3 px-4 py-3">
-            {open && searchScope !== "chat" && (
-              <Search className="h-5 w-5 text-muted-foreground shrink-0" />
+      {/* Command Launcher */}
+      <AnimatePresence>
+        {showRestingBar && (
+          <motion.div
+            ref={containerRef}
+            onClick={() => !open && setOpen(true)}
+            className={cn(
+              "fixed z-50 bg-background/95 backdrop-blur-xl shadow-2xl pointer-events-auto border border-border/50",
+              open ? "cursor-default" : "cursor-pointer"
             )}
-            {!open && (
-              <Search className="h-5 w-5 text-muted-foreground shrink-0" />
-            )}
-            {open ? (
-              <Input
-                ref={inputRef}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={
-                  searchScope === "actions"
-                    ? "Run an action..."
-                    : searchScope === "files"
-                    ? "Search files..."
-                    : searchScope === "modules"
-                    ? "Search modules..."
-                    : searchScope === "chat"
-                    ? "Ask Arlo anything..."
-                    : "Search or type a command..."
-                }
-                className="flex-1 bg-transparent border-none focus-visible:ring-0 text-foreground placeholder:text-muted-foreground/60"
-                autoFocus
-              />
-            ) : (
-              <span className="flex-1 text-sm text-muted-foreground">
-                Search or type a command...
-              </span>
-            )}
-            <AnimatePresence mode="wait">
-              {open &&
-                !hasTyped &&
-                (searchScope === "all" ||
-                  searchScope === "actions" ||
-                  searchScope === "files" ||
-                  searchScope === "modules") && (
+            style={{
+              left: "50%",
+              x: "-50%",
+            }}
+            initial={{
+              bottom: 32,
+              opacity: 0,
+              y: 20,
+              width: 448,
+              borderRadius: 24,
+            }}
+            animate={{
+              bottom: open ? "50%" : 32,
+              y: open ? "50%" : 0,
+              opacity: 1,
+              width: open ? (isExpanded ? 512 : 560) : 448,
+              borderRadius: open ? (isExpanded ? 16 : 20) : 24,
+            }}
+            exit={{
+              opacity: 0,
+              y: 20,
+              transition: { duration: 0.15 },
+            }}
+            transition={springTransition}
+            whileHover={!open ? { scale: 1.02, y: -2 } : {}}
+            whileTap={!open ? { scale: 0.98 } : {}}
+          >
+            <motion.div
+              className="flex flex-col overflow-hidden"
+              layout
+              transition={springTransition}
+            >
+              {/* Input Bar */}
+              <motion.div
+                className="flex items-center gap-3 px-4"
+                animate={{ paddingTop: 12, paddingBottom: 12 }}
+                transition={springTransition}
+              >
+                <motion.div
+                  animate={{
+                    scale: open ? 1 : 0.95,
+                    opacity: searchScope === "chat" && open ? 0.5 : 1,
+                  }}
+                  transition={{ duration: 0.15 }}
+                >
+                  <Search className="h-5 w-5 text-muted-foreground shrink-0" />
+                </motion.div>
+
+                {open ? (
+                  <Input
+                    ref={inputRef}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={
+                      searchScope === "actions"
+                        ? "Run an action..."
+                        : searchScope === "files"
+                        ? "Search files..."
+                        : searchScope === "modules"
+                        ? "Search modules..."
+                        : searchScope === "chat"
+                        ? "Ask Arlo anything..."
+                        : "Search or type a command..."
+                    }
+                    className="flex-1 bg-transparent border-none focus-visible:ring-0 text-foreground placeholder:text-muted-foreground/60 h-8"
+                    autoFocus
+                  />
+                ) : (
+                  <span className="flex-1 text-sm text-muted-foreground select-none">
+                    Search or type a command...
+                  </span>
+                )}
+
+                {/* Scope buttons or keyboard hint */}
+                <AnimatePresence mode="wait">
+                  {open &&
+                    !hasTyped &&
+                    searchScope !== "chat" && (
+                      <motion.div
+                        key="scope-buttons"
+                        className="flex items-center gap-1"
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        transition={{ duration: 0.15 }}
+                      >
+                        {[
+                          { scope: "actions" as const, icon: Zap, label: "Actions" },
+                          { scope: "files" as const, icon: Folder, label: "Files" },
+                          { scope: "modules" as const, icon: LayoutPanelTop, label: "Modules" },
+                          { scope: "chat" as const, icon: MessageSquare, label: "Chat" },
+                        ].map(({ scope, icon: Icon, label }) => (
+                          <motion.button
+                            key={scope}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSearchScope(searchScope === scope ? "all" : scope);
+                            }}
+                            className={cn(
+                              "h-7 w-7 rounded-full flex items-center justify-center transition-colors",
+                              searchScope === scope
+                                ? "bg-primary/20 text-primary"
+                                : "bg-muted/40 text-muted-foreground/60 hover:bg-muted/70 hover:text-muted-foreground"
+                            )}
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.95 }}
+                            title={label}
+                          >
+                            <Icon className="h-4 w-4" />
+                          </motion.button>
+                        ))}
+                      </motion.div>
+                    )}
+                  {open && searchScope === "chat" && (
+                    <motion.button
+                      key="chat-send"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleChatSubmit();
+                      }}
+                      className="h-7 w-7 rounded-full bg-primary/20 text-primary flex items-center justify-center hover:bg-primary/30 transition-colors"
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.95 }}
+                      title="Send"
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                    </motion.button>
+                  )}
+                  {!open && (
+                    <motion.kbd
+                      key="kbd-hint"
+                      className="hidden sm:inline-flex h-5 items-center gap-1 rounded border border-border bg-muted/50 px-1.5 font-mono text-[10px] text-muted-foreground"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      ⌘K
+                    </motion.kbd>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+
+              {/* Results Panel */}
+              <AnimatePresence>
+                {open && isExpanded && searchScope !== "chat" && (
                   <motion.div
-                    className="flex items-center gap-1"
-                    initial={{ opacity: 0, x: 10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 10 }}
-                    transition={{ duration: 0.15 }}
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
+                    className="border-t border-border/50 overflow-hidden"
                   >
-                    <motion.div
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSearchScope(
-                          searchScope === "actions" ? "all" : "actions"
-                        );
-                      }}
-                      className={cn(
-                        "h-7 w-7 rounded-full flex items-center justify-center cursor-pointer transition-colors",
-                        searchScope === "actions"
-                          ? "bg-primary/20 text-primary"
-                          : "bg-muted/40 text-muted-foreground/60 hover:bg-muted/70"
-                      )}
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.95 }}
-                      title="Actions"
-                    >
-                      <Zap className="h-4 w-4" />
-                    </motion.div>
-                    <motion.div
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSearchScope(
-                          searchScope === "files" ? "all" : "files"
-                        );
-                      }}
-                      className={cn(
-                        "h-7 w-7 rounded-full flex items-center justify-center cursor-pointer transition-colors",
-                        searchScope === "files"
-                          ? "bg-primary/20 text-primary"
-                          : "bg-muted/40 text-muted-foreground/60 hover:bg-muted/70"
-                      )}
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.95 }}
-                      title="Files"
-                    >
-                      <Folder className="h-4 w-4" />
-                    </motion.div>
-                    <motion.div
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSearchScope(
-                          searchScope === "modules" ? "all" : "modules"
-                        );
-                      }}
-                      className={cn(
-                        "h-7 w-7 rounded-full flex items-center justify-center cursor-pointer transition-colors",
-                        searchScope === "modules"
-                          ? "bg-primary/20 text-primary"
-                          : "bg-muted/40 text-muted-foreground/60 hover:bg-muted/70"
-                      )}
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.95 }}
-                      title="Modules"
-                    >
-                      <LayoutPanelTop className="h-4 w-4" />
-                    </motion.div>
-                    <motion.div
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSearchScope("chat");
-                      }}
-                      className="h-7 w-7 rounded-full flex items-center justify-center cursor-pointer transition-colors bg-muted/40 text-muted-foreground/60 hover:bg-muted/70"
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.95 }}
-                      title="Chat"
-                    >
-                      <MessageSquare className="h-4 w-4" />
-                    </motion.div>
+                    {filteredCommands().length === 0 ? (
+                      <motion.div
+                        className="py-8 text-center"
+                        initial={{ opacity: 0, y: -8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.05 }}
+                      >
+                        <p className="text-sm text-muted-foreground">
+                          No results for "{searchQuery}"
+                        </p>
+                      </motion.div>
+                    ) : (
+                      <div className="max-h-80 overflow-y-auto py-2 px-2">
+                        {(
+                          ["Actions", "Navigation", "Content", "Recent"] as const
+                        ).map((category) => {
+                          if (groups[category].length === 0) return null;
+
+                          return (
+                            <div
+                              key={category}
+                              className={globalIndex > 0 ? "mt-2" : ""}
+                            >
+                              {groups[category].map((cmd) => {
+                                const currentIndex = globalIndex++;
+                                const isSelected = selectedIndex === currentIndex;
+                                const Icon = cmd.icon;
+
+                                return (
+                                  <motion.div
+                                    key={cmd.id}
+                                    ref={(el) => {
+                                      itemsRef.current[currentIndex] = el;
+                                    }}
+                                    className={cn(
+                                      "flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 transition-colors",
+                                      isSelected
+                                        ? "bg-accent/60"
+                                        : "hover:bg-accent/30"
+                                    )}
+                                    onClick={() => executeCommand(cmd)}
+                                    initial={{ opacity: 0, y: -4 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{
+                                      delay: Math.min(currentIndex * 0.02, 0.15),
+                                      duration: 0.15,
+                                    }}
+                                  >
+                                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted/50">
+                                      <Icon className="h-4 w-4 text-primary" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium text-foreground truncate">
+                                        {cmd.title}
+                                      </p>
+                                      {cmd.description && (
+                                        <p className="text-xs text-muted-foreground truncate">
+                                          {cmd.description}
+                                        </p>
+                                      )}
+                                    </div>
+                                    {cmd.shortcut && (
+                                      <kbd className="hidden sm:inline-flex h-5 items-center gap-1 rounded border border-border bg-muted px-1.5 font-mono text-xs text-muted-foreground">
+                                        {cmd.shortcut}
+                                      </kbd>
+                                    )}
+                                  </motion.div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </motion.div>
                 )}
-              {open && searchScope === "chat" && (
-                <motion.div
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleChatSubmit();
-                  }}
-                  className="h-7 w-7 rounded-full bg-primary/20 text-primary flex items-center justify-center cursor-pointer hover:bg-primary/30 transition-colors"
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.95 }}
-                  title="Send"
-                  initial={{ opacity: 0, x: 10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 10 }}
-                  transition={{ duration: 0.2, delay: 0.1 }}
-                >
-                  <ArrowRight className="h-4 w-4" />
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
-          <AnimatePresence>
-            {open &&
-              (hasTyped || searchScope !== "all") &&
-              searchScope !== "chat" && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="border-t border-border overflow-hidden"
-                >
-                  {filteredCommands().length === 0 ? (
-                    <div className="py-8 text-center">
-                      <p className="text-sm text-muted-foreground">
-                        No results for "{searchQuery}"
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="max-h-80 overflow-y-auto py-2 px-2">
-                      {(
-                        ["Actions", "Navigation", "Content", "Recent"] as const
-                      ).map((category) => {
-                        if (groups[category].length === 0) return null;
-
-                        return (
-                          <div
-                            key={category}
-                            className={globalIndex > 0 ? "mt-3" : ""}
-                          >
-                            {groups[category].map((cmd) => {
-                              const currentIndex = globalIndex++;
-                              const isSelected = selectedIndex === currentIndex;
-                              const Icon = cmd.icon;
-
-                              return (
-                                <motion.div
-                                  key={cmd.id}
-                                  ref={(el) => {
-                                    itemsRef.current[currentIndex] = el;
-                                  }}
-                                  className={cn(
-                                    "flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 transition-all",
-                                    isSelected
-                                      ? "bg-accent/60"
-                                      : "hover:bg-accent/30"
-                                  )}
-                                  onClick={() => executeCommand(cmd)}
-                                  initial={{ opacity: 0, y: -4 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  transition={{ delay: currentIndex * 0.015 }}
-                                >
-                                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted/50">
-                                    <Icon className="h-4 w-4 text-primary" />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-foreground truncate">
-                                      {cmd.title}
-                                    </p>
-                                    {cmd.description && (
-                                      <p className="text-xs text-muted-foreground truncate">
-                                        {cmd.description}
-                                      </p>
-                                    )}
-                                  </div>
-                                  {cmd.shortcut && (
-                                    <kbd className="hidden sm:inline-flex h-5 items-center gap-1 rounded border border-border bg-muted px-1.5 font-mono text-xs text-muted-foreground">
-                                      {cmd.shortcut}
-                                    </kbd>
-                                  )}
-                                </motion.div>
-                              );
-                            })}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </motion.div>
-              )}
-          </AnimatePresence>
-        </div>
-      </motion.div>
+              </AnimatePresence>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 };
