@@ -22,7 +22,6 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useArlo } from "@/providers/ArloProvider";
 import { useNavigate } from "react-router-dom";
 import { BentoGrid } from "@/components/BentoGrid";
-import { FloatingChatBar } from "@/components/FloatingChatBar";
 import { Check, ChevronDown, Scan } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -162,9 +161,6 @@ export default function Dashboard() {
           recenterSignal={recenterSignal}
         />
       </main>
-
-      {/* Floating Chat Bar */}
-      <FloatingChatBar />
 
       {/* Edge Fade Overlay */}
       <div className="pointer-events-none fixed inset-0 z-30">
