@@ -163,6 +163,88 @@ export type Database = {
         }
         Relationships: []
       }
+      creation_assets: {
+        Row: {
+          created_at: string
+          file_path: string
+          id: string
+          original_name: string
+          project_id: string
+        }
+        Insert: {
+          created_at?: string
+          file_path: string
+          id?: string
+          original_name: string
+          project_id: string
+        }
+        Update: {
+          created_at?: string
+          file_path?: string
+          id?: string
+          original_name?: string
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creation_assets_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "creation_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      creation_projects: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      creation_scene_state: {
+        Row: {
+          project_id: string
+          state_json: Json
+          updated_at: string
+        }
+        Insert: {
+          project_id: string
+          state_json?: Json
+          updated_at?: string
+        }
+        Update: {
+          project_id?: string
+          state_json?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creation_scene_state_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: true
+            referencedRelation: "creation_projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       habit_logs: {
         Row: {
           completed_at: string
