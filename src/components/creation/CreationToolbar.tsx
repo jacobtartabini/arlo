@@ -26,7 +26,13 @@ import {
   Group,
   Hexagon,
   Square,
-  Layers
+  Layers,
+  Merge,
+  Minus,
+  Scissors,
+  Ruler,
+  Focus,
+  Fullscreen
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -49,7 +55,7 @@ import {
 } from '@/components/ui/tooltip';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-import type { PrimitiveType, TransformMode, ViewMode, SnapSettings } from '@/types/creation';
+import type { PrimitiveType, TransformMode, ViewMode, SnapSettings, BooleanOperation, MeasureTool } from '@/types/creation';
 
 interface CreationToolbarProps {
   transformMode: TransformMode;
@@ -62,6 +68,7 @@ interface CreationToolbarProps {
   showGrid: boolean;
   showAxes: boolean;
   snapSettings: SnapSettings;
+  measureTool: MeasureTool;
   onAddPrimitive: (type: PrimitiveType) => void;
   onImportSTL: (file: File) => void;
   onTransformModeChange: (mode: TransformMode) => void;
@@ -78,6 +85,11 @@ interface CreationToolbarProps {
   onDropToGround: () => void;
   onCenterInScene: () => void;
   onGroup: () => void;
+  onBooleanOperation: (op: BooleanOperation) => void;
+  onToggleMeasure: () => void;
+  onClearMeasure: () => void;
+  onFitToSelection: () => void;
+  onFitToScene: () => void;
 }
 
 export function CreationToolbar({
@@ -91,6 +103,7 @@ export function CreationToolbar({
   showGrid,
   showAxes,
   snapSettings,
+  measureTool,
   onAddPrimitive,
   onImportSTL,
   onTransformModeChange,
@@ -106,7 +119,12 @@ export function CreationToolbar({
   onAlignToOrigin,
   onDropToGround,
   onCenterInScene,
-  onGroup
+  onGroup,
+  onBooleanOperation,
+  onToggleMeasure,
+  onClearMeasure,
+  onFitToSelection,
+  onFitToScene
 }: CreationToolbarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -386,6 +404,93 @@ export function CreationToolbar({
             </Button>
           </TooltipTrigger>
           <TooltipContent>Group Selected</TooltipContent>
+        </Tooltip>
+
+        {/* Boolean Operations */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-7"
+              disabled={!hasTwoSelected}
+            >
+              <Merge className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuLabel>Boolean Operations</DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => onBooleanOperation('union')}>
+              <Merge className="h-4 w-4 mr-2" />
+              Union (Combine)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onBooleanOperation('subtract')}>
+              <Minus className="h-4 w-4 mr-2" />
+              Subtract (Cut)
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onBooleanOperation('intersect')}>
+              <Scissors className="h-4 w-4 mr-2" />
+              Intersect (Keep Overlap)
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <Separator orientation="vertical" className="h-6" />
+
+        {/* Measure Tool */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button 
+              variant={measureTool.active ? 'secondary' : 'ghost'} 
+              size="sm" 
+              className="h-7"
+              onClick={onToggleMeasure}
+            >
+              <Ruler className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {measureTool.active ? 'Measuring Mode (Click to disable)' : 'Measure Tool'}
+          </TooltipContent>
+        </Tooltip>
+
+        {measureTool.distance !== null && (
+          <div className="flex items-center gap-1 text-xs bg-muted px-2 py-1 rounded">
+            <span className="font-medium">{measureTool.distance.toFixed(2)}mm</span>
+            <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={onClearMeasure}>
+              ×
+            </Button>
+          </div>
+        )}
+
+        {/* Camera/Fit Controls */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-7"
+              onClick={onFitToSelection}
+              disabled={!hasSelection}
+            >
+              <Focus className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Fit to Selection</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-7"
+              onClick={onFitToScene}
+            >
+              <Fullscreen className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Fit to Scene</TooltipContent>
         </Tooltip>
 
         <Separator orientation="vertical" className="h-6" />

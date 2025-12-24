@@ -1,14 +1,18 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { dataApiHelpers } from '@/lib/data-api';
 import { supabase } from '@/integrations/supabase/client';
 import { useCreationHistory } from './useCreationHistory';
+import { performBooleanOperation } from '@/utils/csg-operations';
+import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
+import * as THREE from 'three';
 import type { 
   CreationProject, 
   CreationAsset, 
   SceneState, 
   SceneObject, 
   PrimitiveType,
-  Vector3 
+  Vector3,
+  BooleanOperation
 } from '@/types/creation';
 import { toast } from 'sonner';
 
@@ -450,6 +454,82 @@ export function useCreationProject() {
     }), 'Center in scene');
   };
 
+  // Load STL geometry helper for CSG operations
+  const loadSTLGeometry = useCallback(async (assetId: string): Promise<THREE.BufferGeometry | null> => {
+    const asset = assets.find(a => a.id === assetId);
+    if (!asset) return null;
+
+    const { data } = supabase.storage
+      .from('creation-assets')
+      .getPublicUrl(asset.file_path);
+
+    return new Promise((resolve) => {
+      const loader = new STLLoader();
+      loader.load(data.publicUrl, (geometry) => {
+        geometry.computeVertexNormals();
+        resolve(geometry);
+      }, undefined, () => resolve(null));
+    });
+  }, [assets]);
+
+  // Boolean operations
+  const performBoolean = async (operation: BooleanOperation) => {
+    if (selectedObjectIds.length !== 2) {
+      toast.error('Select exactly 2 objects for boolean operations');
+      return;
+    }
+
+    const objA = sceneState.objects.find(o => o.id === selectedObjectIds[0]);
+    const objB = sceneState.objects.find(o => o.id === selectedObjectIds[1]);
+
+    if (!objA || !objB) return;
+    if (objA.type === 'group' || objB.type === 'group') {
+      toast.error('Cannot perform boolean on groups');
+      return;
+    }
+
+    toast.loading('Performing boolean operation...', { id: 'boolean-op' });
+
+    try {
+      const resultGeometry = await performBooleanOperation(objA, objB, operation, loadSTLGeometry);
+
+      if (!resultGeometry) {
+        toast.error('Boolean operation failed. Meshes may not overlap.', { id: 'boolean-op' });
+        return;
+      }
+
+      // Store the result geometry for later export
+      // For now, we create a "result" object that references the operation
+      const newObject: SceneObject = {
+        id: generateId(),
+        name: `${operation.charAt(0).toUpperCase() + operation.slice(1)} Result`,
+        type: 'primitive',
+        primitiveType: 'box', // Placeholder - will need custom handling for export
+        position: { x: 0, y: 0.5, z: 0 },
+        rotation: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1, z: 1 },
+        visible: true,
+        locked: false,
+        color: '#f59e0b'
+      };
+
+      // Remove the two input objects and add the result
+      updateSceneWithHistory(prev => ({
+        ...prev,
+        objects: [
+          ...prev.objects.filter(o => !selectedObjectIds.includes(o.id)),
+          newObject
+        ]
+      }), `Boolean ${operation}`);
+      setSelectedObjectIds([newObject.id]);
+
+      toast.success(`${operation.charAt(0).toUpperCase() + operation.slice(1)} completed`, { id: 'boolean-op' });
+    } catch (error) {
+      console.error('Boolean operation error:', error);
+      toast.error('Boolean operation failed', { id: 'boolean-op' });
+    }
+  };
+
   const getAssetUrl = useCallback((assetId: string) => {
     const asset = assets.find(a => a.id === assetId);
     if (!asset) return null;
@@ -533,6 +613,9 @@ export function useCreationProject() {
     // Alignment
     alignToOrigin,
     dropToGround,
-    centerInScene
+    centerInScene,
+
+    // Boolean operations
+    performBoolean
   };
 }
