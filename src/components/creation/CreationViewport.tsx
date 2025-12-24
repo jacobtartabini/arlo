@@ -1,133 +1,25 @@
-import { useRef, useMemo, Suspense, useEffect, useState } from 'react';
-import { Canvas, useThree, useLoader } from '@react-three/fiber';
+import { useRef, useMemo, Suspense, useEffect, useState, useCallback } from 'react';
+import { Canvas, useThree } from '@react-three/fiber';
 import { 
   OrbitControls, 
   TransformControls, 
   Grid, 
   GizmoHelper, 
   GizmoViewport,
-  Environment
+  PerspectiveCamera
 } from '@react-three/drei';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import * as THREE from 'three';
-import type { SceneObject, TransformMode, ViewMode, Vector3 } from '@/types/creation';
+import type { SceneObject, TransformMode, ViewMode, Vector3, SnapSettings, CameraPreset } from '@/types/creation';
 import { supabase } from '@/integrations/supabase/client';
-
-interface PrimitiveProps {
-  object: SceneObject;
-  isSelected: boolean;
-  onClick: () => void;
-  wireframe: boolean;
-}
-
-function Primitive({ object, isSelected, onClick, wireframe }: PrimitiveProps) {
-  const meshRef = useRef<THREE.Mesh>(null);
-
-  const geometry = useMemo(() => {
-    switch (object.primitiveType) {
-      case 'box':
-        return new THREE.BoxGeometry(1, 1, 1);
-      case 'sphere':
-        return new THREE.SphereGeometry(0.5, 32, 32);
-      case 'cylinder':
-        return new THREE.CylinderGeometry(0.5, 0.5, 1, 32);
-      case 'cone':
-        return new THREE.ConeGeometry(0.5, 1, 32);
-      case 'torus':
-        return new THREE.TorusGeometry(0.5, 0.2, 16, 100);
-      default:
-        return new THREE.BoxGeometry(1, 1, 1);
-    }
-  }, [object.primitiveType]);
-
-  return (
-    <mesh
-      ref={meshRef}
-      geometry={geometry}
-      position={[object.position.x, object.position.y, object.position.z]}
-      rotation={[object.rotation.x, object.rotation.y, object.rotation.z]}
-      scale={[object.scale.x, object.scale.y, object.scale.z]}
-      visible={object.visible}
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
-    >
-      <meshStandardMaterial 
-        color={object.color} 
-        wireframe={wireframe}
-        emissive={isSelected ? object.color : '#000000'}
-        emissiveIntensity={isSelected ? 0.2 : 0}
-      />
-    </mesh>
-  );
-}
-
-interface ImportedSTLProps {
-  object: SceneObject;
-  assetFilePath: string | null;
-  isSelected: boolean;
-  onClick: () => void;
-  wireframe: boolean;
-}
-
-function ImportedSTL({ object, assetFilePath, isSelected, onClick, wireframe }: ImportedSTLProps) {
-  const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null);
-
-  useEffect(() => {
-    if (!assetFilePath) return;
-
-    const loadSTL = async () => {
-      try {
-        const { data } = supabase.storage
-          .from('creation-assets')
-          .getPublicUrl(assetFilePath);
-
-        const loader = new STLLoader();
-        loader.load(data.publicUrl, (geo) => {
-          geo.center();
-          geo.computeVertexNormals();
-          setGeometry(geo);
-        });
-      } catch (error) {
-        console.error('Failed to load STL:', error);
-      }
-    };
-
-    loadSTL();
-  }, [assetFilePath]);
-
-  if (!geometry) {
-    return null;
-  }
-
-  return (
-    <mesh
-      geometry={geometry}
-      position={[object.position.x, object.position.y, object.position.z]}
-      rotation={[object.rotation.x, object.rotation.y, object.rotation.z]}
-      scale={[object.scale.x, object.scale.y, object.scale.z]}
-      visible={object.visible}
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
-    >
-      <meshStandardMaterial 
-        color={object.color} 
-        wireframe={wireframe}
-        emissive={isSelected ? object.color : '#000000'}
-        emissiveIntensity={isSelected ? 0.2 : 0}
-      />
-    </mesh>
-  );
-}
+import { createPrimitiveGeometry } from '@/utils/stl-exporter';
 
 interface TransformableObjectProps {
   object: SceneObject;
   isSelected: boolean;
   transformMode: TransformMode;
   wireframe: boolean;
+  snapSettings: SnapSettings;
   onSelect: () => void;
   onTransformEnd: (position: Vector3, rotation: Vector3, scale: Vector3) => void;
   getAssetFilePath: (assetId: string) => string | null;
@@ -138,29 +30,17 @@ function TransformableObject({
   isSelected, 
   transformMode, 
   wireframe,
+  snapSettings,
   onSelect, 
   onTransformEnd,
   getAssetFilePath
 }: TransformableObjectProps) {
   const meshRef = useRef<THREE.Group>(null);
+  const controlsRef = useRef<any>(null);
 
   const geometry = useMemo(() => {
-    if (object.type === 'imported') return null;
-    
-    switch (object.primitiveType) {
-      case 'box':
-        return new THREE.BoxGeometry(1, 1, 1);
-      case 'sphere':
-        return new THREE.SphereGeometry(0.5, 32, 32);
-      case 'cylinder':
-        return new THREE.CylinderGeometry(0.5, 0.5, 1, 32);
-      case 'cone':
-        return new THREE.ConeGeometry(0.5, 1, 32);
-      case 'torus':
-        return new THREE.TorusGeometry(0.5, 0.2, 16, 100);
-      default:
-        return new THREE.BoxGeometry(1, 1, 1);
-    }
+    if (object.type === 'imported' || object.type === 'group') return null;
+    return createPrimitiveGeometry(object.primitiveType!);
   }, [object.primitiveType, object.type]);
 
   const [stlGeometry, setStlGeometry] = useState<THREE.BufferGeometry | null>(null);
@@ -183,7 +63,29 @@ function TransformableObject({
     });
   }, [object.type, object.assetId, getAssetFilePath]);
 
+  // Set up snapping
+  useEffect(() => {
+    if (controlsRef.current && snapSettings.enabled) {
+      if (transformMode === 'translate') {
+        controlsRef.current.setTranslationSnap(snapSettings.translateSnap / 1000);
+      } else if (transformMode === 'rotate') {
+        controlsRef.current.setRotationSnap(THREE.MathUtils.degToRad(snapSettings.rotateSnap));
+      } else {
+        controlsRef.current.setScaleSnap(0.1);
+      }
+    } else if (controlsRef.current) {
+      controlsRef.current.setTranslationSnap(null);
+      controlsRef.current.setRotationSnap(null);
+      controlsRef.current.setScaleSnap(null);
+    }
+  }, [snapSettings, transformMode]);
+
   const actualGeometry = object.type === 'imported' ? stlGeometry : geometry;
+
+  // For groups, render nothing but still allow selection
+  if (object.type === 'group') {
+    return null;
+  }
 
   if (!actualGeometry) return null;
 
@@ -199,6 +101,7 @@ function TransformableObject({
         <mesh
           geometry={actualGeometry}
           onClick={(e) => {
+            if (object.locked) return;
             e.stopPropagation();
             onSelect();
           }}
@@ -211,11 +114,12 @@ function TransformableObject({
           />
         </mesh>
       </group>
-      {isSelected && meshRef.current && (
+      {isSelected && meshRef.current && !object.locked && (
         <TransformControls
+          ref={controlsRef}
           object={meshRef.current}
           mode={transformMode}
-          onObjectChange={() => {
+          onMouseUp={() => {
             if (meshRef.current) {
               const pos = meshRef.current.position;
               const rot = meshRef.current.rotation;
@@ -235,19 +139,27 @@ function TransformableObject({
 
 interface SceneProps {
   objects: SceneObject[];
-  selectedObjectId: string | null;
+  selectedObjectIds: string[];
   transformMode: TransformMode;
   viewMode: ViewMode;
-  onSelectObject: (id: string | null) => void;
+  showGrid: boolean;
+  showAxes: boolean;
+  gridSize: number;
+  snapSettings: SnapSettings;
+  onSelectObject: (id: string | null, addToSelection?: boolean) => void;
   onTransformEnd: (id: string, position: Vector3, rotation: Vector3, scale: Vector3) => void;
   getAssetFilePath: (assetId: string) => string | null;
 }
 
 function Scene({ 
   objects, 
-  selectedObjectId, 
+  selectedObjectIds, 
   transformMode,
   viewMode,
+  showGrid,
+  showAxes,
+  gridSize,
+  snapSettings,
   onSelectObject, 
   onTransformEnd,
   getAssetFilePath
@@ -260,27 +172,34 @@ function Scene({
       <directionalLight position={[10, 10, 5]} intensity={1} castShadow />
       <directionalLight position={[-10, -10, -5]} intensity={0.3} />
       
-      <Grid 
-        args={[20, 20]} 
-        cellSize={1}
-        cellThickness={0.5}
-        cellColor="#6b7280"
-        sectionSize={5}
-        sectionThickness={1}
-        sectionColor="#9ca3af"
-        fadeDistance={30}
-        fadeStrength={1}
-        followCamera={false}
-        infiniteGrid={true}
-      />
+      {showGrid && (
+        <Grid 
+          args={[20, 20]} 
+          cellSize={gridSize}
+          cellThickness={0.5}
+          cellColor="#6b7280"
+          sectionSize={gridSize * 5}
+          sectionThickness={1}
+          sectionColor="#9ca3af"
+          fadeDistance={30}
+          fadeStrength={1}
+          followCamera={false}
+          infiniteGrid={true}
+        />
+      )}
+
+      {showAxes && (
+        <axesHelper args={[5]} />
+      )}
 
       {objects.map(obj => (
         <TransformableObject
           key={obj.id}
           object={obj}
-          isSelected={obj.id === selectedObjectId}
+          isSelected={selectedObjectIds.includes(obj.id)}
           transformMode={transformMode}
           wireframe={wireframe}
+          snapSettings={snapSettings}
           onSelect={() => onSelectObject(obj.id)}
           onTransformEnd={(pos, rot, scl) => onTransformEnd(obj.id, pos, rot, scl)}
           getAssetFilePath={getAssetFilePath}
@@ -298,19 +217,27 @@ function Scene({
 
 interface CreationViewportProps {
   objects: SceneObject[];
-  selectedObjectId: string | null;
+  selectedObjectIds: string[];
   transformMode: TransformMode;
   viewMode: ViewMode;
-  onSelectObject: (id: string | null) => void;
+  showGrid: boolean;
+  showAxes: boolean;
+  gridSize: number;
+  snapSettings: SnapSettings;
+  onSelectObject: (id: string | null, addToSelection?: boolean) => void;
   onTransformEnd: (id: string, position: Vector3, rotation: Vector3, scale: Vector3) => void;
   getAssetFilePath: (assetId: string) => string | null;
 }
 
 export function CreationViewport({
   objects,
-  selectedObjectId,
+  selectedObjectIds,
   transformMode,
   viewMode,
+  showGrid,
+  showAxes,
+  gridSize,
+  snapSettings,
   onSelectObject,
   onTransformEnd,
   getAssetFilePath
@@ -324,9 +251,13 @@ export function CreationViewport({
         <Suspense fallback={null}>
           <Scene
             objects={objects}
-            selectedObjectId={selectedObjectId}
+            selectedObjectIds={selectedObjectIds}
             transformMode={transformMode}
             viewMode={viewMode}
+            showGrid={showGrid}
+            showAxes={showAxes}
+            gridSize={gridSize}
+            snapSettings={snapSettings}
             onSelectObject={onSelectObject}
             onTransformEnd={onTransformEnd}
             getAssetFilePath={getAssetFilePath}

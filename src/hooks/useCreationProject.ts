@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { dataApiHelpers } from '@/lib/data-api';
 import { supabase } from '@/integrations/supabase/client';
+import { useCreationHistory } from './useCreationHistory';
 import type { 
   CreationProject, 
   CreationAsset, 
@@ -24,14 +25,45 @@ export function useCreationProject() {
   const [currentProject, setCurrentProject] = useState<CreationProject | null>(null);
   const [sceneState, setSceneState] = useState<SceneState>(defaultSceneState);
   const [assets, setAssets] = useState<CreationAsset[]>([]);
-  const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+  const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+
+  // History management
+  const { pushState, undo: historyUndo, redo: historyRedo, canUndo, canRedo, reset: resetHistory } = useCreationHistory(defaultSceneState);
 
   // Load projects on mount
   useEffect(() => {
     loadProjects();
   }, []);
+
+  // Track scene changes for history
+  const updateSceneWithHistory = useCallback((
+    updater: (prev: SceneState) => SceneState,
+    description: string
+  ) => {
+    setSceneState(prev => {
+      const newState = updater(prev);
+      pushState(newState, description);
+      return newState;
+    });
+  }, [pushState]);
+
+  const undo = useCallback(() => {
+    const state = historyUndo();
+    if (state) {
+      setSceneState(state);
+      toast.success('Undone');
+    }
+  }, [historyUndo]);
+
+  const redo = useCallback(() => {
+    const state = historyRedo();
+    if (state) {
+      setSceneState(state);
+      toast.success('Redone');
+    }
+  }, [historyRedo]);
 
   const loadProjects = async () => {
     try {
@@ -40,7 +72,6 @@ export function useCreationProject() {
       });
       if (response.data) {
         setProjects(response.data);
-        // Auto-load most recent project
         if (response.data.length > 0) {
           await loadProject(response.data[0].id);
         }
@@ -56,7 +87,6 @@ export function useCreationProject() {
     try {
       setIsLoading(true);
       
-      // Load project details
       const projectRes = await dataApiHelpers.select<CreationProject[]>('creation_projects', {
         filters: { id: projectId }
       });
@@ -65,7 +95,6 @@ export function useCreationProject() {
         setCurrentProject(projectRes.data[0]);
       }
 
-      // Load assets
       const assetsRes = await dataApiHelpers.select<CreationAsset[]>('creation_assets', {
         filters: { project_id: projectId }
       });
@@ -73,7 +102,6 @@ export function useCreationProject() {
         setAssets(assetsRes.data);
       }
 
-      // Load scene state - use custom query since project_id is the primary key
       const { data: sceneData, error } = await supabase
         .from('creation_scene_state')
         .select('*')
@@ -81,12 +109,20 @@ export function useCreationProject() {
         .maybeSingle();
 
       if (sceneData && !error) {
-        setSceneState(sceneData.state_json as unknown as SceneState);
+        const loadedState = sceneData.state_json as unknown as SceneState;
+        // Ensure locked property exists for all objects
+        loadedState.objects = loadedState.objects.map(obj => ({
+          ...obj,
+          locked: obj.locked ?? false
+        }));
+        setSceneState(loadedState);
+        resetHistory(loadedState);
       } else {
         setSceneState(defaultSceneState);
+        resetHistory(defaultSceneState);
       }
 
-      setSelectedObjectId(null);
+      setSelectedObjectIds([]);
     } catch (error) {
       console.error('Failed to load project:', error);
       toast.error('Failed to load project');
@@ -106,8 +142,9 @@ export function useCreationProject() {
         setProjects(prev => [response.data as CreationProject, ...prev]);
         setCurrentProject(response.data as CreationProject);
         setSceneState(defaultSceneState);
+        resetHistory(defaultSceneState);
         setAssets([]);
-        setSelectedObjectId(null);
+        setSelectedObjectIds([]);
         toast.success('Project created');
         return response.data as CreationProject;
       }
@@ -127,7 +164,6 @@ export function useCreationProject() {
     try {
       setIsSaving(true);
 
-      // Upsert scene state using raw query approach
       const { data: existing } = await supabase
         .from('creation_scene_state')
         .select('project_id')
@@ -150,7 +186,6 @@ export function useCreationProject() {
         if (error) throw error;
       }
 
-      // Update project timestamp
       await dataApiHelpers.update('creation_projects', currentProject.id, {
         updated_at: new Date().toISOString()
       });
@@ -176,7 +211,6 @@ export function useCreationProject() {
     }
   };
 
-  // Object management
   const generateId = () => crypto.randomUUID();
 
   const addPrimitive = (type: PrimitiveType) => {
@@ -189,14 +223,15 @@ export function useCreationProject() {
       rotation: { x: 0, y: 0, z: 0 },
       scale: { x: 1, y: 1, z: 1 },
       visible: true,
+      locked: false,
       color: '#6366f1'
     };
 
-    setSceneState(prev => ({
+    updateSceneWithHistory(prev => ({
       ...prev,
       objects: [...prev.objects, newObject]
-    }));
-    setSelectedObjectId(newObject.id);
+    }), `Add ${type}`);
+    setSelectedObjectIds([newObject.id]);
   };
 
   const importSTL = async (file: File) => {
@@ -209,14 +244,12 @@ export function useCreationProject() {
       const projectId = currentProject!.id;
       const filePath = `${ARLO_USER_ID}/${projectId}/${Date.now()}_${file.name}`;
 
-      // Upload to storage
       const { error: uploadError } = await supabase.storage
         .from('creation-assets')
         .upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
-      // Create asset record
       const assetRes = await dataApiHelpers.insert<CreationAsset>('creation_assets', {
         project_id: projectId,
         file_path: filePath,
@@ -227,24 +260,24 @@ export function useCreationProject() {
         const asset = assetRes.data as CreationAsset;
         setAssets(prev => [...prev, asset]);
 
-        // Add to scene
         const newObject: SceneObject = {
           id: generateId(),
           name: file.name.replace('.stl', ''),
           type: 'imported',
           assetId: asset.id,
           position: { x: 0, y: 0, z: 0 },
-          rotation: { x: -Math.PI / 2, y: 0, z: 0 }, // STL files are often oriented differently
-          scale: { x: 0.01, y: 0.01, z: 0.01 }, // Scale down for typical STL sizes
+          rotation: { x: -Math.PI / 2, y: 0, z: 0 },
+          scale: { x: 0.01, y: 0.01, z: 0.01 },
           visible: true,
+          locked: false,
           color: '#10b981'
         };
 
-        setSceneState(prev => ({
+        updateSceneWithHistory(prev => ({
           ...prev,
           objects: [...prev.objects, newObject]
-        }));
-        setSelectedObjectId(newObject.id);
+        }), `Import ${file.name}`);
+        setSelectedObjectIds([newObject.id]);
 
         toast.success(`Imported ${file.name}`);
         return asset;
@@ -256,17 +289,27 @@ export function useCreationProject() {
     return null;
   };
 
-  const updateObject = (id: string, updates: Partial<SceneObject>) => {
-    setSceneState(prev => ({
+  const updateObject = (id: string, updates: Partial<SceneObject>, description?: string) => {
+    updateSceneWithHistory(prev => ({
       ...prev,
       objects: prev.objects.map(obj => 
         obj.id === id ? { ...obj, ...updates } : obj
       )
-    }));
+    }), description || 'Update object');
   };
 
   const updateObjectTransform = (id: string, property: 'position' | 'rotation' | 'scale', value: Vector3) => {
-    updateObject(id, { [property]: value });
+    // For continuous transforms, don't push to history every time
+    setSceneState(prev => ({
+      ...prev,
+      objects: prev.objects.map(obj => 
+        obj.id === id ? { ...obj, [property]: value } : obj
+      )
+    }));
+  };
+
+  const commitTransform = (id: string) => {
+    pushState(sceneState, 'Transform object');
   };
 
   const duplicateObject = (id: string) => {
@@ -284,34 +327,129 @@ export function useCreationProject() {
       }
     };
 
-    setSceneState(prev => ({
+    updateSceneWithHistory(prev => ({
       ...prev,
       objects: [...prev.objects, newObject]
-    }));
-    setSelectedObjectId(newObject.id);
+    }), 'Duplicate object');
+    setSelectedObjectIds([newObject.id]);
   };
 
   const deleteObject = (id: string) => {
-    setSceneState(prev => ({
+    updateSceneWithHistory(prev => ({
       ...prev,
       objects: prev.objects.filter(obj => obj.id !== id)
-    }));
-    if (selectedObjectId === id) {
-      setSelectedObjectId(null);
-    }
+    }), 'Delete object');
+    setSelectedObjectIds(prev => prev.filter(sid => sid !== id));
+  };
+
+  const deleteSelectedObjects = () => {
+    if (selectedObjectIds.length === 0) return;
+    updateSceneWithHistory(prev => ({
+      ...prev,
+      objects: prev.objects.filter(obj => !selectedObjectIds.includes(obj.id))
+    }), `Delete ${selectedObjectIds.length} object(s)`);
+    setSelectedObjectIds([]);
   };
 
   const toggleObjectVisibility = (id: string) => {
-    updateObject(id, { 
-      visible: !sceneState.objects.find(o => o.id === id)?.visible 
-    });
+    const obj = sceneState.objects.find(o => o.id === id);
+    updateObject(id, { visible: !obj?.visible }, 'Toggle visibility');
+  };
+
+  const toggleObjectLock = (id: string) => {
+    const obj = sceneState.objects.find(o => o.id === id);
+    updateObject(id, { locked: !obj?.locked }, 'Toggle lock');
   };
 
   const renameObject = (id: string, name: string) => {
-    updateObject(id, { name });
+    updateObject(id, { name }, 'Rename object');
   };
 
-  // Get asset URL for imported STLs
+  // Grouping
+  const groupSelectedObjects = () => {
+    if (selectedObjectIds.length < 2) return;
+
+    const group: SceneObject = {
+      id: generateId(),
+      name: `Group ${sceneState.objects.filter(o => o.type === 'group').length + 1}`,
+      type: 'group',
+      position: { x: 0, y: 0, z: 0 },
+      rotation: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1, z: 1 },
+      visible: true,
+      locked: false,
+      color: '#9333ea',
+      children: selectedObjectIds
+    };
+
+    updateSceneWithHistory(prev => ({
+      ...prev,
+      objects: [
+        ...prev.objects.map(obj => 
+          selectedObjectIds.includes(obj.id) 
+            ? { ...obj, groupId: group.id }
+            : obj
+        ),
+        group
+      ]
+    }), 'Group objects');
+    setSelectedObjectIds([group.id]);
+  };
+
+  const ungroupObject = (groupId: string) => {
+    const group = sceneState.objects.find(o => o.id === groupId);
+    if (!group || group.type !== 'group') return;
+
+    updateSceneWithHistory(prev => ({
+      ...prev,
+      objects: prev.objects
+        .filter(obj => obj.id !== groupId)
+        .map(obj => 
+          obj.groupId === groupId 
+            ? { ...obj, groupId: undefined }
+            : obj
+        )
+    }), 'Ungroup');
+    setSelectedObjectIds(group.children || []);
+  };
+
+  // Alignment actions
+  const alignToOrigin = () => {
+    if (selectedObjectIds.length === 0) return;
+    updateSceneWithHistory(prev => ({
+      ...prev,
+      objects: prev.objects.map(obj => 
+        selectedObjectIds.includes(obj.id)
+          ? { ...obj, position: { x: 0, y: obj.position.y, z: 0 } }
+          : obj
+      )
+    }), 'Align to origin');
+  };
+
+  const dropToGround = () => {
+    if (selectedObjectIds.length === 0) return;
+    updateSceneWithHistory(prev => ({
+      ...prev,
+      objects: prev.objects.map(obj => 
+        selectedObjectIds.includes(obj.id)
+          ? { ...obj, position: { ...obj.position, y: 0.5 } }
+          : obj
+      )
+    }), 'Drop to ground');
+  };
+
+  const centerInScene = () => {
+    if (selectedObjectIds.length === 0) return;
+    updateSceneWithHistory(prev => ({
+      ...prev,
+      objects: prev.objects.map(obj => 
+        selectedObjectIds.includes(obj.id)
+          ? { ...obj, position: { x: 0, y: 0.5, z: 0 } }
+          : obj
+      )
+    }), 'Center in scene');
+  };
+
   const getAssetUrl = useCallback((assetId: string) => {
     const asset = assets.find(a => a.id === assetId);
     if (!asset) return null;
@@ -323,7 +461,26 @@ export function useCreationProject() {
     return data.publicUrl;
   }, [assets]);
 
-  const selectedObject = sceneState.objects.find(o => o.id === selectedObjectId) || null;
+  // Multi-select support
+  const toggleObjectSelection = (id: string, addToSelection: boolean) => {
+    const obj = sceneState.objects.find(o => o.id === id);
+    if (obj?.locked) return;
+
+    if (addToSelection) {
+      setSelectedObjectIds(prev => 
+        prev.includes(id) 
+          ? prev.filter(sid => sid !== id)
+          : [...prev, id]
+      );
+    } else {
+      setSelectedObjectIds([id]);
+    }
+  };
+
+  const clearSelection = () => setSelectedObjectIds([]);
+
+  const selectedObjects = sceneState.objects.filter(o => selectedObjectIds.includes(o.id));
+  const selectedObject = selectedObjects.length === 1 ? selectedObjects[0] : null;
 
   return {
     // Project management
@@ -336,23 +493,46 @@ export function useCreationProject() {
     saveProject,
     updateProjectName,
 
+    // History
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+
     // Scene state
     sceneState,
     setSceneState,
     assets,
 
-    // Object management
+    // Selection
     selectedObject,
-    selectedObjectId,
-    setSelectedObjectId,
+    selectedObjects,
+    selectedObjectIds,
+    setSelectedObjectIds,
+    toggleObjectSelection,
+    clearSelection,
+
+    // Object management
     addPrimitive,
     importSTL,
     updateObject,
     updateObjectTransform,
+    commitTransform,
     duplicateObject,
     deleteObject,
+    deleteSelectedObjects,
     toggleObjectVisibility,
+    toggleObjectLock,
     renameObject,
-    getAssetUrl
+    getAssetUrl,
+
+    // Grouping
+    groupSelectedObjects,
+    ungroupObject,
+
+    // Alignment
+    alignToOrigin,
+    dropToGround,
+    centerInScene
   };
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Eye, EyeOff, Copy, Trash2, Edit2, Check, X, Box, Circle, Cylinder, Triangle, Donut, FileBox } from 'lucide-react';
+import { Eye, EyeOff, Copy, Trash2, Edit2, Check, X, Box, Circle, Cylinder, Triangle, Donut, FileBox, Lock, Unlock, Folder, Hexagon, Square, Layers, Ungroup } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -11,17 +11,26 @@ const primitiveIcons: Record<PrimitiveType, React.ElementType> = {
   sphere: Circle,
   cylinder: Cylinder,
   cone: Triangle,
-  torus: Donut
+  torus: Donut,
+  capsule: Hexagon,
+  roundedBox: Box,
+  pyramid: Triangle,
+  plane: Square,
+  tube: Cylinder,
+  torusKnot: Donut,
+  lathe: Layers
 };
 
 interface ObjectListItemProps {
   object: SceneObject;
   isSelected: boolean;
-  onSelect: () => void;
+  onSelect: (addToSelection: boolean) => void;
   onToggleVisibility: () => void;
+  onToggleLock: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
   onRename: (name: string) => void;
+  onUngroup?: () => void;
 }
 
 function ObjectListItem({
@@ -29,9 +38,11 @@ function ObjectListItem({
   isSelected,
   onSelect,
   onToggleVisibility,
+  onToggleLock,
   onDuplicate,
   onDelete,
-  onRename
+  onRename,
+  onUngroup
 }: ObjectListItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(object.name);
@@ -48,8 +59,15 @@ function ObjectListItem({
     setIsEditing(false);
   };
 
+  const handleClick = (e: React.MouseEvent) => {
+    if (object.locked) return;
+    onSelect(e.shiftKey || e.metaKey || e.ctrlKey);
+  };
+
   const Icon = object.type === 'imported' 
     ? FileBox 
+    : object.type === 'group'
+    ? Folder
     : primitiveIcons[object.primitiveType!] || Box;
 
   return (
@@ -58,9 +76,10 @@ function ObjectListItem({
         "flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors",
         isSelected 
           ? "bg-primary/20 border border-primary/30" 
-          : "hover:bg-muted/50"
+          : "hover:bg-muted/50",
+        object.locked && "opacity-60"
       )}
-      onClick={onSelect}
+      onClick={handleClick}
     >
       <div 
         className="w-6 h-6 rounded flex items-center justify-center"
@@ -98,6 +117,16 @@ function ObjectListItem({
           </span>
 
           <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+            {object.type === 'group' && onUngroup && (
+              <Button 
+                size="icon" 
+                variant="ghost" 
+                className="h-6 w-6"
+                onClick={onUngroup}
+              >
+                <Ungroup className="h-3 w-3" />
+              </Button>
+            )}
             <Button 
               size="icon" 
               variant="ghost" 
@@ -105,6 +134,18 @@ function ObjectListItem({
               onClick={() => setIsEditing(true)}
             >
               <Edit2 className="h-3 w-3" />
+            </Button>
+            <Button 
+              size="icon" 
+              variant="ghost" 
+              className="h-6 w-6"
+              onClick={onToggleLock}
+            >
+              {object.locked ? (
+                <Lock className="h-3 w-3 text-amber-500" />
+              ) : (
+                <Unlock className="h-3 w-3 text-muted-foreground" />
+              )}
             </Button>
             <Button 
               size="icon" 
@@ -123,6 +164,7 @@ function ObjectListItem({
               variant="ghost" 
               className="h-6 w-6"
               onClick={onDuplicate}
+              disabled={object.locked}
             >
               <Copy className="h-3 w-3" />
             </Button>
@@ -131,6 +173,7 @@ function ObjectListItem({
               variant="ghost" 
               className="h-6 w-6 text-destructive hover:text-destructive"
               onClick={onDelete}
+              disabled={object.locked}
             >
               <Trash2 className="h-3 w-3" />
             </Button>
@@ -143,22 +186,26 @@ function ObjectListItem({
 
 interface ObjectListPanelProps {
   objects: SceneObject[];
-  selectedObjectId: string | null;
-  onSelectObject: (id: string) => void;
+  selectedObjectIds: string[];
+  onSelectObject: (id: string, addToSelection: boolean) => void;
   onToggleVisibility: (id: string) => void;
+  onToggleLock: (id: string) => void;
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
   onRename: (id: string, name: string) => void;
+  onUngroup: (id: string) => void;
 }
 
 export function ObjectListPanel({
   objects,
-  selectedObjectId,
+  selectedObjectIds,
   onSelectObject,
   onToggleVisibility,
+  onToggleLock,
   onDuplicate,
   onDelete,
-  onRename
+  onRename,
+  onUngroup
 }: ObjectListPanelProps) {
   return (
     <div className="h-full flex flex-col">
@@ -166,6 +213,7 @@ export function ObjectListPanel({
         <h3 className="font-medium text-sm">Objects</h3>
         <p className="text-xs text-muted-foreground mt-0.5">
           {objects.length} object{objects.length !== 1 ? 's' : ''}
+          {selectedObjectIds.length > 0 && ` • ${selectedObjectIds.length} selected`}
         </p>
       </div>
       
@@ -180,12 +228,14 @@ export function ObjectListPanel({
               <ObjectListItem
                 key={obj.id}
                 object={obj}
-                isSelected={obj.id === selectedObjectId}
-                onSelect={() => onSelectObject(obj.id)}
+                isSelected={selectedObjectIds.includes(obj.id)}
+                onSelect={(addToSelection) => onSelectObject(obj.id, addToSelection)}
                 onToggleVisibility={() => onToggleVisibility(obj.id)}
+                onToggleLock={() => onToggleLock(obj.id)}
                 onDuplicate={() => onDuplicate(obj.id)}
                 onDelete={() => onDelete(obj.id)}
                 onRename={(name) => onRename(obj.id, name)}
+                onUngroup={obj.type === 'group' ? () => onUngroup(obj.id) : undefined}
               />
             ))}
           </div>

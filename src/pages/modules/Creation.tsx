@@ -1,17 +1,26 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useCreationProject } from "@/hooks/useCreationProject";
 import { CreationViewport } from "@/components/creation/CreationViewport";
 import { CreationToolbar } from "@/components/creation/CreationToolbar";
 import { ObjectListPanel } from "@/components/creation/ObjectListPanel";
 import { PropertiesPanel } from "@/components/creation/PropertiesPanel";
-import { exportObjectsToSTL, exportSingleObjectToSTL } from "@/utils/stl-exporter";
+import { ExportDialog } from "@/components/creation/ExportDialog";
 import { Input } from "@/components/ui/input";
 import { Loader2 } from "lucide-react";
-import type { TransformMode, ViewMode, CreationAsset } from "@/types/creation";
+import type { TransformMode, ViewMode, CreationAsset, SnapSettings, CameraPreset } from "@/types/creation";
 
 export default function Creation() {
   const [transformMode, setTransformMode] = useState<TransformMode>('translate');
   const [viewMode, setViewMode] = useState<ViewMode>('solid');
+  const [showGrid, setShowGrid] = useState(true);
+  const [showAxes, setShowAxes] = useState(true);
+  const [gridSize, setGridSize] = useState<number>(1);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [snapSettings, setSnapSettings] = useState<SnapSettings>({
+    enabled: false,
+    translateSnap: 1,
+    rotateSnap: 15
+  });
 
   const {
     currentProject,
@@ -23,16 +32,30 @@ export default function Creation() {
     sceneState,
     assets,
     selectedObject,
-    selectedObjectId,
-    setSelectedObjectId,
+    selectedObjects,
+    selectedObjectIds,
+    toggleObjectSelection,
+    clearSelection,
     addPrimitive,
     importSTL,
     updateObject,
     updateObjectTransform,
+    commitTransform,
     duplicateObject,
     deleteObject,
+    deleteSelectedObjects,
     toggleObjectVisibility,
-    renameObject
+    toggleObjectLock,
+    renameObject,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    groupSelectedObjects,
+    ungroupObject,
+    alignToOrigin,
+    dropToGround,
+    centerInScene
   } = useCreationProject();
 
   useEffect(() => {
@@ -42,8 +65,20 @@ export default function Creation() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       
+      // Undo/Redo
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+        return;
+      }
+
+      // Other shortcuts
       switch (e.key.toLowerCase()) {
         case 'g':
           setTransformMode('translate');
@@ -54,26 +89,30 @@ export default function Creation() {
         case 's':
           if (!e.ctrlKey && !e.metaKey) {
             setTransformMode('scale');
+          } else if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            saveProject();
           }
           break;
         case 'delete':
         case 'backspace':
-          if (selectedObjectId) {
-            deleteObject(selectedObjectId);
-          }
+          deleteSelectedObjects();
           break;
         case 'd':
-          if ((e.ctrlKey || e.metaKey) && selectedObjectId) {
+          if ((e.ctrlKey || e.metaKey) && selectedObjectIds.length === 1) {
             e.preventDefault();
-            duplicateObject(selectedObjectId);
+            duplicateObject(selectedObjectIds[0]);
           }
+          break;
+        case 'escape':
+          clearSelection();
           break;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedObjectId, deleteObject, duplicateObject]);
+  }, [selectedObjectIds, deleteSelectedObjects, duplicateObject, undo, redo, saveProject, clearSelection]);
 
   const getAssetFilePath = useCallback((assetId: string): string | null => {
     const asset = assets.find((a: CreationAsset) => a.id === assetId);
@@ -84,17 +123,15 @@ export default function Creation() {
     updateObjectTransform(id, 'position', position);
     updateObjectTransform(id, 'rotation', rotation);
     updateObjectTransform(id, 'scale', scale);
+    commitTransform(id);
   };
 
-  const handleExportSelected = () => {
-    if (selectedObject) {
-      exportSingleObjectToSTL(selectedObject);
+  const handleSelectObject = (id: string | null, addToSelection: boolean = false) => {
+    if (id === null) {
+      clearSelection();
+    } else {
+      toggleObjectSelection(id, addToSelection);
     }
-  };
-
-  const handleExportAll = () => {
-    const name = currentProject?.name || 'scene';
-    exportObjectsToSTL(sceneState.objects, `${name}.stl`);
   };
 
   if (isLoading) {
@@ -118,15 +155,29 @@ export default function Creation() {
           transformMode={transformMode}
           viewMode={viewMode}
           isSaving={isSaving}
-          hasSelection={!!selectedObject}
+          hasSelection={selectedObjectIds.length > 0}
+          hasTwoSelected={selectedObjectIds.length === 2}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          showGrid={showGrid}
+          showAxes={showAxes}
+          snapSettings={snapSettings}
           onAddPrimitive={addPrimitive}
           onImportSTL={importSTL}
           onTransformModeChange={setTransformMode}
           onViewModeChange={setViewMode}
           onSave={saveProject}
           onNewProject={() => createProject()}
-          onExportSelected={handleExportSelected}
-          onExportAll={handleExportAll}
+          onExport={() => setExportDialogOpen(true)}
+          onUndo={undo}
+          onRedo={redo}
+          onToggleGrid={() => setShowGrid(!showGrid)}
+          onToggleAxes={() => setShowAxes(!showAxes)}
+          onSnapSettingsChange={setSnapSettings}
+          onAlignToOrigin={alignToOrigin}
+          onDropToGround={dropToGround}
+          onCenterInScene={centerInScene}
+          onGroup={groupSelectedObjects}
         />
       </div>
 
@@ -136,12 +187,14 @@ export default function Creation() {
         <div className="w-64 border-r border-border bg-card/50">
           <ObjectListPanel
             objects={sceneState.objects}
-            selectedObjectId={selectedObjectId}
-            onSelectObject={setSelectedObjectId}
+            selectedObjectIds={selectedObjectIds}
+            onSelectObject={(id, addToSelection) => handleSelectObject(id, addToSelection)}
             onToggleVisibility={toggleObjectVisibility}
+            onToggleLock={toggleObjectLock}
             onDuplicate={duplicateObject}
             onDelete={deleteObject}
             onRename={renameObject}
+            onUngroup={ungroupObject}
           />
         </div>
 
@@ -149,10 +202,14 @@ export default function Creation() {
         <div className="flex-1">
           <CreationViewport
             objects={sceneState.objects}
-            selectedObjectId={selectedObjectId}
+            selectedObjectIds={selectedObjectIds}
             transformMode={transformMode}
             viewMode={viewMode}
-            onSelectObject={setSelectedObjectId}
+            showGrid={showGrid}
+            showAxes={showAxes}
+            gridSize={gridSize}
+            snapSettings={snapSettings}
+            onSelectObject={handleSelectObject}
             onTransformEnd={handleTransformEnd}
             getAssetFilePath={getAssetFilePath}
           />
@@ -162,13 +219,24 @@ export default function Creation() {
         <div className="w-72 border-l border-border bg-card/50">
           <PropertiesPanel
             selectedObject={selectedObject}
-            onUpdatePosition={(v) => selectedObjectId && updateObjectTransform(selectedObjectId, 'position', v)}
-            onUpdateRotation={(v) => selectedObjectId && updateObjectTransform(selectedObjectId, 'rotation', v)}
-            onUpdateScale={(v) => selectedObjectId && updateObjectTransform(selectedObjectId, 'scale', v)}
-            onUpdateColor={(c) => selectedObjectId && updateObject(selectedObjectId, { color: c })}
+            selectedCount={selectedObjectIds.length}
+            onUpdatePosition={(v) => selectedObjectIds.length === 1 && updateObjectTransform(selectedObjectIds[0], 'position', v)}
+            onUpdateRotation={(v) => selectedObjectIds.length === 1 && updateObjectTransform(selectedObjectIds[0], 'rotation', v)}
+            onUpdateScale={(v) => selectedObjectIds.length === 1 && updateObjectTransform(selectedObjectIds[0], 'scale', v)}
+            onUpdateColor={(c) => selectedObjectIds.length === 1 && updateObject(selectedObjectIds[0], { color: c })}
+            onCommitTransform={() => selectedObjectIds.length === 1 && commitTransform(selectedObjectIds[0])}
           />
         </div>
       </div>
+
+      {/* Export Dialog */}
+      <ExportDialog
+        open={exportDialogOpen}
+        onOpenChange={setExportDialogOpen}
+        objects={sceneState.objects}
+        selectedObjects={selectedObjects}
+        projectName={currentProject?.name || 'export'}
+      />
     </div>
   );
 }
