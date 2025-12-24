@@ -403,17 +403,21 @@ const ArloCommandLauncher = () => {
             ref={containerRef}
             onClick={() => !open && setOpen(true)}
             className={cn(
-              "fixed left-1/2 bottom-8 -translate-x-1/2 z-50 w-full bg-background shadow-2xl pointer-events-auto border border-border/50",
+              "fixed bottom-8 z-50 bg-background shadow-2xl pointer-events-auto border border-border/50",
               open ? "cursor-default" : "cursor-pointer"
             )}
+            style={{
+              left: "50%",
+              transform: "translateX(-50%)",
+            }}
             initial={false}
             animate={{
-              maxWidth: open ? (isExpanded ? "32rem" : "40rem") : "28rem",
+              width: open ? (isExpanded ? "32rem" : "40rem") : "28rem",
               borderRadius: open ? (isExpanded ? 16 : 24) : 24,
               scale: open && searchScope !== "all" && !hasTyped ? 1.01 : 1,
             }}
             transition={{
-              maxWidth: { duration: 0.25, ease: "easeInOut" },
+              width: { duration: 0.25, ease: "easeInOut" },
               borderRadius: { duration: 0.25, ease: "easeInOut" },
               scale: { duration: 0.2, ease: "easeOut" },
             }}
