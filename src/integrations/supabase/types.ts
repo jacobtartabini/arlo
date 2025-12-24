@@ -169,21 +169,27 @@ export type Database = {
           habit_id: string
           id: string
           notes: string | null
+          skipped: boolean | null
           user_id: string
+          value: number | null
         }
         Insert: {
           completed_at?: string
           habit_id: string
           id?: string
           notes?: string | null
+          skipped?: boolean | null
           user_id: string
+          value?: number | null
         }
         Update: {
           completed_at?: string
           habit_id?: string
           id?: string
           notes?: string | null
+          skipped?: boolean | null
           user_id?: string
+          value?: number | null
         }
         Relationships: [
           {
@@ -200,33 +206,68 @@ export type Database = {
           category: string
           created_at: string
           description: string | null
+          difficulty: string | null
           enabled: boolean
+          habit_type: string | null
+          icon: string | null
           id: string
+          routine_id: string | null
+          routine_order: number | null
+          schedule_days: number[] | null
+          schedule_type: string | null
+          target_value: number | null
           title: string
           updated_at: string
           user_id: string
+          weekly_frequency: number | null
         }
         Insert: {
           category?: string
           created_at?: string
           description?: string | null
+          difficulty?: string | null
           enabled?: boolean
+          habit_type?: string | null
+          icon?: string | null
           id?: string
+          routine_id?: string | null
+          routine_order?: number | null
+          schedule_days?: number[] | null
+          schedule_type?: string | null
+          target_value?: number | null
           title: string
           updated_at?: string
           user_id: string
+          weekly_frequency?: number | null
         }
         Update: {
           category?: string
           created_at?: string
           description?: string | null
+          difficulty?: string | null
           enabled?: boolean
+          habit_type?: string | null
+          icon?: string | null
           id?: string
+          routine_id?: string | null
+          routine_order?: number | null
+          schedule_days?: number[] | null
+          schedule_type?: string | null
+          target_value?: number | null
           title?: string
           updated_at?: string
           user_id?: string
+          weekly_frequency?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "habits_routine_id_fkey"
+            columns: ["routine_id"]
+            isOneToOne: false
+            referencedRelation: "routines"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       note_folders: {
         Row: {
@@ -347,6 +388,110 @@ export type Database = {
         }
         Relationships: []
       }
+      reward_redemptions: {
+        Row: {
+          id: string
+          redeemed_at: string
+          reward_id: string
+          user_id: string
+          xp_spent: number
+        }
+        Insert: {
+          id?: string
+          redeemed_at?: string
+          reward_id: string
+          user_id: string
+          xp_spent: number
+        }
+        Update: {
+          id?: string
+          redeemed_at?: string
+          reward_id?: string
+          user_id?: string
+          xp_spent?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reward_redemptions_reward_id_fkey"
+            columns: ["reward_id"]
+            isOneToOne: false
+            referencedRelation: "rewards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rewards: {
+        Row: {
+          created_at: string
+          description: string | null
+          enabled: boolean
+          icon: string | null
+          id: string
+          name: string
+          user_id: string
+          xp_cost: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          icon?: string | null
+          id?: string
+          name: string
+          user_id: string
+          xp_cost?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          icon?: string | null
+          id?: string
+          name?: string
+          user_id?: string
+          xp_cost?: number
+        }
+        Relationships: []
+      }
+      routines: {
+        Row: {
+          anchor_cue: string | null
+          created_at: string
+          enabled: boolean
+          icon: string | null
+          id: string
+          name: string
+          reward_description: string | null
+          routine_type: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          anchor_cue?: string | null
+          created_at?: string
+          enabled?: boolean
+          icon?: string | null
+          id?: string
+          name: string
+          reward_description?: string | null
+          routine_type?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          anchor_cue?: string | null
+          created_at?: string
+          enabled?: boolean
+          icon?: string | null
+          id?: string
+          name?: string
+          reward_description?: string | null
+          routine_type?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       tasks: {
         Row: {
           category: string | null
@@ -381,6 +526,45 @@ export type Database = {
           id?: string
           priority?: number
           title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_progress: {
+        Row: {
+          available_xp: number
+          created_at: string
+          current_level: number
+          current_streak: number
+          id: string
+          last_activity_date: string | null
+          longest_streak: number
+          total_xp: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          available_xp?: number
+          created_at?: string
+          current_level?: number
+          current_streak?: number
+          id?: string
+          last_activity_date?: string | null
+          longest_streak?: number
+          total_xp?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          available_xp?: number
+          created_at?: string
+          current_level?: number
+          current_streak?: number
+          id?: string
+          last_activity_date?: string | null
+          longest_streak?: number
+          total_xp?: number
           updated_at?: string
           user_id?: string
         }
@@ -440,6 +624,36 @@ export type Database = {
           updated_at?: string
           user_id?: string
           voice_responses_enabled?: boolean
+        }
+        Relationships: []
+      }
+      xp_events: {
+        Row: {
+          created_at: string
+          description: string | null
+          event_type: string
+          id: string
+          reference_id: string | null
+          user_id: string
+          xp_amount: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          event_type: string
+          id?: string
+          reference_id?: string | null
+          user_id: string
+          xp_amount: number
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          event_type?: string
+          id?: string
+          reference_id?: string | null
+          user_id?: string
+          xp_amount?: number
         }
         Relationships: []
       }

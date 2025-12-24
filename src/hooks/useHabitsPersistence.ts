@@ -6,7 +6,16 @@ interface DbHabit {
   user_id: string;
   title: string;
   description: string | null;
+  icon: string;
   category: string;
+  habit_type: string;
+  target_value: number;
+  schedule_type: string;
+  schedule_days: number[];
+  weekly_frequency: number;
+  difficulty: string;
+  routine_id: string | null;
+  routine_order: number;
   enabled: boolean;
   created_at: string;
   updated_at: string;
@@ -17,6 +26,8 @@ interface DbHabitLog {
   habit_id: string;
   user_id: string;
   completed_at: string;
+  value: number;
+  skipped: boolean;
   notes: string | null;
 }
 
@@ -24,7 +35,16 @@ const dbToHabit = (db: DbHabit): Habit => ({
   id: db.id,
   title: db.title,
   description: db.description ?? undefined,
+  icon: db.icon ?? 'check',
   category: db.category as Habit["category"],
+  habitType: (db.habit_type ?? 'check') as Habit["habitType"],
+  targetValue: db.target_value ?? 1,
+  scheduleType: (db.schedule_type ?? 'daily') as Habit["scheduleType"],
+  scheduleDays: db.schedule_days ?? [0, 1, 2, 3, 4, 5, 6],
+  weeklyFrequency: db.weekly_frequency ?? 7,
+  difficulty: (db.difficulty ?? 'normal') as Habit["difficulty"],
+  routineId: db.routine_id ?? undefined,
+  routineOrder: db.routine_order ?? 0,
   enabled: db.enabled,
   createdAt: new Date(db.created_at),
   updatedAt: new Date(db.updated_at),
@@ -34,6 +54,8 @@ const dbToHabitLog = (db: DbHabitLog): HabitLog => ({
   id: db.id,
   habitId: db.habit_id,
   completedAt: new Date(db.completed_at),
+  value: db.value ?? 1,
+  skipped: db.skipped ?? false,
   notes: db.notes ?? undefined,
 });
 
@@ -52,6 +74,8 @@ const calculateStreak = (logs: HabitLog[]): number => {
   let currentDate = new Date(today);
 
   for (const log of sortedLogs) {
+    if (log.skipped) continue; // Skips don't break streaks
+    
     const logDate = new Date(log.completedAt);
     logDate.setHours(0, 0, 0, 0);
 
@@ -68,6 +92,17 @@ const calculateStreak = (logs: HabitLog[]): number => {
   }
 
   return streak;
+};
+
+// Count completions in last 7 days
+const countLast7Days = (logs: HabitLog[]): number => {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  sevenDaysAgo.setHours(0, 0, 0, 0);
+
+  return logs.filter(log => 
+    !log.skipped && log.completedAt >= sevenDaysAgo
+  ).length;
 };
 
 /**
@@ -100,14 +135,21 @@ export function useHabitsPersistence() {
     const habits = await fetchHabits();
     const logs = await fetchAllHabitLogs();
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     return habits.map((habit) => {
       const habitLogs = logs.filter((log) => log.habitId === habit.id);
       const streak = calculateStreak(habitLogs);
-      const lastCompleted = habitLogs.length > 0 
-        ? habitLogs.sort((a, b) => b.completedAt.getTime() - a.completedAt.getTime())[0].completedAt
-        : undefined;
+      const lastCompleted = habitLogs.find(l => !l.skipped)?.completedAt;
+      const completedToday = habitLogs.some(log => {
+        const logDate = new Date(log.completedAt);
+        logDate.setHours(0, 0, 0, 0);
+        return logDate.getTime() === today.getTime() && !log.skipped;
+      });
+      const last7Days = countLast7Days(habitLogs);
 
-      return { ...habit, streak, lastCompleted };
+      return { ...habit, streak, lastCompleted, completedToday, last7Days };
     });
   };
 
@@ -158,6 +200,15 @@ export function useHabitsPersistence() {
     if (updates.description !== undefined) dbUpdates.description = updates.description;
     if (updates.category !== undefined) dbUpdates.category = updates.category;
     if (updates.enabled !== undefined) dbUpdates.enabled = updates.enabled;
+    if (updates.icon !== undefined) dbUpdates.icon = updates.icon;
+    if (updates.habitType !== undefined) dbUpdates.habit_type = updates.habitType;
+    if (updates.targetValue !== undefined) dbUpdates.target_value = updates.targetValue;
+    if (updates.scheduleType !== undefined) dbUpdates.schedule_type = updates.scheduleType;
+    if (updates.scheduleDays !== undefined) dbUpdates.schedule_days = updates.scheduleDays;
+    if (updates.weeklyFrequency !== undefined) dbUpdates.weekly_frequency = updates.weeklyFrequency;
+    if (updates.difficulty !== undefined) dbUpdates.difficulty = updates.difficulty;
+    if (updates.routineId !== undefined) dbUpdates.routine_id = updates.routineId;
+    if (updates.routineOrder !== undefined) dbUpdates.routine_order = updates.routineOrder;
 
     const { error } = await dataApiHelpers.update('habits', id, dbUpdates);
 
@@ -191,6 +242,8 @@ export function useHabitsPersistence() {
     const { data, error } = await dataApiHelpers.insert<DbHabitLog>('habit_logs', {
       habit_id: habitId,
       notes: notes ?? null,
+      value: 1,
+      skipped: false,
     });
 
     if (error || !data) {
