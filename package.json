@@ -66,6 +66,7 @@
     "tailwindcss-animate": "^1.0.7",
     "three": "^0.170.0",
     "three-bvh-csg": "^0.0.17",
+    "usehooks-ts": "^3.1.1",
     "vaul": "^0.9.3",
     "zod": "^3.23.8"
   },
