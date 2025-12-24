@@ -53,7 +53,8 @@ Deno.serve(async (req) => {
     const allowedTables = [
       'notes', 'note_folders', 'tasks', 'habits', 'habit_logs',
       'calendar_events', 'booking_slots', 'notifications',
-      'conversations', 'conversation_messages', 'user_settings'
+      'conversations', 'conversation_messages', 'user_settings',
+      'routines', 'user_progress', 'rewards', 'reward_redemptions', 'xp_events'
     ]
 
     if (!allowedTables.includes(table)) {
