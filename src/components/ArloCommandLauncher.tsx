@@ -403,7 +403,7 @@ const ArloCommandLauncher = () => {
             ref={containerRef}
             onClick={() => !open && setOpen(true)}
             className={cn(
-              "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full bg-background shadow-2xl pointer-events-auto border border-border/50",
+              "fixed left-1/2 bottom-8 -translate-x-1/2 z-50 w-full bg-background shadow-2xl pointer-events-auto border border-border/50",
               open ? "cursor-default" : "cursor-pointer"
             )}
             initial={false}
