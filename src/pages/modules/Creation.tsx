@@ -7,7 +7,7 @@ import { PropertiesPanel } from "@/components/creation/PropertiesPanel";
 import { ExportDialog } from "@/components/creation/ExportDialog";
 import { Input } from "@/components/ui/input";
 import { Loader2 } from "lucide-react";
-import type { TransformMode, ViewMode, CreationAsset, SnapSettings, CameraPreset } from "@/types/creation";
+import type { TransformMode, ViewMode, CreationAsset, SnapSettings, MeasureTool } from "@/types/creation";
 
 export default function Creation() {
   const [transformMode, setTransformMode] = useState<TransformMode>('translate');
@@ -16,11 +16,20 @@ export default function Creation() {
   const [showAxes, setShowAxes] = useState(true);
   const [gridSize, setGridSize] = useState<number>(1);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [measureTool, setMeasureTool] = useState<MeasureTool>({
+    active: false,
+    point1: null,
+    point2: null,
+    distance: null
+  });
   const [snapSettings, setSnapSettings] = useState<SnapSettings>({
     enabled: false,
     translateSnap: 1,
     rotateSnap: 15
   });
+
+  const fitToSelectionRef = useRef<() => void>(() => {});
+  const fitToSceneRef = useRef<() => void>(() => {});
 
   const {
     currentProject,
@@ -55,8 +64,53 @@ export default function Creation() {
     ungroupObject,
     alignToOrigin,
     dropToGround,
-    centerInScene
+    centerInScene,
+    performBoolean
   } = useCreationProject();
+
+  // Measure tool handlers
+  const handleMeasurePoint = useCallback((point: { x: number; y: number; z: number }) => {
+    setMeasureTool(prev => {
+      if (!prev.point1) {
+        return { ...prev, point1: point, point2: null, distance: null };
+      } else if (!prev.point2) {
+        const dx = point.x - prev.point1.x;
+        const dy = point.y - prev.point1.y;
+        const dz = point.z - prev.point1.z;
+        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz) * 1000; // Convert to mm
+        return { ...prev, point2: point, distance };
+      } else {
+        // Reset and start new measurement
+        return { ...prev, point1: point, point2: null, distance: null };
+      }
+    });
+  }, []);
+
+  const toggleMeasure = useCallback(() => {
+    setMeasureTool(prev => ({
+      active: !prev.active,
+      point1: null,
+      point2: null,
+      distance: null
+    }));
+  }, []);
+
+  const clearMeasure = useCallback(() => {
+    setMeasureTool(prev => ({
+      ...prev,
+      point1: null,
+      point2: null,
+      distance: null
+    }));
+  }, []);
+
+  const fitToSelection = useCallback(() => {
+    fitToSelectionRef.current?.();
+  }, []);
+
+  const fitToScene = useCallback(() => {
+    fitToSceneRef.current?.();
+  }, []);
 
   useEffect(() => {
     document.title = "Creation — Arlo";
@@ -162,6 +216,7 @@ export default function Creation() {
           showGrid={showGrid}
           showAxes={showAxes}
           snapSettings={snapSettings}
+          measureTool={measureTool}
           onAddPrimitive={addPrimitive}
           onImportSTL={importSTL}
           onTransformModeChange={setTransformMode}
@@ -178,6 +233,11 @@ export default function Creation() {
           onDropToGround={dropToGround}
           onCenterInScene={centerInScene}
           onGroup={groupSelectedObjects}
+          onBooleanOperation={performBoolean}
+          onToggleMeasure={toggleMeasure}
+          onClearMeasure={clearMeasure}
+          onFitToSelection={fitToSelection}
+          onFitToScene={fitToScene}
         />
       </div>
 
@@ -209,9 +269,13 @@ export default function Creation() {
             showAxes={showAxes}
             gridSize={gridSize}
             snapSettings={snapSettings}
+            measureTool={measureTool}
             onSelectObject={handleSelectObject}
             onTransformEnd={handleTransformEnd}
             getAssetFilePath={getAssetFilePath}
+            onMeasurePoint={handleMeasurePoint}
+            onFitToSelectionRef={fitToSelectionRef}
+            onFitToSceneRef={fitToSceneRef}
           />
         </div>
 

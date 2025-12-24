@@ -6,11 +6,11 @@ import {
   Grid, 
   GizmoHelper, 
   GizmoViewport,
-  PerspectiveCamera
+  Line
 } from '@react-three/drei';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import * as THREE from 'three';
-import type { SceneObject, TransformMode, ViewMode, Vector3, SnapSettings, CameraPreset } from '@/types/creation';
+import type { SceneObject, TransformMode, ViewMode, Vector3, SnapSettings, MeasureTool } from '@/types/creation';
 import { supabase } from '@/integrations/supabase/client';
 import { createPrimitiveGeometry } from '@/utils/stl-exporter';
 
@@ -63,7 +63,6 @@ function TransformableObject({
     });
   }, [object.type, object.assetId, getAssetFilePath]);
 
-  // Set up snapping
   useEffect(() => {
     if (controlsRef.current && snapSettings.enabled) {
       if (transformMode === 'translate') {
@@ -82,11 +81,7 @@ function TransformableObject({
 
   const actualGeometry = object.type === 'imported' ? stlGeometry : geometry;
 
-  // For groups, render nothing but still allow selection
-  if (object.type === 'group') {
-    return null;
-  }
-
+  if (object.type === 'group') return null;
   if (!actualGeometry) return null;
 
   return (
@@ -146,9 +141,13 @@ interface SceneProps {
   showAxes: boolean;
   gridSize: number;
   snapSettings: SnapSettings;
+  measureTool: MeasureTool;
   onSelectObject: (id: string | null, addToSelection?: boolean) => void;
   onTransformEnd: (id: string, position: Vector3, rotation: Vector3, scale: Vector3) => void;
   getAssetFilePath: (assetId: string) => string | null;
+  onMeasurePoint: (point: Vector3) => void;
+  onFitToSelectionRef: React.MutableRefObject<() => void>;
+  onFitToSceneRef: React.MutableRefObject<() => void>;
 }
 
 function Scene({ 
@@ -160,11 +159,63 @@ function Scene({
   showAxes,
   gridSize,
   snapSettings,
+  measureTool,
   onSelectObject, 
   onTransformEnd,
-  getAssetFilePath
+  getAssetFilePath,
+  onMeasurePoint,
+  onFitToSelectionRef,
+  onFitToSceneRef
 }: SceneProps) {
   const wireframe = viewMode === 'wireframe';
+  const { camera } = useThree();
+  const orbitControlsRef = useRef<any>(null);
+
+  const fitCameraToObjects = useCallback((targetObjects: SceneObject[]) => {
+    if (targetObjects.length === 0) return;
+
+    const box = new THREE.Box3();
+    
+    targetObjects.forEach(obj => {
+      if (obj.type === 'group') return;
+      const tempBox = new THREE.Box3();
+      const pos = new THREE.Vector3(obj.position.x, obj.position.y, obj.position.z);
+      const size = new THREE.Vector3(obj.scale.x * 2, obj.scale.y * 2, obj.scale.z * 2);
+      tempBox.setFromCenterAndSize(pos, size);
+      box.union(tempBox);
+    });
+
+    if (box.isEmpty()) return;
+
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const fov = (camera as THREE.PerspectiveCamera).fov * (Math.PI / 180);
+    const cameraZ = Math.abs(maxDim / Math.sin(fov / 2)) * 1.5;
+
+    camera.position.set(center.x + cameraZ * 0.5, center.y + cameraZ * 0.5, center.z + cameraZ);
+    if (orbitControlsRef.current) {
+      orbitControlsRef.current.target.copy(center);
+      orbitControlsRef.current.update();
+    }
+  }, [camera]);
+
+  useEffect(() => {
+    onFitToSelectionRef.current = () => {
+      const selected = objects.filter(o => selectedObjectIds.includes(o.id));
+      fitCameraToObjects(selected);
+    };
+    onFitToSceneRef.current = () => {
+      fitCameraToObjects(objects);
+    };
+  }, [objects, selectedObjectIds, fitCameraToObjects, onFitToSelectionRef, onFitToSceneRef]);
+
+  const handleMeasureClick = (e: any) => {
+    if (!measureTool.active) return;
+    e.stopPropagation();
+    const point = e.point as THREE.Vector3;
+    onMeasurePoint({ x: point.x, y: point.y, z: point.z });
+  };
 
   return (
     <>
@@ -188,8 +239,37 @@ function Scene({
         />
       )}
 
-      {showAxes && (
-        <axesHelper args={[5]} />
+      {showAxes && <axesHelper args={[5]} />}
+
+      {measureTool.active && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} onClick={handleMeasureClick}>
+          <planeGeometry args={[100, 100]} />
+          <meshBasicMaterial visible={false} />
+        </mesh>
+      )}
+
+      {measureTool.point1 && (
+        <mesh position={[measureTool.point1.x, measureTool.point1.y, measureTool.point1.z]}>
+          <sphereGeometry args={[0.05, 16, 16]} />
+          <meshBasicMaterial color="#f43f5e" />
+        </mesh>
+      )}
+      
+      {measureTool.point2 && measureTool.point1 && (
+        <>
+          <mesh position={[measureTool.point2.x, measureTool.point2.y, measureTool.point2.z]}>
+            <sphereGeometry args={[0.05, 16, 16]} />
+            <meshBasicMaterial color="#f43f5e" />
+          </mesh>
+          <Line
+            points={[
+              [measureTool.point1.x, measureTool.point1.y, measureTool.point1.z],
+              [measureTool.point2.x, measureTool.point2.y, measureTool.point2.z]
+            ]}
+            color="#f43f5e"
+            lineWidth={2}
+          />
+        </>
       )}
 
       {objects.map(obj => (
@@ -206,7 +286,7 @@ function Scene({
         />
       ))}
 
-      <OrbitControls makeDefault />
+      <OrbitControls ref={orbitControlsRef} makeDefault />
       
       <GizmoHelper alignment="bottom-right" margin={[80, 80]}>
         <GizmoViewport axisColors={['#f43f5e', '#22c55e', '#3b82f6']} labelColor="white" />
@@ -224,9 +304,13 @@ interface CreationViewportProps {
   showAxes: boolean;
   gridSize: number;
   snapSettings: SnapSettings;
+  measureTool: MeasureTool;
   onSelectObject: (id: string | null, addToSelection?: boolean) => void;
   onTransformEnd: (id: string, position: Vector3, rotation: Vector3, scale: Vector3) => void;
   getAssetFilePath: (assetId: string) => string | null;
+  onMeasurePoint: (point: Vector3) => void;
+  onFitToSelectionRef: React.MutableRefObject<() => void>;
+  onFitToSceneRef: React.MutableRefObject<() => void>;
 }
 
 export function CreationViewport({
@@ -238,9 +322,13 @@ export function CreationViewport({
   showAxes,
   gridSize,
   snapSettings,
+  measureTool,
   onSelectObject,
   onTransformEnd,
-  getAssetFilePath
+  getAssetFilePath,
+  onMeasurePoint,
+  onFitToSelectionRef,
+  onFitToSceneRef
 }: CreationViewportProps) {
   return (
     <div className="w-full h-full bg-background/50 rounded-lg overflow-hidden">
@@ -258,9 +346,13 @@ export function CreationViewport({
             showAxes={showAxes}
             gridSize={gridSize}
             snapSettings={snapSettings}
+            measureTool={measureTool}
             onSelectObject={onSelectObject}
             onTransformEnd={onTransformEnd}
             getAssetFilePath={getAssetFilePath}
+            onMeasurePoint={onMeasurePoint}
+            onFitToSelectionRef={onFitToSelectionRef}
+            onFitToSceneRef={onFitToSceneRef}
           />
         </Suspense>
       </Canvas>

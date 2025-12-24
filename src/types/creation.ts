@@ -99,3 +99,12 @@ export interface BoundingBoxInfo {
   depth: number;
   center: Vector3;
 }
+
+export type BooleanOperation = 'union' | 'subtract' | 'intersect';
+
+export interface MeasureTool {
+  active: boolean;
+  point1: Vector3 | null;
+  point2: Vector3 | null;
+  distance: number | null;
+}
