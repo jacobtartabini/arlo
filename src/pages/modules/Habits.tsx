@@ -80,17 +80,21 @@ export default function Habits() {
   }, [loadData]);
 
   const handleCompleteHabit = async (habitId: string, skipped: boolean = false) => {
-    const { log, xpEarned } = await logHabitCompletion(habitId, 1, skipped);
+    const { log, xpEarned, bonuses } = await logHabitCompletion(habitId, 1, skipped);
     
     if (log) {
       if (xpEarned > 0) {
         setXpPopup({ amount: xpEarned, visible: true });
-        setTimeout(() => setXpPopup({ amount: 0, visible: false }), 2000);
+        setTimeout(() => setXpPopup({ amount: 0, visible: false }), 2500);
       }
+      
+      const bonusText = bonuses.length > 0 ? ` • ${bonuses.join(' • ')}` : '';
       
       toast({
         title: skipped ? "Habit skipped" : "Habit completed!",
-        description: skipped ? "No worries, streak preserved" : `+${xpEarned} XP earned`,
+        description: skipped 
+          ? "No worries, streak preserved" 
+          : `+${xpEarned} XP earned${bonusText}`,
       });
       
       loadData();

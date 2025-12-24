@@ -10,9 +10,8 @@ import type {
   Reward,
   RewardRedemption,
   XpEvent,
-  XP_VALUES,
-  calculateLevel,
 } from "@/types/habits";
+import { XP_VALUES, calculateLevel } from "@/types/habits";
 
 // Check if Tailscale is verified
 function isTailscaleVerified(): boolean {
@@ -365,14 +364,14 @@ export function useHabitSystem() {
     return dbToRoutine(data);
   }, []);
 
-  // Log habit completion
+  // Log habit completion with full XP bonus calculations
   const logHabitCompletion = useCallback(async (
     habitId: string,
     value: number = 1,
     skipped: boolean = false,
     notes?: string
-  ): Promise<{ log: HabitLog | null; xpEarned: number }> => {
-    if (!isTailscaleVerified()) return { log: null, xpEarned: 0 };
+  ): Promise<{ log: HabitLog | null; xpEarned: number; bonuses: string[] }> => {
+    if (!isTailscaleVerified()) return { log: null, xpEarned: 0, bonuses: [] };
 
     const { data, error } = await dataApiHelpers.insert<DbHabitLog>('habit_logs', {
       habit_id: habitId,
@@ -381,41 +380,185 @@ export function useHabitSystem() {
       notes: notes ?? null,
     });
 
-    if (error || !data) return { log: null, xpEarned: 0 };
+    if (error || !data) return { log: null, xpEarned: 0, bonuses: [] };
 
     // If skipped, no XP
-    if (skipped) return { log: dbToHabitLog(data), xpEarned: 0 };
+    if (skipped) return { log: dbToHabitLog(data), xpEarned: 0, bonuses: [] };
 
-    // Calculate and award XP
-    const [habitsRes, progressRes] = await Promise.all([
+    // Fetch all needed data for XP calculation
+    const [habitsRes, allHabitsRes, routinesRes, progressRes, logsRes] = await Promise.all([
       dataApiHelpers.select<DbHabit[]>('habits', { filters: { id: habitId } }),
+      dataApiHelpers.select<DbHabit[]>('habits'),
+      dataApiHelpers.select<DbRoutine[]>('routines'),
       dataApiHelpers.select<DbUserProgress[]>('user_progress', { limit: 1 }),
+      dataApiHelpers.select<DbHabitLog[]>('habit_logs', {
+        order: { column: 'completed_at', ascending: false },
+      }),
     ]);
 
     if (!habitsRes.data?.[0] || !progressRes.data?.[0]) {
-      return { log: dbToHabitLog(data), xpEarned: 0 };
+      return { log: dbToHabitLog(data), xpEarned: 0, bonuses: [] };
     }
 
     const habit = dbToHabit(habitsRes.data[0]);
+    const allHabits = (allHabitsRes.data || []).map(dbToHabit);
+    const routines = (routinesRes.data || []).map(dbToRoutine);
     const progress = dbToUserProgress(progressRes.data[0]);
+    const allLogs = (logsRes.data || []).map(dbToHabitLog);
 
-    let xpEarned = habit.difficulty === 'hard' ? 15 : 10;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
 
-    // Record XP event
-    await dataApiHelpers.insert('xp_events', {
-      event_type: 'habit_complete',
-      xp_amount: xpEarned,
-      description: `Completed: ${habit.title}`,
-      reference_id: habitId,
+    let xpEarned = 0;
+    const bonuses: string[] = [];
+    const xpEvents: Array<{ type: string; amount: number; desc: string; ref?: string }> = [];
+
+    // 1. Base XP for habit completion
+    const baseXp = habit.difficulty === 'hard' ? XP_VALUES.HABIT_HARD : XP_VALUES.HABIT_NORMAL;
+    xpEarned += baseXp;
+    xpEvents.push({ type: 'habit_complete', amount: baseXp, desc: `Completed: ${habit.title}`, ref: habitId });
+
+    // 2. Streak continuation bonus
+    const habitLogs = allLogs.filter(l => l.habitId === habitId && !l.skipped);
+    const hadYesterdayLog = habitLogs.some(log => {
+      const logDate = new Date(log.completedAt);
+      logDate.setHours(0, 0, 0, 0);
+      return logDate.getTime() === yesterday.getTime();
     });
+    
+    if (hadYesterdayLog) {
+      xpEarned += XP_VALUES.STREAK_CONTINUE;
+      bonuses.push(`+${XP_VALUES.STREAK_CONTINUE} streak`);
+      xpEvents.push({ type: 'streak_continue', amount: XP_VALUES.STREAK_CONTINUE, desc: 'Streak continued', ref: habitId });
+    }
+
+    // 3. Check for streak milestones
+    const currentStreak = calculateStreak(habitLogs, habit.scheduleDays) + 1; // +1 for this completion
+    if (currentStreak === 7) {
+      xpEarned += XP_VALUES.STREAK_MILESTONE_7;
+      bonuses.push(`+${XP_VALUES.STREAK_MILESTONE_7} 7-day milestone!`);
+      xpEvents.push({ type: 'streak_milestone', amount: XP_VALUES.STREAK_MILESTONE_7, desc: '7-day streak milestone', ref: habitId });
+    } else if (currentStreak === 14) {
+      xpEarned += XP_VALUES.STREAK_MILESTONE_14;
+      bonuses.push(`+${XP_VALUES.STREAK_MILESTONE_14} 14-day milestone!`);
+      xpEvents.push({ type: 'streak_milestone', amount: XP_VALUES.STREAK_MILESTONE_14, desc: '14-day streak milestone', ref: habitId });
+    } else if (currentStreak === 30) {
+      xpEarned += XP_VALUES.STREAK_MILESTONE_30;
+      bonuses.push(`+${XP_VALUES.STREAK_MILESTONE_30} 30-day milestone!`);
+      xpEvents.push({ type: 'streak_milestone', amount: XP_VALUES.STREAK_MILESTONE_30, desc: '30-day streak milestone', ref: habitId });
+    }
+
+    // 4. Check for routine completion bonus
+    if (habit.routineId) {
+      const routineHabits = allHabits.filter(h => h.routineId === habit.routineId && h.enabled);
+      const routineLogsToday = allLogs.filter(log => {
+        const logDate = new Date(log.completedAt);
+        logDate.setHours(0, 0, 0, 0);
+        return logDate.getTime() === today.getTime() && !log.skipped;
+      });
+      
+      const completedRoutineHabits = routineHabits.filter(rh => 
+        routineLogsToday.some(log => log.habitId === rh.id) || rh.id === habitId
+      );
+
+      // If this completion finishes the routine
+      if (completedRoutineHabits.length === routineHabits.length) {
+        xpEarned += XP_VALUES.ROUTINE_COMPLETE;
+        bonuses.push(`+${XP_VALUES.ROUTINE_COMPLETE} routine complete!`);
+        xpEvents.push({ type: 'routine_complete', amount: XP_VALUES.ROUTINE_COMPLETE, desc: 'Routine completed', ref: habit.routineId });
+
+        // 5. Check for double routine bonus (morning + night)
+        const thisRoutine = routines.find(r => r.id === habit.routineId);
+        if (thisRoutine && (thisRoutine.routineType === 'morning' || thisRoutine.routineType === 'night')) {
+          const otherType = thisRoutine.routineType === 'morning' ? 'night' : 'morning';
+          const otherRoutine = routines.find(r => r.routineType === otherType);
+          
+          if (otherRoutine) {
+            const otherRoutineHabits = allHabits.filter(h => h.routineId === otherRoutine.id && h.enabled);
+            const otherRoutineComplete = otherRoutineHabits.every(orh =>
+              routineLogsToday.some(log => log.habitId === orh.id)
+            );
+            
+            if (otherRoutineComplete && otherRoutineHabits.length > 0) {
+              xpEarned += XP_VALUES.DOUBLE_ROUTINE_BONUS;
+              bonuses.push(`+${XP_VALUES.DOUBLE_ROUTINE_BONUS} double routine day!`);
+              xpEvents.push({ type: 'double_routine', amount: XP_VALUES.DOUBLE_ROUTINE_BONUS, desc: 'Morning + Night routines completed' });
+            }
+          }
+        }
+      }
+    }
+
+    // 6. Check for Daily Win (80%+ completion)
+    const scheduledToday = allHabits.filter(h => h.enabled && isScheduledForToday(h));
+    const completedToday = scheduledToday.filter(h => {
+      if (h.id === habitId) return true; // This one counts as completed
+      return allLogs.some(log => {
+        const logDate = new Date(log.completedAt);
+        logDate.setHours(0, 0, 0, 0);
+        return log.habitId === h.id && logDate.getTime() === today.getTime() && !log.skipped;
+      });
+    });
+
+    const completionPercent = scheduledToday.length > 0 
+      ? (completedToday.length / scheduledToday.length) * 100 
+      : 0;
+
+    // Check if we just crossed the 80% threshold
+    const prevCompletedCount = completedToday.length - 1;
+    const prevPercent = scheduledToday.length > 0 ? (prevCompletedCount / scheduledToday.length) * 100 : 0;
+    
+    if (completionPercent >= 80 && prevPercent < 80) {
+      xpEarned += XP_VALUES.DAILY_WIN;
+      bonuses.push(`+${XP_VALUES.DAILY_WIN} Daily Win!`);
+      xpEvents.push({ type: 'daily_win', amount: XP_VALUES.DAILY_WIN, desc: 'Daily Win achieved (80%+ completion)' });
+    }
+
+    // 7. Comeback bonus (completed today after missing yesterday)
+    const hadAnyYesterdayLog = allLogs.some(log => {
+      const logDate = new Date(log.completedAt);
+      logDate.setHours(0, 0, 0, 0);
+      return logDate.getTime() === yesterday.getTime() && !log.skipped;
+    });
+    
+    const hadAnyTodayLogBefore = allLogs.some(log => {
+      const logDate = new Date(log.completedAt);
+      logDate.setHours(0, 0, 0, 0);
+      return logDate.getTime() === today.getTime() && !log.skipped && log.id !== data.id;
+    });
+
+    if (!hadAnyYesterdayLog && !hadAnyTodayLogBefore) {
+      xpEarned += XP_VALUES.COMEBACK;
+      bonuses.push(`+${XP_VALUES.COMEBACK} comeback!`);
+      xpEvents.push({ type: 'comeback', amount: XP_VALUES.COMEBACK, desc: 'Comeback after missing yesterday' });
+    }
+
+    // Record all XP events
+    for (const event of xpEvents) {
+      await dataApiHelpers.insert('xp_events', {
+        event_type: event.type,
+        xp_amount: event.amount,
+        description: event.desc,
+        reference_id: event.ref ?? null,
+      });
+    }
 
     // Update user progress
+    const newTotalXp = progress.totalXp + xpEarned;
+    const newLevel = calculateLevel(newTotalXp);
+    
     await dataApiHelpers.update('user_progress', progress.id, {
-      total_xp: progress.totalXp + xpEarned,
+      total_xp: newTotalXp,
       available_xp: progress.availableXp + xpEarned,
+      current_level: newLevel,
+      current_streak: Math.max(progress.currentStreak, currentStreak),
+      longest_streak: Math.max(progress.longestStreak, currentStreak),
+      last_activity_date: today.toISOString().split('T')[0],
     });
 
-    return { log: dbToHabitLog(data), xpEarned };
+    return { log: dbToHabitLog(data), xpEarned, bonuses };
   }, []);
 
   // Redeem reward

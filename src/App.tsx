@@ -32,6 +32,7 @@ import AIInsights from "./pages/modules/AIInsights";
 import Notifications from "./pages/modules/Notifications";
 import Notes from "./pages/Notes";
 import NotesDashboard from "./pages/modules/NotesDashboard";
+import Habits from "./pages/modules/Habits";
 
 const queryClient = new QueryClient();
 
@@ -145,6 +146,11 @@ const App = () => (
                   <Route path="/notes-dashboard" element={
                     <ProtectedRoute>
                       <NotesDashboard />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/habits" element={
+                    <ProtectedRoute>
+                      <Habits />
                     </ProtectedRoute>
                   } />
 
