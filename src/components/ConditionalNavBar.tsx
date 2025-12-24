@@ -2,13 +2,14 @@ import React from "react";
 import { useLocation } from "react-router-dom";
 import NavBar from "./NavBar";
 
-const hiddenRoutes = ["/login", "/unauthorized"];
+// Only show navbar on dashboard routes
+const dashboardRoutes = ["/", "/dashboard"];
 
 export default function ConditionalNavBar() {
   const location = useLocation();
-  const shouldHideNav = hiddenRoutes.includes(location.pathname);
+  const shouldShowNav = dashboardRoutes.includes(location.pathname);
 
-  if (shouldHideNav) {
+  if (!shouldShowNav) {
     return null;
   }
 

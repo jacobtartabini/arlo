@@ -1,37 +1,71 @@
 import React from "react";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Home, MessageCircle, Calendar as CalendarIcon, Settings as SettingsIcon } from "lucide-react";
-import { NavLink } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
+import { Home, MessageCircle, Calendar as CalendarIcon, Settings as SettingsIcon, LucideIcon } from "lucide-react";
+import { ExpandableTabs, TabItem } from "@/components/ui/expandable-tabs";
 
-const tabs = [
-  { to: "/dashboard", label: "Dashboard", icon: Home },
-  { to: "/chat", label: "Chat", icon: MessageCircle },
-  { to: "/calendar", label: "Calendar", icon: CalendarIcon },
-  { to: "/settings", label: "Settings", icon: SettingsIcon },
+interface NavTabWithPath {
+  title: string;
+  icon: LucideIcon;
+  path: string;
+}
+
+interface NavSeparator {
+  type: "separator";
+}
+
+type NavTab = NavTabWithPath | NavSeparator;
+
+function isNavSeparator(item: NavTab): item is NavSeparator {
+  return "type" in item && item.type === "separator";
+}
+
+const navTabs: NavTab[] = [
+  { title: "Dashboard", icon: Home, path: "/dashboard" },
+  { title: "Chat", icon: MessageCircle, path: "/chat" },
+  { type: "separator" },
+  { title: "Calendar", icon: CalendarIcon, path: "/calendar" },
+  { title: "Settings", icon: SettingsIcon, path: "/settings" },
 ];
 
 export default function NavBar() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Find active index based on current path
+  const activeIndex = React.useMemo(() => {
+    for (let i = 0; i < navTabs.length; i++) {
+      const tab = navTabs[i];
+      if (isNavSeparator(tab)) continue;
+      if (tab.path === location.pathname || 
+          (location.pathname === "/" && tab.path === "/dashboard")) {
+        return i;
+      }
+    }
+    return null;
+  }, [location.pathname]);
+
+  const handleTabChange = (index: number | null) => {
+    if (index === null) return;
+    const tab = navTabs[index];
+    if (tab && !isNavSeparator(tab)) {
+      navigate(tab.path);
+    }
+  };
+
+  const expandableTabs: TabItem[] = navTabs.map(tab => 
+    isNavSeparator(tab) 
+      ? { type: "separator" as const }
+      : { title: tab.title, icon: tab.icon }
+  );
+
   return (
     <nav className="fixed top-4 left-1/2 -translate-x-1/2 z-40">
-      <Card className="px-2 py-2 bg-background/60 backdrop-blur-md border border-border/30">
-        <div className="flex items-center gap-1">
-          {tabs.map((tab) => (
-            <NavLink key={tab.to} to={tab.to} end className={({ isActive }) => isActive ? "" : ""}>
-              {({ isActive }) => (
-                <Button
-                  variant={isActive ? "default" : "ghost"}
-                  size="sm"
-                  className="flex items-center gap-2 px-4 py-2"
-                >
-                  <tab.icon className="w-4 h-4" />
-                  <span className="hidden sm:inline">{tab.label}</span>
-                </Button>
-              )}
-            </NavLink>
-          ))}
-        </div>
-      </Card>
+      <ExpandableTabs
+        tabs={expandableTabs}
+        activeIndex={activeIndex}
+        onChange={handleTabChange}
+        activeColor="text-primary"
+      />
     </nav>
   );
 }
