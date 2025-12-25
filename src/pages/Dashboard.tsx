@@ -24,6 +24,7 @@ import { useNavigate } from "react-router-dom";
 import { BentoGrid } from "@/components/BentoGrid";
 import { Check, ChevronDown, Scan } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 
 const PRESET_ZOOM_LEVELS = [50, 75, 100, 125, 150, 175, 200];
 
@@ -171,128 +172,129 @@ export default function Dashboard() {
       </div>
 
       {/* Arlo Status Badge */}
-      <motion.div
-        initial={{ scale: 0, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ delay: 0.5 }}
-        className="fixed top-6 right-6 z-40"
-        onHoverStart={handleChipEnter}
-        onHoverEnd={handleChipLeave}
-        onFocusCapture={handleChipEnter}
-        onBlurCapture={handleChipBlur}
-        onKeyDown={handleChipKeyDown}
-        aria-label="Arlo status controls"
-        aria-expanded={isChipExpanded}
-        role="group"
-        tabIndex={0}
-      >
+      <div className="fixed top-6 right-6 z-40 flex items-center gap-2">
+        <NotificationBell />
         <motion.div
-          layout
-          transition={{ type: "spring", stiffness: 400, damping: 30 }}
-          className={cn(
-            badgeVariants({ variant: "secondary" }),
-            "rounded-full border border-border/60 bg-muted/80 text-muted-foreground shadow-sm backdrop-blur transition-colors duration-300 ease-out overflow-hidden",
-            isChipExpanded ? "gap-3 px-3 py-1" : "gap-1.5 px-2 py-1"
-          )}
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ delay: 0.5 }}
+          onHoverStart={handleChipEnter}
+          onHoverEnd={handleChipLeave}
+          onFocusCapture={handleChipEnter}
+          onBlurCapture={handleChipBlur}
+          onKeyDown={handleChipKeyDown}
+          aria-label="Arlo status controls"
+          aria-expanded={isChipExpanded}
+          role="group"
+          tabIndex={0}
         >
-          <span className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
-            {isChipExpanded ? (
-              <span>Arlo Online</span>
-            ) : (
-              <span className="sr-only">Arlo Online</span>
+          <motion.div
+            layout
+            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+            className={cn(
+              badgeVariants({ variant: "secondary" }),
+              "rounded-full border border-border/60 bg-muted/80 text-muted-foreground shadow-sm backdrop-blur transition-colors duration-300 ease-out overflow-hidden",
+              isChipExpanded ? "gap-3 px-3 py-1" : "gap-1.5 px-2 py-1"
             )}
-          </span>
-          {isChipExpanded ? (
-            <div className="flex items-center gap-1">
-              <span className="text-muted-foreground/60" aria-hidden="true">
-                •
-              </span>
-              <DropdownMenu open={isZoomMenuOpen} onOpenChange={setIsZoomMenuOpen}>
-                <div className="flex items-center gap-1">
-                  <DropdownMenuTrigger asChild>
+          >
+            <span className="flex items-center gap-1">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+              {isChipExpanded ? (
+                <span>Arlo Online</span>
+              ) : (
+                <span className="sr-only">Arlo Online</span>
+              )}
+            </span>
+            {isChipExpanded ? (
+              <div className="flex items-center gap-1">
+                <span className="text-muted-foreground/60" aria-hidden="true">
+                  •
+                </span>
+                <DropdownMenu open={isZoomMenuOpen} onOpenChange={setIsZoomMenuOpen}>
+                  <div className="flex items-center gap-1">
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className="flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-muted-foreground/80 transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        aria-label="Adjust dashboard zoom"
+                      >
+                        <span>{isFit ? "Fit" : `${zoomPercent}%`}</span>
+                        <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                    </DropdownMenuTrigger>
                     <button
                       type="button"
-                      className="flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-muted-foreground/80 transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      aria-label="Adjust dashboard zoom"
+                      className="flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground/80 transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label="Open scanner"
+                      onClick={handleRecenter}
                     >
-                      <span>{isFit ? "Fit" : `${zoomPercent}%`}</span>
-                      <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+                      <Scan className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
-                  </DropdownMenuTrigger>
-                  <button
-                    type="button"
-                    className="flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground/80 transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    aria-label="Open scanner"
-                    onClick={handleRecenter}
-                  >
-                    <Scan className="h-3.5 w-3.5" aria-hidden="true" />
-                  </button>
-                </div>
-                <DropdownMenuContent align="end" sideOffset={8} className="w-56">
-                  <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">
-                    Zoom options
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {PRESET_ZOOM_LEVELS.map((level) => (
+                  </div>
+                  <DropdownMenuContent align="end" sideOffset={8} className="w-56">
+                    <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">
+                      Zoom options
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {PRESET_ZOOM_LEVELS.map((level) => (
+                      <DropdownMenuItem
+                        key={level}
+                        onSelect={(event) => {
+                          event.preventDefault();
+                          handlePresetSelect(level);
+                        }}
+                        className="flex items-center justify-between text-sm"
+                      >
+                        {level}%
+                        {!isFit && zoomPercent === level ? (
+                          <Check className="h-4 w-4" aria-hidden="true" />
+                        ) : null}
+                      </DropdownMenuItem>
+                    ))}
                     <DropdownMenuItem
-                      key={level}
                       onSelect={(event) => {
                         event.preventDefault();
-                        handlePresetSelect(level);
+                        handleFitSelect();
                       }}
                       className="flex items-center justify-between text-sm"
                     >
-                      {level}%
-                      {!isFit && zoomPercent === level ? (
-                        <Check className="h-4 w-4" aria-hidden="true" />
-                      ) : null}
+                      Fit to screen
+                      {isFit ? <Check className="h-4 w-4" aria-hidden="true" /> : null}
                     </DropdownMenuItem>
-                  ))}
-                  <DropdownMenuItem
-                    onSelect={(event) => {
-                      event.preventDefault();
-                      handleFitSelect();
-                    }}
-                    className="flex items-center justify-between text-sm"
-                  >
-                    Fit to screen
-                    {isFit ? <Check className="h-4 w-4" aria-hidden="true" /> : null}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <form onSubmit={handleCustomSubmit} className="grid gap-2 px-2 py-2">
-                    <label
-                      htmlFor="dashboard-custom-zoom"
-                      className="text-xs font-medium text-muted-foreground"
-                    >
-                      Custom zoom
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        id="dashboard-custom-zoom"
-                        value={customZoom}
-                        onChange={(event) =>
-                          setCustomZoom(event.target.value.replace(/[^0-9.]/g, ""))
-                        }
-                        inputMode="decimal"
-                        placeholder="120"
-                        className="h-8"
-                      />
-                      <Button type="submit" size="sm">
-                        Apply
-                      </Button>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground">
-                      Enter a value between 50% and 200%.
-                    </p>
-                  </form>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          ) : null}
+                    <DropdownMenuSeparator />
+                    <form onSubmit={handleCustomSubmit} className="grid gap-2 px-2 py-2">
+                      <label
+                        htmlFor="dashboard-custom-zoom"
+                        className="text-xs font-medium text-muted-foreground"
+                      >
+                        Custom zoom
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          id="dashboard-custom-zoom"
+                          value={customZoom}
+                          onChange={(event) =>
+                            setCustomZoom(event.target.value.replace(/[^0-9.]/g, ""))
+                          }
+                          inputMode="decimal"
+                          placeholder="120"
+                          className="h-8"
+                        />
+                        <Button type="submit" size="sm">
+                          Apply
+                        </Button>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        Enter a value between 50% and 200%.
+                      </p>
+                    </form>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            ) : null}
+          </motion.div>
         </motion.div>
-
-      </motion.div>
+      </div>
     </div>
   );
 }

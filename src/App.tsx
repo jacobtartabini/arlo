@@ -14,6 +14,7 @@ import { AuthProvider } from "./providers/AuthProvider";
 import { ArloProvider } from "./providers/ArloProvider";
 import { ChatHistoryProvider } from "./providers/ChatHistoryProvider";
 import { UserSettingsProvider } from "./providers/UserSettingsProvider";
+import { NotificationsProvider } from "./providers/NotificationsProvider";
 import ConditionalNavBar from "./components/ConditionalNavBar";
 import Chat from "./pages/Chat";
 import CalendarPage from "./pages/Calendar";
@@ -43,11 +44,12 @@ const App = () => (
         <UserSettingsProvider>
           <ChatHistoryProvider>
             <ArloProvider>
-              <TooltipProvider>
-                <Toaster />
-                <Sonner />
-                <BrowserRouter>
-                  <ArloCommandLauncher />
+              <NotificationsProvider>
+                <TooltipProvider>
+                  <Toaster />
+                  <Sonner />
+                  <BrowserRouter>
+                    <ArloCommandLauncher />
                 <ConditionalNavBar />
                 <Routes>
                   {/* Public routes */}
@@ -161,7 +163,8 @@ const App = () => (
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </BrowserRouter>
-            </TooltipProvider>
+                </TooltipProvider>
+              </NotificationsProvider>
             </ArloProvider>
           </ChatHistoryProvider>
         </UserSettingsProvider>
