@@ -34,6 +34,7 @@ import Notifications from "./pages/modules/Notifications";
 import Notes from "./pages/Notes";
 import NotesDashboard from "./pages/modules/NotesDashboard";
 import Habits from "./pages/modules/Habits";
+import { NotificationMonitor } from "./components/NotificationMonitor";
 
 const queryClient = new QueryClient();
 
@@ -48,6 +49,7 @@ const App = () => (
                 <TooltipProvider>
                   <Toaster />
                   <Sonner />
+                  <NotificationMonitor />
                   <BrowserRouter>
                     <ArloCommandLauncher />
                 <ConditionalNavBar />
