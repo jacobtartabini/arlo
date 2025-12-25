@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import { AuthContextType, AuthState } from '@/types/auth';
+import { useSecurityNotifications } from '@/hooks/useSecurityNotifications';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 

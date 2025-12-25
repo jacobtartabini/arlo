@@ -13,6 +13,7 @@ import React, {
 import { toast } from 'sonner';
 import { useChatHistory } from './ChatHistoryProvider';
 import { ChatMessageStatus } from '@/types/chat';
+import { notifyChat, showToast } from '@/lib/notifications/notify';
 
 export interface ArloConfig {
   apiEndpoint: string;
@@ -213,9 +214,104 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
   // All socket message handlers remain unchanged — omitted for brevity
   // (kept identical to your original implementation)
 
+  // Handle incoming socket messages including chat notifications
   const handleSocketMessage = useCallback((event: MessageEvent) => {
-    // … same logic as your original code …
-  }, []);
+    try {
+      const payload = JSON.parse(event.data) as SocketMessage;
+      const messageType = getString(payload, 'type');
+      
+      // Handle chat responses
+      if (messageType === 'chat_response' || messageType === 'response') {
+        const content = getStringFromKeys(payload, ['message', 'text', 'content', 'response']);
+        if (content) {
+          // Get conversation info
+          const msgId = getString(payload, 'id') || getString(payload, 'message_id');
+          const record = msgId ? outboundMessageMapRef.current.get(msgId) : null;
+          const conversationId = record?.conversationId || activeConversation?.id;
+          
+          if (conversationId) {
+            // Add the assistant message
+            appendMessage({
+              conversationId,
+              text: content,
+              sender: 'arlo',
+              status: 'sent',
+            });
+
+            // Send chat notification
+            const preview = content.length > 100 ? content.substring(0, 100) + '...' : content;
+            showToast('chat', 'Arlo responded', preview);
+            
+            // Get user ID and send push notification
+            (async () => {
+              try {
+                const userId = sessionStorage.getItem('arlo_user_id');
+                if (userId) {
+                  await notifyChat(userId, 'Arlo responded', preview, {
+                    conversationId,
+                    source: 'chat',
+                  });
+                }
+              } catch (e) {
+                console.error('Failed to send chat notification:', e);
+              }
+            })();
+          }
+
+          // Clear pending state
+          if (msgId) {
+            completePendingMessage(msgId);
+            outboundMessageMapRef.current.delete(msgId);
+          }
+        }
+      }
+
+      // Handle acknowledgements
+      if (messageType === 'ack' || messageType === 'acknowledgement') {
+        const msgId = getString(payload, 'id') || getString(payload, 'message_id');
+        const record = msgId ? outboundMessageMapRef.current.get(msgId) : null;
+        if (record) {
+          updateMessageStatus(record.conversationId, record.messageId, 'sent');
+        }
+      }
+
+      // Handle weather updates
+      if (messageType === 'weather_update' || messageType === 'weather') {
+        const weatherData = getObject<WeatherUpdate>(payload, 'data') || payload as unknown as WeatherUpdate;
+        if (weatherData) {
+          setLatestWeatherUpdate(weatherData);
+        }
+      }
+
+      // Handle map updates
+      if (messageType === 'map_update' || messageType === 'navigation') {
+        const mapData = getObject<MapUpdate>(payload, 'data') || payload as unknown as MapUpdate;
+        if (mapData) {
+          setLatestMapUpdate(mapData);
+        }
+      }
+
+      // Handle errors
+      if (messageType === 'error') {
+        const errorMsg = getString(payload, 'message') || getString(payload, 'error');
+        const msgId = getString(payload, 'id');
+        
+        if (errorMsg) {
+          toast.error(errorMsg);
+        }
+        
+        if (msgId) {
+          const record = outboundMessageMapRef.current.get(msgId);
+          if (record) {
+            updateMessageStatus(record.conversationId, record.messageId, 'error');
+          }
+          completePendingMessage(msgId);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to parse socket message:', e);
+    }
+  }, [activeConversation, appendMessage, completePendingMessage, updateMessageStatus]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
