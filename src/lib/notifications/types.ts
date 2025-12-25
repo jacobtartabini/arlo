@@ -1,4 +1,4 @@
-export type NotificationType = 'system' | 'chat' | 'calendar' | 'security';
+export type NotificationType = 'system' | 'chat' | 'calendar' | 'security' | 'habits' | 'tasks';
 
 export interface AppNotification {
   id: string;
