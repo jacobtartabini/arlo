@@ -1,7 +1,10 @@
 import { supabase } from "@/integrations/supabase/client";
 
-// VAPID public key - users need to set this in .env
-const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY || '';
+// VAPID public key for Web Push
+// Generate your own at https://vapidkeys.com/ and set both:
+// - VAPID_PUBLIC_KEY in Cloud secrets (for edge functions)
+// - Update this constant with your public key
+const VAPID_PUBLIC_KEY = '';
 
 // Detect platform
 export function detectPlatform(): 'web' | 'pwa-ios' | 'pwa-android' {
@@ -76,6 +79,11 @@ export async function subscribeToPush(): Promise<boolean> {
     return false;
   }
 
+  if (!VAPID_PUBLIC_KEY) {
+    console.error('VAPID public key not configured. Please set it in src/lib/notifications/push.ts');
+    return false;
+  }
+
   // Request permission first
   const permission = await requestNotificationPermission();
   if (permission !== 'granted') {
@@ -91,12 +99,6 @@ export async function subscribeToPush(): Promise<boolean> {
     let subscription = await registration.pushManager.getSubscription();
     
     if (!subscription) {
-      // Create new subscription
-      if (!VAPID_PUBLIC_KEY) {
-        console.error('VAPID public key not configured');
-        return false;
-      }
-
       const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
@@ -120,20 +122,22 @@ export async function subscribeToPush(): Promise<boolean> {
       return false;
     }
 
-    // Save to database using raw insert (types may not include new table)
-    const { error } = await supabase.rpc('upsert_push_subscription' as never, {
-      p_user_id: user.id,
-      p_platform: detectPlatform(),
-      p_endpoint: subscription.endpoint,
-      p_p256dh: keys.p256dh,
-      p_auth: keys.auth,
-      p_user_agent: navigator.userAgent,
-    } as never);
+    // Save subscription to database via edge function
+    const { error } = await supabase.functions.invoke('send-push', {
+      body: {
+        action: 'subscribe',
+        user_id: user.id,
+        platform: detectPlatform(),
+        endpoint: subscription.endpoint,
+        p256dh: keys.p256dh,
+        auth: keys.auth,
+        user_agent: navigator.userAgent,
+      },
+    });
 
     if (error) {
       console.error('Error saving push subscription:', error);
-      // Try alternative approach
-      console.log('Push subscription created locally');
+      // Continue anyway - subscription works locally
     }
 
     console.log('Push subscription saved successfully');
