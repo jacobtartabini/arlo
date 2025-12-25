@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 // Generate your own at https://vapidkeys.com/ and set both:
 // - VAPID_PUBLIC_KEY in Cloud secrets (for edge functions)
 // - Update this constant with your public key
-const VAPID_PUBLIC_KEY = '';
+const VAPID_PUBLIC_KEY = 'BDfwl4LTSKNp-IdDG16QPxSBFoyWXdMCfeO6-wamY2_MnnSY0WQ8FHbcIcsjpsH7BL6c2NzVlUsOHvHFalXwNc4';
 
 // Detect platform
 export function detectPlatform(): 'web' | 'pwa-ios' | 'pwa-android' {
