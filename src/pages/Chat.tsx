@@ -143,9 +143,11 @@ export default function Chat() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [localAttachments, setLocalAttachments] = useState<Record<string, UploadedFile[]>>({});
+  const [isDragging, setIsDragging] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dragCounterRef = useRef(0);
   
   const { textareaRef, adjustHeight } = useAutoResizeTextarea({
     minHeight: 48,
@@ -359,6 +361,96 @@ export default function Chat() {
     }
   };
 
+  // Drag and drop handlers
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounterRef.current = 0;
+
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    if (droppedFiles.length === 0) return;
+
+    const MAX_FILE_SIZE = 20 * 1024 * 1024;
+    const MAX_FILES = 10;
+
+    if (files.length + droppedFiles.length > MAX_FILES) {
+      toast.error(`Maximum ${MAX_FILES} files allowed`);
+      return;
+    }
+
+    const oversizedFiles = droppedFiles.filter(f => f.size > MAX_FILE_SIZE);
+    if (oversizedFiles.length > 0) {
+      toast.error("Some files exceed the 20MB limit");
+      return;
+    }
+
+    // Import supabase for uploads
+    const { supabase } = await import('@/integrations/supabase/client');
+
+    const uploadedFiles: UploadedFile[] = [];
+
+    for (const file of droppedFiles) {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `uploads/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('chat-attachments')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        toast.error(`Failed to upload ${file.name}`);
+        continue;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from('chat-attachments')
+        .getPublicUrl(filePath);
+
+      const fileType = file.type.startsWith('image/') ? 'image' 
+        : (file.type === 'application/pdf' || file.type.includes('document')) ? 'document' 
+        : 'other';
+
+      uploadedFiles.push({
+        id: fileName,
+        name: file.name,
+        url: urlData.publicUrl,
+        type: fileType,
+        size: file.size,
+      });
+    }
+
+    if (uploadedFiles.length > 0) {
+      setFiles([...files, ...uploadedFiles]);
+      toast.success(`${uploadedFiles.length} file(s) uploaded`);
+    }
+  };
+
   // Filter conversations based on search
   const filteredConversations = conversations.filter((conv) =>
     conv.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -394,7 +486,32 @@ export default function Chat() {
   };
 
   return (
-    <div className="flex h-screen w-full bg-background">
+    <div 
+      className="flex h-screen w-full bg-background relative"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {/* Drag and drop overlay */}
+      <AnimatePresence>
+        {isDragging && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center pointer-events-none"
+          >
+            <div className="border-2 border-dashed border-primary rounded-2xl p-12 bg-primary/5">
+              <div className="text-center">
+                <Paperclip className="w-12 h-12 mx-auto mb-4 text-primary" />
+                <p className="text-lg font-medium text-foreground">Drop files here</p>
+                <p className="text-sm text-muted-foreground mt-1">Images, PDFs, documents and more</p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
