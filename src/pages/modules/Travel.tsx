@@ -31,7 +31,7 @@ const packingChecklist = [
 
 export default function Travel() {
   useEffect(() => {
-    document.title = "Travel — Arlo";
+    document.title = "Arlo";
   }, []);
 
   const stats: ModuleStat[] = [
