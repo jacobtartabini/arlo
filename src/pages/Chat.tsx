@@ -25,6 +25,8 @@ import {
   Check,
   Loader2,
   Image as ImageIcon,
+  Pencil,
+  X,
 } from "lucide-react";
 import { useArlo } from "@/providers/ArloProvider";
 import { useChatHistory } from "@/providers/ChatHistoryProvider";
@@ -144,6 +146,8 @@ export default function Chat() {
   const [renameValue, setRenameValue] = useState("");
   const [localAttachments, setLocalAttachments] = useState<Record<string, UploadedFile[]>>({});
   const [isDragging, setIsDragging] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingContent, setEditingContent] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -166,6 +170,7 @@ export default function Chat() {
     createConversation,
     deleteConversation,
     updateConversationTitle,
+    updateMessageText,
   } = useChatHistory();
 
   // Scroll to bottom when messages change
@@ -249,6 +254,32 @@ export default function Chat() {
   const handleRenameCancel = () => {
     setRenamingId(null);
     setRenameValue("");
+  };
+
+  // Message editing handlers
+  const handleStartEditMessage = (messageId: string, content: string) => {
+    // Extract just the text content (remove attachment references)
+    const { text } = parseMessageAttachments(content);
+    setEditingMessageId(messageId);
+    setEditingContent(text);
+  };
+
+  const handleSaveEditMessage = (messageId: string) => {
+    if (!editingContent.trim() || !activeConversationId) {
+      setEditingMessageId(null);
+      setEditingContent("");
+      return;
+    }
+    
+    updateMessageText(activeConversationId, messageId, editingContent.trim());
+    toast.success("Message updated");
+    setEditingMessageId(null);
+    setEditingContent("");
+  };
+
+  const handleCancelEditMessage = () => {
+    setEditingMessageId(null);
+    setEditingContent("");
   };
 
   // Voice recording with Web Speech API
@@ -681,6 +712,7 @@ export default function Chat() {
             <div className="max-w-3xl mx-auto py-6 px-4 space-y-4">
               {messages.map((message) => {
                 const { text, attachments } = parseMessageAttachments(message.content);
+                const isEditing = editingMessageId === message.id;
                 
                 return (
                   <motion.div
@@ -688,10 +720,21 @@ export default function Chat() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     className={cn(
-                      "flex",
+                      "group flex",
                       message.role === "user" ? "justify-end" : "justify-start"
                     )}
                   >
+                    {/* Edit button for user messages - left side */}
+                    {message.role === "user" && !isEditing && (
+                      <button
+                        onClick={() => handleStartEditMessage(message.id, message.content)}
+                        className="self-center mr-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-muted transition-all"
+                        title="Edit message"
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                      </button>
+                    )}
+                    
                     <div
                       className={cn(
                         "max-w-[80%] px-4 py-3 rounded-2xl",
@@ -700,7 +743,40 @@ export default function Chat() {
                           : "bg-muted text-foreground"
                       )}
                     >
-                      {message.role === "assistant" ? (
+                      {isEditing ? (
+                        <div className="space-y-2">
+                          <textarea
+                            value={editingContent}
+                            onChange={(e) => setEditingContent(e.target.value)}
+                            className="w-full min-w-[200px] bg-primary-foreground/10 text-primary-foreground rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary-foreground/30 resize-none"
+                            rows={3}
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && !e.shiftKey) {
+                                e.preventDefault();
+                                handleSaveEditMessage(message.id);
+                              }
+                              if (e.key === "Escape") {
+                                handleCancelEditMessage();
+                              }
+                            }}
+                          />
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={handleCancelEditMessage}
+                              className="px-3 py-1 text-xs rounded-lg bg-primary-foreground/10 hover:bg-primary-foreground/20 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              onClick={() => handleSaveEditMessage(message.id)}
+                              className="px-3 py-1 text-xs rounded-lg bg-primary-foreground text-primary hover:bg-primary-foreground/90 transition-colors"
+                            >
+                              Save
+                            </button>
+                          </div>
+                        </div>
+                      ) : message.role === "assistant" ? (
                         <MarkdownRenderer 
                           content={text || message.content} 
                           className="text-sm"
@@ -708,17 +784,19 @@ export default function Chat() {
                       ) : (
                         <p className="text-sm whitespace-pre-wrap">{text || message.content}</p>
                       )}
-                      {attachments.length > 0 && (
+                      {attachments.length > 0 && !isEditing && (
                         <MessageAttachments attachments={attachments} />
                       )}
-                      <div
-                        className={cn(
-                          "text-xs mt-1 opacity-60",
-                          message.role === "user" ? "text-right" : "text-left"
-                        )}
-                      >
-                        {formatTime(message.timestamp)}
-                      </div>
+                      {!isEditing && (
+                        <div
+                          className={cn(
+                            "text-xs mt-1 opacity-60",
+                            message.role === "user" ? "text-right" : "text-left"
+                          )}
+                        >
+                          {formatTime(message.timestamp)}
+                        </div>
+                      )}
                     </div>
                   </motion.div>
                 );

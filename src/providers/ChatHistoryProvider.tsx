@@ -59,6 +59,11 @@ interface ChatHistoryContextValue {
     status: ChatMessageStatus,
     overrides?: UpdateMessageOverrides,
   ) => void;
+  updateMessageText: (
+    conversationId: string,
+    messageId: string,
+    text: string,
+  ) => void;
   updateConversationTitle: (conversationId: string, title: string) => void;
   setActiveConversation: (conversationId: string | null) => void;
   deleteConversation: (conversationId: string) => void;
@@ -461,6 +466,37 @@ export function ChatHistoryProvider({
     [isAuthenticated, persistToLocalStorage, dbPersistence],
   );
 
+  const updateMessageText = useCallback(
+    (conversationId: string, messageId: string, text: string) => {
+      setConversations((previous) => {
+        const updated = previous.map((conversation) => {
+          if (conversation.id !== conversationId) return conversation;
+
+          const updatedMessages = conversation.messages.map((message) =>
+            message.id === messageId ? { ...message, text } : message
+          );
+
+          return {
+            ...conversation,
+            messages: sortMessages(updatedMessages),
+            updatedAt: new Date().toISOString(),
+          };
+        });
+
+        if (!isAuthenticated) {
+          persistToLocalStorage(updated);
+        }
+        return sortConversations(updated);
+      });
+
+      // Persist to database
+      if (isAuthenticated) {
+        dbPersistence.updateMessageStatus(messageId, 'sent', text);
+      }
+    },
+    [isAuthenticated, persistToLocalStorage, dbPersistence],
+  );
+
   const updateConversationTitle = useCallback(
     (conversationId: string, title: string) => {
       setConversations((previous) => {
@@ -534,6 +570,7 @@ export function ChatHistoryProvider({
       ensureActiveConversation,
       appendMessage,
       updateMessageStatus,
+      updateMessageText,
       updateConversationTitle,
       setActiveConversation: setActiveConversationInternal,
       deleteConversation,
@@ -548,6 +585,7 @@ export function ChatHistoryProvider({
       ensureActiveConversation,
       appendMessage,
       updateMessageStatus,
+      updateMessageText,
       updateConversationTitle,
       setActiveConversationInternal,
       deleteConversation,
