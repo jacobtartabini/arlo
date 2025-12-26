@@ -21,7 +21,7 @@ const requests = [
 
 export default function Knowledge() {
   useEffect(() => {
-    document.title = "Knowledge — Arlo";
+    document.title = "Arlo";
   }, []);
 
   const stats: ModuleStat[] = [
