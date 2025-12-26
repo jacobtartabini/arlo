@@ -21,7 +21,7 @@ const requests = [
 
 export default function Files() {
   useEffect(() => {
-    document.title = "Files — Arlo";
+    document.title = "Arlo";
   }, []);
 
   const stats: ModuleStat[] = [
