@@ -28,7 +28,7 @@ export default function NotesDashboard() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   useEffect(() => {
-    document.title = "Notes — Arlo";
+    document.title = "Arlo";
   }, []);
 
   // Computed insights
