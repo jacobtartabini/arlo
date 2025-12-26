@@ -21,7 +21,7 @@ const shopping = [
 
 export default function Nutrition() {
   useEffect(() => {
-    document.title = "Nutrition — Arlo";
+    document.title = "Arlo";
   }, []);
 
   const stats: ModuleStat[] = [
