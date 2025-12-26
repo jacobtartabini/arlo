@@ -57,7 +57,7 @@ export default function Habits() {
   const [xpPopup, setXpPopup] = useState<{ amount: number; visible: boolean }>({ amount: 0, visible: false });
 
   useEffect(() => {
-    document.title = "Habits — Arlo";
+    document.title = "Arlo";
   }, []);
 
   const loadData = useCallback(async () => {
