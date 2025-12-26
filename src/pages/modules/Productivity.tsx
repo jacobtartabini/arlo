@@ -29,7 +29,7 @@ export default function Productivity() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    document.title = "Productivity — Arlo";
+    document.title = "Arlo";
   }, []);
 
   const loadTasks = useCallback(async () => {
