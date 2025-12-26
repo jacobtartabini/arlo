@@ -20,7 +20,7 @@ const notes = [
 
 export default function Health() {
   useEffect(() => {
-    document.title = "Health — Arlo";
+    document.title = "Arlo";
   }, []);
 
   const stats: ModuleStat[] = [
