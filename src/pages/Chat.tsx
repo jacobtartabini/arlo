@@ -9,10 +9,8 @@ import {
   ArrowUp,
   Paperclip,
   ChevronLeft,
-  ChevronRight,
   Folder,
   Menu,
-  X,
   Mic,
   MicOff,
   FileImage,
@@ -26,11 +24,15 @@ import {
   Edit2,
   Check,
   Loader2,
+  Image as ImageIcon,
 } from "lucide-react";
 import { useArlo } from "@/providers/ArloProvider";
 import { useChatHistory } from "@/providers/ChatHistoryProvider";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
+import { FileUpload, useFileUpload, type UploadedFile } from "@/components/chat/FileUpload";
+import { MessageAttachments } from "@/components/chat/MessageAttachments";
 
 // Types for speech recognition
 interface SpeechRecognitionEvent {
@@ -73,6 +75,15 @@ declare global {
     SpeechRecognition: new () => SpeechRecognition;
     webkitSpeechRecognition: new () => SpeechRecognition;
   }
+}
+
+// Extended message type with attachments
+interface MessageWithAttachments {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+  attachments?: UploadedFile[];
 }
 
 // Custom Hook for auto-resizing textarea
@@ -131,13 +142,18 @@ export default function Chat() {
   const [isRecording, setIsRecording] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [localAttachments, setLocalAttachments] = useState<Record<string, UploadedFile[]>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const { textareaRef, adjustHeight } = useAutoResizeTextarea({
     minHeight: 48,
     maxHeight: 200,
   });
+
+  // File upload hook
+  const { files, setFiles, clearFiles } = useFileUpload();
 
   // Get chat functionality from providers
   const { messages, sendMessage, isLoading } = useArlo();
@@ -157,25 +173,50 @@ export default function Chat() {
 
   // Handle sending a message
   const handleSendMessage = async () => {
-    if (!input.trim() || isLoading) return;
+    if ((!input.trim() && files.length === 0) || isLoading) return;
 
     const message = input.trim();
+    const currentFiles = [...files];
+    
     setInput("");
     adjustHeight(true);
     setShowPlusMenu(false);
+    clearFiles();
 
-    await sendMessage(message);
+    // Store attachments locally for this message
+    if (currentFiles.length > 0) {
+      const tempId = `temp-${Date.now()}`;
+      setLocalAttachments(prev => ({
+        ...prev,
+        [tempId]: currentFiles,
+      }));
+    }
+
+    // Build message with file references
+    let fullMessage = message;
+    if (currentFiles.length > 0) {
+      const fileDescriptions = currentFiles.map(f => 
+        f.type === 'image' 
+          ? `[Attached image: ${f.name}](${f.url})`
+          : `[Attached file: ${f.name}](${f.url})`
+      ).join('\n');
+      fullMessage = fullMessage ? `${fullMessage}\n\n${fileDescriptions}` : fileDescriptions;
+    }
+
+    await sendMessage(fullMessage);
   };
 
   // Handle creating a new chat
   const handleNewChat = () => {
     createConversation({ setActive: true });
     setShowPlusMenu(false);
+    clearFiles();
   };
 
   // Handle selecting a conversation
   const handleSelectConversation = (conversationId: string) => {
     setActiveConversation(conversationId);
+    clearFiles();
   };
 
   // Handle deleting a conversation
@@ -252,6 +293,72 @@ export default function Chat() {
     toast.info("Listening...");
   };
 
+  // Handle file input change
+  const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    if (selectedFiles.length === 0) return;
+
+    const MAX_FILE_SIZE = 20 * 1024 * 1024;
+    const MAX_FILES = 10;
+
+    if (files.length + selectedFiles.length > MAX_FILES) {
+      toast.error(`Maximum ${MAX_FILES} files allowed`);
+      return;
+    }
+
+    const oversizedFiles = selectedFiles.filter(f => f.size > MAX_FILE_SIZE);
+    if (oversizedFiles.length > 0) {
+      toast.error("Some files exceed the 20MB limit");
+      return;
+    }
+
+    // Import supabase for uploads
+    const { supabase } = await import('@/integrations/supabase/client');
+
+    const uploadedFiles: UploadedFile[] = [];
+
+    for (const file of selectedFiles) {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const filePath = `uploads/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('chat-attachments')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        toast.error(`Failed to upload ${file.name}`);
+        continue;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from('chat-attachments')
+        .getPublicUrl(filePath);
+
+      const fileType = file.type.startsWith('image/') ? 'image' 
+        : (file.type === 'application/pdf' || file.type.includes('document')) ? 'document' 
+        : 'other';
+
+      uploadedFiles.push({
+        id: fileName,
+        name: file.name,
+        url: urlData.publicUrl,
+        type: fileType,
+        size: file.size,
+      });
+    }
+
+    if (uploadedFiles.length > 0) {
+      setFiles([...files, ...uploadedFiles]);
+      toast.success(`${uploadedFiles.length} file(s) uploaded`);
+    }
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   // Filter conversations based on search
   const filteredConversations = conversations.filter((conv) =>
     conv.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -266,8 +373,38 @@ export default function Chat() {
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
+  // Parse message for attachments
+  const parseMessageAttachments = (content: string): { text: string; attachments: UploadedFile[] } => {
+    const attachments: UploadedFile[] = [];
+    const attachmentRegex = /\[Attached (image|file): ([^\]]+)\]\(([^)]+)\)/g;
+    let match;
+    
+    while ((match = attachmentRegex.exec(content)) !== null) {
+      attachments.push({
+        id: match[3],
+        name: match[2],
+        url: match[3],
+        type: match[1] === 'image' ? 'image' : 'document',
+        size: 0,
+      });
+    }
+
+    const text = content.replace(attachmentRegex, '').trim();
+    return { text, attachments };
+  };
+
   return (
     <div className="flex h-screen w-full bg-background">
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        onChange={handleFileInputChange}
+        className="hidden"
+        accept="image/*,.pdf,.doc,.docx,.txt,.md,.csv,.json"
+      />
+
       {/* Sidebar */}
       <AnimatePresence mode="wait">
         {sidebarOpen && (
@@ -425,36 +562,50 @@ export default function Chat() {
             </div>
           ) : (
             <div className="max-w-3xl mx-auto py-6 px-4 space-y-4">
-              {messages.map((message) => (
-                <motion.div
-                  key={message.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={cn(
-                    "flex",
-                    message.role === "user" ? "justify-end" : "justify-start"
-                  )}
-                >
-                  <div
+              {messages.map((message) => {
+                const { text, attachments } = parseMessageAttachments(message.content);
+                
+                return (
+                  <motion.div
+                    key={message.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
                     className={cn(
-                      "max-w-[80%] px-4 py-3 rounded-2xl",
-                      message.role === "user"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-foreground"
+                      "flex",
+                      message.role === "user" ? "justify-end" : "justify-start"
                     )}
                   >
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                     <div
                       className={cn(
-                        "text-xs mt-1 opacity-60",
-                        message.role === "user" ? "text-right" : "text-left"
+                        "max-w-[80%] px-4 py-3 rounded-2xl",
+                        message.role === "user"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-foreground"
                       )}
                     >
-                      {formatTime(message.timestamp)}
+                      {message.role === "assistant" ? (
+                        <MarkdownRenderer 
+                          content={text || message.content} 
+                          className="text-sm"
+                        />
+                      ) : (
+                        <p className="text-sm whitespace-pre-wrap">{text || message.content}</p>
+                      )}
+                      {attachments.length > 0 && (
+                        <MessageAttachments attachments={attachments} />
+                      )}
+                      <div
+                        className={cn(
+                          "text-xs mt-1 opacity-60",
+                          message.role === "user" ? "text-right" : "text-left"
+                        )}
+                      >
+                        {formatTime(message.timestamp)}
+                      </div>
                     </div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                );
+              })}
               {isLoading && (
                 <motion.div
                   initial={{ opacity: 0 }}
@@ -475,6 +626,43 @@ export default function Chat() {
         {/* Input Area */}
         <div className="border-t border-border p-4">
           <div className="max-w-3xl mx-auto">
+            {/* File previews */}
+            {files.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {files.map((file) => (
+                  <div
+                    key={file.id}
+                    className={cn(
+                      "relative group flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-muted/50",
+                      file.type === 'image' && "p-1"
+                    )}
+                  >
+                    {file.type === 'image' ? (
+                      <img
+                        src={file.url}
+                        alt={file.name}
+                        className="h-16 w-16 object-cover rounded"
+                      />
+                    ) : (
+                      <>
+                        <FileText className="w-4 h-4" />
+                        <span className="text-xs font-medium truncate max-w-[120px]">
+                          {file.name}
+                        </span>
+                      </>
+                    )}
+                    <button
+                      onClick={() => setFiles(files.filter(f => f.id !== file.id))}
+                      className="absolute -top-1.5 -right-1.5 p-0.5 bg-destructive text-destructive-foreground rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <span className="sr-only">Remove</span>
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="relative">
               <div className="relative flex items-center bg-muted/50 rounded-2xl border border-border focus-within:ring-1 focus-within:ring-ring transition-all">
                 <button
@@ -503,6 +691,13 @@ export default function Chat() {
                 />
                 <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
                   <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-2 hover:bg-muted/50 rounded-lg transition-colors text-muted-foreground hover:text-foreground"
+                    title="Attach files"
+                  >
+                    <Paperclip className="w-4 h-4" />
+                  </button>
+                  <button
                     onClick={toggleRecording}
                     className={cn(
                       "p-2 rounded-lg transition-colors",
@@ -516,10 +711,10 @@ export default function Chat() {
                   </button>
                   <button
                     onClick={handleSendMessage}
-                    disabled={!input.trim() || isLoading}
+                    disabled={(!input.trim() && files.length === 0) || isLoading}
                     className={cn(
                       "p-2 rounded-full transition-all",
-                      input.trim() && !isLoading
+                      (input.trim() || files.length > 0) && !isLoading
                         ? "bg-foreground text-background hover:bg-foreground/90"
                         : "bg-muted/50 text-muted-foreground/40 cursor-not-allowed"
                     )}
@@ -541,7 +736,7 @@ export default function Chat() {
                   >
                     <button
                       onClick={() => {
-                        toast.info("File upload coming soon!");
+                        fileInputRef.current?.click();
                         setShowPlusMenu(false);
                       }}
                       className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted rounded-lg transition-colors text-left text-sm"
@@ -592,7 +787,7 @@ export default function Chat() {
                       }}
                       className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted rounded-lg transition-colors text-left text-sm"
                     >
-                      <FileImage className="w-4 h-4 text-muted-foreground" />
+                      <ImageIcon className="w-4 h-4 text-muted-foreground" />
                       <span>Create image</span>
                     </button>
                     <button
