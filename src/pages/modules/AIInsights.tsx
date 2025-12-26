@@ -20,7 +20,7 @@ const recaps = [
 
 export default function AIInsights() {
   useEffect(() => {
-    document.title = "Insights — Arlo";
+    document.title = "Arlo";
   }, []);
 
   const stats: ModuleStat[] = [
