@@ -10,7 +10,7 @@ import { BarChart3, CreditCard, LineChart, PiggyBank, Radar, Sparkles } from "lu
 
 export default function Finance() {
   useEffect(() => {
-    document.title = "Finance — Arlo";
+    document.title = "Arlo";
   }, []);
 
   const stats: ModuleStat[] = [
