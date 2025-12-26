@@ -20,7 +20,7 @@ const logs = [
 
 export default function Automations() {
   useEffect(() => {
-    document.title = "Automations — Arlo";
+    document.title = "Arlo";
   }, []);
 
   const stats: ModuleStat[] = [
