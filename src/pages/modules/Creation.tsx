@@ -113,7 +113,7 @@ export default function Creation() {
   }, []);
 
   useEffect(() => {
-    document.title = "Creation — Arlo";
+    document.title = "Arlo";
   }, []);
 
   // Keyboard shortcuts
