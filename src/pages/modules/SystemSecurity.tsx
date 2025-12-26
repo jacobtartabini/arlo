@@ -21,7 +21,7 @@ const alerts = [
 
 export default function SystemSecurity() {
   useEffect(() => {
-    document.title = "Security — Arlo";
+    document.title = "Arlo";
   }, []);
 
   const stats: ModuleStat[] = [
