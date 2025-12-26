@@ -29,7 +29,7 @@ export default function Settings() {
 
   // SEO
   useEffect(() => {
-    document.title = "Arlo AI Settings — Configure Your Assistant";
+    document.title = "Arlo";
     const desc = "Configure Arlo AI settings including appearance, privacy, notifications, and system preferences.";
     let meta = document.querySelector('meta[name="description"]') as HTMLMetaElement | null;
     if (!meta) {
