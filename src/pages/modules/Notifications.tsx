@@ -23,7 +23,7 @@ export default function Notifications() {
   } = useNotifications();
 
   useEffect(() => {
-    document.title = "Notifications — Arlo";
+    document.title = "Arlo";
   }, []);
 
   return (
