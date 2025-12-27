@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Shield,
   ShieldCheck,
@@ -32,6 +32,7 @@ import {
   Eye,
   TrendingUp,
   Layers,
+  Loader2,
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -46,6 +47,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Device {
   id: string;
@@ -55,6 +57,10 @@ interface Device {
   tailnetIp: string;
   lastSeen: string;
   tags: string[];
+  user?: string;
+  clientVersion?: string;
+  updateAvailable?: boolean;
+  expires?: string;
 }
 
 interface AuditEvent {
@@ -66,6 +72,19 @@ interface AuditEvent {
   ip: string;
   location: string;
   source: 'tailnet' | 'public';
+  actor?: string;
+  eventType?: string;
+}
+
+interface AuthKey {
+  id: string;
+  description: string;
+  created: string;
+  expires: string;
+  lastUsed?: string;
+  reusable: boolean;
+  ephemeral: boolean;
+  tags: string[];
 }
 
 interface IntelligenceFinding {
@@ -102,76 +121,150 @@ const Services = () => {
   const [osintCategory, setOsintCategory] = useState('all');
   const [investigationType, setInvestigationType] = useState('identity');
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastCheckTime, setLastCheckTime] = useState('2 hours ago');
+  const [lastCheckTime, setLastCheckTime] = useState<string>('Never');
+  
+  // Live data state
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [recentEvents, setRecentEvents] = useState<AuditEvent[]>([]);
+  const [authKeys, setAuthKeys] = useState<AuthKey[]>([]);
+  const [isLoadingDevices, setIsLoadingDevices] = useState(false);
+  const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+  const [isLoadingKeys, setIsLoadingKeys] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = "Security — Arlo";
   }, []);
 
+  const formatLastSeen = (isoDate: string): string => {
+    if (!isoDate) return 'Unknown';
+    const date = new Date(isoDate);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  };
+
+  const fetchTailscaleData = useCallback(async (action: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('tailscale-api', {
+        body: { action },
+        headers: {
+          'x-tailscale-verified': 'true',
+        },
+      });
+
+      if (error) {
+        console.error(`Tailscale API error (${action}):`, error);
+        throw new Error(error.message || 'Failed to fetch Tailscale data');
+      }
+
+      return data;
+    } catch (err) {
+      console.error(`Error fetching ${action}:`, err);
+      throw err;
+    }
+  }, []);
+
+  const loadDevices = useCallback(async () => {
+    setIsLoadingDevices(true);
+    try {
+      const data = await fetchTailscaleData('devices');
+      if (data?.devices) {
+        const formattedDevices: Device[] = data.devices.map((d: any) => ({
+          id: d.id,
+          name: d.name,
+          os: d.os,
+          status: d.status,
+          tailnetIp: d.tailnetIp,
+          lastSeen: formatLastSeen(d.lastSeen),
+          tags: d.tags || [],
+          user: d.user,
+          clientVersion: d.clientVersion,
+          updateAvailable: d.updateAvailable,
+          expires: d.expires,
+        }));
+        setDevices(formattedDevices);
+        setApiError(null);
+      }
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : 'Failed to load devices');
+    } finally {
+      setIsLoadingDevices(false);
+    }
+  }, [fetchTailscaleData]);
+
+  const loadAuditEvents = useCallback(async () => {
+    setIsLoadingEvents(true);
+    try {
+      const data = await fetchTailscaleData('audit-logs');
+      if (data?.events) {
+        const formattedEvents: AuditEvent[] = data.events.map((e: any) => ({
+          id: e.id,
+          type: e.type,
+          timestamp: formatLastSeen(e.timestamp),
+          device: e.device,
+          os: e.os || 'Unknown',
+          ip: e.ip,
+          location: e.location || 'Via Tailnet',
+          source: e.source,
+          actor: e.actor,
+          eventType: e.eventType,
+        }));
+        setRecentEvents(formattedEvents);
+      } else if (data?.message) {
+        // Audit logs not available on this plan
+        console.log('Audit logs:', data.message);
+      }
+    } catch (err) {
+      console.error('Failed to load audit events:', err);
+    } finally {
+      setIsLoadingEvents(false);
+    }
+  }, [fetchTailscaleData]);
+
+  const loadAuthKeys = useCallback(async () => {
+    setIsLoadingKeys(true);
+    try {
+      const data = await fetchTailscaleData('keys');
+      if (data?.keys) {
+        setAuthKeys(data.keys);
+      }
+    } catch (err) {
+      console.error('Failed to load auth keys:', err);
+    } finally {
+      setIsLoadingKeys(false);
+    }
+  }, [fetchTailscaleData]);
+
+  const loadAllData = useCallback(async () => {
+    setIsRefreshing(true);
+    await Promise.all([loadDevices(), loadAuditEvents(), loadAuthKeys()]);
+    setLastCheckTime('Just now');
+    setIsRefreshing(false);
+  }, [loadDevices, loadAuditEvents, loadAuthKeys]);
+
+  // Load data on mount and when access section is expanded
+  useEffect(() => {
+    loadAllData();
+  }, []);
+
   const securityStatus = 'secure' as 'secure' | 'attention' | 'risk';
 
-  const devices: Device[] = [
-    {
-      id: '1',
-      name: 'MacBook Pro',
-      os: 'macOS 14.2',
-      status: 'online',
-      tailnetIp: '100.64.0.1',
-      lastSeen: '2 minutes ago',
-      tags: ['primary', 'trusted'],
-    },
-    {
-      id: '2',
-      name: 'iPhone 15',
-      os: 'iOS 17.2',
-      status: 'online',
-      tailnetIp: '100.64.0.2',
-      lastSeen: '5 minutes ago',
-      tags: ['mobile', 'trusted'],
-    },
-    {
-      id: '3',
-      name: 'Ubuntu Server',
-      os: 'Ubuntu 22.04',
-      status: 'offline',
-      tailnetIp: '100.64.0.3',
-      lastSeen: '2 hours ago',
-      tags: ['server'],
-    },
-  ];
-
-  const recentEvents: AuditEvent[] = [
-    {
-      id: '1',
-      type: 'login',
-      timestamp: '2 minutes ago',
-      device: 'MacBook Pro',
-      os: 'macOS / Chrome',
-      ip: '100.64.0.1',
-      location: 'San Francisco, CA',
-      source: 'tailnet',
-    },
-    {
-      id: '2',
-      type: 'refresh',
-      timestamp: '15 minutes ago',
-      device: 'iPhone 15',
-      os: 'iOS / Safari',
-      ip: '100.64.0.2',
-      location: 'San Francisco, CA',
-      source: 'tailnet',
-    },
-    {
-      id: '3',
-      type: 'failed',
-      timestamp: '2 hours ago',
-      device: 'Unknown',
-      os: 'Windows / Edge',
-      ip: '203.0.113.42',
-      location: 'Unknown',
-      source: 'public',
-    },
-  ];
+  // Calculate expiring keys
+  const expiringKeys = authKeys.filter((key) => {
+    if (!key.expires) return false;
+    const expiresDate = new Date(key.expires);
+    const now = new Date();
+    const daysUntilExpiry = Math.floor((expiresDate.getTime() - now.getTime()) / 86400000);
+    return daysUntilExpiry <= 7 && daysUntilExpiry >= 0;
+  });
 
   const intelligenceFindings: IntelligenceFinding[] = [
     {
@@ -537,11 +630,8 @@ const Services = () => {
   };
 
   const handleRefresh = async () => {
-    setIsRefreshing(true);
     toast.info('Refreshing security status...');
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    setLastCheckTime('Just now');
-    setIsRefreshing(false);
+    await loadAllData();
     toast.success('Security status updated');
   };
 
@@ -628,11 +718,27 @@ const Services = () => {
                   <Clock className="h-3.5 w-3.5" />
                   Last Activity
                 </div>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl font-semibold text-foreground">2m</span>
-                  <span className="text-sm text-muted-foreground">ago</span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">MacBook Pro</p>
+                {devices.length > 0 ? (
+                  <>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-2xl font-semibold text-foreground">
+                        {devices.find(d => d.status === 'online')?.lastSeen?.split(' ')[0] || '--'}
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        {devices.find(d => d.status === 'online')?.lastSeen?.includes('minute') ? 'min ago' : 
+                         devices.find(d => d.status === 'online')?.lastSeen?.includes('hour') ? 'hrs ago' : 'ago'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {devices.find(d => d.status === 'online')?.name || 'No active device'}
+                    </p>
+                  </>
+                ) : (
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="text-2xl font-semibold text-foreground">--</span>
+                    <span className="text-sm text-muted-foreground">loading</span>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -692,68 +798,115 @@ const Services = () => {
             <CardContent className="pt-0 space-y-6">
               {/* Devices */}
               <div className="space-y-3">
-                <h3 className="text-sm font-medium text-foreground">Connected Devices</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium text-foreground">Connected Devices</h3>
+                  {isLoadingDevices && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                </div>
                 <div className="space-y-2">
-                  {devices.map((device) => (
-                    <div
-                      key={device.id}
-                      className="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
-                    >
-                      <div className="flex items-center gap-3">
-                        {device.os.includes('macOS') ? (
-                          <Laptop className="h-5 w-5 text-muted-foreground" />
-                        ) : device.os.includes('iOS') ? (
-                          <Smartphone className="h-5 w-5 text-muted-foreground" />
-                        ) : (
-                          <Monitor className="h-5 w-5 text-muted-foreground" />
-                        )}
-                        <div>
-                          <p className="text-sm font-medium text-foreground">{device.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {device.tailnetIp} · {device.lastSeen}
-                          </p>
-                        </div>
-                      </div>
-                      <Badge variant={device.status === 'online' ? 'default' : 'secondary'}>
-                        {device.status}
-                      </Badge>
+                  {isLoadingDevices && devices.length === 0 ? (
+                    <div className="flex items-center justify-center p-6 text-muted-foreground">
+                      <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                      Loading devices...
                     </div>
-                  ))}
+                  ) : devices.length === 0 ? (
+                    <div className="text-center p-6 text-muted-foreground">
+                      No devices found. Check your Tailscale API configuration.
+                    </div>
+                  ) : (
+                    devices.map((device) => (
+                      <div
+                        key={device.id}
+                        className="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          {device.os.toLowerCase().includes('macos') || device.os.toLowerCase().includes('darwin') ? (
+                            <Laptop className="h-5 w-5 text-muted-foreground" />
+                          ) : device.os.toLowerCase().includes('ios') || device.os.toLowerCase().includes('android') ? (
+                            <Smartphone className="h-5 w-5 text-muted-foreground" />
+                          ) : (
+                            <Monitor className="h-5 w-5 text-muted-foreground" />
+                          )}
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-foreground">{device.name}</p>
+                              {device.updateAvailable && (
+                                <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/50">
+                                  Update available
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {device.tailnetIp} · {device.lastSeen} · {device.os}
+                            </p>
+                            {device.user && (
+                              <p className="text-xs text-muted-foreground/70">{device.user}</p>
+                            )}
+                          </div>
+                        </div>
+                        <Badge variant={device.status === 'online' ? 'default' : 'secondary'}>
+                          {device.status}
+                        </Badge>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
 
               {/* Recent Activity */}
               <div className="space-y-3">
-                <h3 className="text-sm font-medium text-foreground">Recent Activity</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium text-foreground">Recent Activity</h3>
+                  {isLoadingEvents && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                </div>
                 <div className="space-y-2">
-                  {recentEvents.map((event) => (
-                    <div
-                      key={event.id}
-                      className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg"
-                    >
-                      <div className="mt-0.5">{getEventIcon(event.type)}</div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-foreground capitalize">{event.type}</span>
-                          <Badge variant="outline" className="text-xs">
-                            {event.source}
-                          </Badge>
-                        </div>
-                        <div className="mt-0.5">
-                          <p className="text-sm text-foreground">{event.device} · {event.os}</p>
-                          <p className="text-xs text-muted-foreground flex items-center gap-1">
-                            <span>{event.ip}</span>
-                            <span>·</span>
-                            <MapPin className="h-3 w-3" />
-                            <span>{event.location}</span>
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {event.timestamp}
-                      </span>
+                  {isLoadingEvents && recentEvents.length === 0 ? (
+                    <div className="flex items-center justify-center p-6 text-muted-foreground">
+                      <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                      Loading activity...
                     </div>
-                  ))}
+                  ) : recentEvents.length === 0 ? (
+                    <div className="text-center p-6 text-muted-foreground">
+                      No recent activity. Audit logs may not be available on your Tailscale plan.
+                    </div>
+                  ) : (
+                    recentEvents.map((event) => (
+                      <div
+                        key={event.id}
+                        className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg"
+                      >
+                        <div className="mt-0.5">{getEventIcon(event.type)}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-foreground capitalize">{event.type}</span>
+                            <Badge variant="outline" className="text-xs">
+                              {event.source}
+                            </Badge>
+                            {event.eventType && (
+                              <span className="text-xs text-muted-foreground">{event.eventType}</span>
+                            )}
+                          </div>
+                          <div className="mt-0.5">
+                            <p className="text-sm text-foreground">
+                              {event.device} {event.actor && `by ${event.actor}`}
+                            </p>
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              {event.ip && <span>{event.ip}</span>}
+                              {event.ip && event.location && <span>·</span>}
+                              {event.location && (
+                                <>
+                                  <MapPin className="h-3 w-3" />
+                                  <span>{event.location}</span>
+                                </>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          {event.timestamp}
+                        </span>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </CardContent>
@@ -1058,7 +1211,7 @@ const Services = () => {
             <div className="text-left">
               <h2 className="font-medium text-foreground">Security Health</h2>
               <p className="text-sm text-muted-foreground">
-                1 warning
+                {expiringKeys.length > 0 ? `${expiringKeys.length} warning${expiringKeys.length > 1 ? 's' : ''}` : 'All healthy'}
               </p>
             </div>
             {expandedSection === 'health' ? (
@@ -1070,11 +1223,17 @@ const Services = () => {
           {expandedSection === 'health' && (
             <CardContent className="pt-0 space-y-3">
               <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
-                <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                {devices.filter(d => d.status === 'online').length > 0 ? (
+                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                ) : (
+                  <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />
+                )}
                 <div>
                   <p className="text-sm font-medium text-foreground">Tailnet Connectivity</p>
                   <p className="text-xs text-muted-foreground">
-                    All devices are properly connected to the Tailnet
+                    {devices.filter(d => d.status === 'online').length > 0 
+                      ? `${devices.filter(d => d.status === 'online').length} of ${devices.length} devices online`
+                      : 'No devices currently online'}
                   </p>
                 </div>
               </div>
@@ -1082,26 +1241,52 @@ const Services = () => {
               <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
                 <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
                 <div>
-                  <p className="text-sm font-medium text-foreground">Unknown Devices</p>
+                  <p className="text-sm font-medium text-foreground">Device Updates</p>
                   <p className="text-xs text-muted-foreground">
-                    No unknown devices detected in the last 30 days
+                    {devices.filter(d => d.updateAvailable).length > 0 
+                      ? `${devices.filter(d => d.updateAvailable).length} device${devices.filter(d => d.updateAvailable).length > 1 ? 's' : ''} have updates available`
+                      : 'All devices up to date'}
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-start gap-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground">Auth Key Expiration</p>
-                  <p className="text-xs text-muted-foreground">
-                    1 auth key will expire in 7 days
-                  </p>
-                  <Button variant="outline" size="sm" className="mt-2" onClick={() => toast.info('Key rotation initiated')}>
-                    <Key className="h-3.5 w-3.5 mr-1.5" />
-                    Rotate Key
-                  </Button>
+              {expiringKeys.length > 0 ? (
+                expiringKeys.map((key) => {
+                  const expiresDate = new Date(key.expires);
+                  const now = new Date();
+                  const daysUntilExpiry = Math.floor((expiresDate.getTime() - now.getTime()) / 86400000);
+                  return (
+                    <div key={key.id} className="flex items-start gap-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                      <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-foreground">Auth Key Expiration</p>
+                        <p className="text-xs text-muted-foreground">
+                          "{key.description}" expires in {daysUntilExpiry} day{daysUntilExpiry !== 1 ? 's' : ''}
+                        </p>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="mt-2" 
+                          onClick={() => toast.info('Key rotation initiated - visit Tailscale admin console to complete')}
+                        >
+                          <Key className="h-3.5 w-3.5 mr-1.5" />
+                          Rotate Key
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
+                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Auth Keys</p>
+                    <p className="text-xs text-muted-foreground">
+                      {authKeys.length > 0 ? `All ${authKeys.length} auth keys are valid` : 'No auth keys configured'}
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
                 <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
@@ -1116,9 +1301,23 @@ const Services = () => {
           )}
         </Card>
 
+        {/* API Error Notice */}
+        {apiError && (
+          <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            <p className="text-sm text-muted-foreground">
+              Unable to fetch live Tailscale data: {apiError}
+            </p>
+            <Button variant="ghost" size="sm" onClick={handleRefresh} className="ml-auto">
+              Retry
+            </Button>
+          </div>
+        )}
+
         {/* Footer */}
         <p className="text-xs text-center text-muted-foreground">
-          Last security check: {lastCheckTime} · Next check: in 22 hours
+          Last security check: {lastCheckTime} · {isRefreshing && <Loader2 className="inline h-3 w-3 animate-spin mr-1" />}
+          {isRefreshing ? 'Refreshing...' : 'Next check: in 22 hours'}
         </p>
       </div>
     </div>
