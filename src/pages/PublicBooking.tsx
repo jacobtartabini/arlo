@@ -346,26 +346,53 @@ const PublicBookingPage = () => {
       title: "Scheduling...",
       message: "Please wait while we schedule your meeting.",
       variant: "default",
-      duration: 2000,
+      duration: 3000,
     });
 
-    // Simulate API call - in production this would create a calendar event
-    setTimeout(() => {
-      toastRef.current?.show({
-        title: "Meeting Scheduled",
-        message: `Meeting confirmed with ${name} for ${formatDateDisplay(selectedDate)} at ${selectedTime}.`,
-        variant: "success",
-        duration: 5000,
-        highlightTitle: true,
+    try {
+      // Call the edge function to create the booking
+      const { data, error } = await supabase.functions.invoke("create-booking", {
+        body: {
+          date: selectedDate.toISOString(),
+          time: selectedTime,
+          name: name.trim(),
+          email: email.trim(),
+          message: message.trim() || undefined,
+          handle,
+        },
       });
 
-      setIsSubmitting(false);
+      if (error) {
+        throw new Error(error.message || "Failed to create booking");
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      toastRef.current?.show({
+        title: "Meeting Scheduled!",
+        message: `Your meeting has been confirmed for ${formatDateDisplay(selectedDate)} at ${selectedTime}. A confirmation email has been sent to ${email}.`,
+        variant: "success",
+        duration: 6000,
+        highlightTitle: true,
+      });
 
       // Reset form after successful booking
       setTimeout(() => {
         handleReset();
-      }, 1000);
-    }, 2000);
+      }, 1500);
+    } catch (err: any) {
+      console.error("Booking error:", err);
+      toastRef.current?.show({
+        title: "Booking Failed",
+        message: err.message || "Unable to schedule meeting. Please try again.",
+        variant: "error",
+        duration: 5000,
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const renderCalendarDays = () => {
