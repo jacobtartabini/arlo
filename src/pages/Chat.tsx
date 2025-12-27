@@ -136,6 +136,15 @@ function useAutoResizeTextarea({
 }
 
 // Main Chat Component
+// Folder type
+interface ChatFolder {
+  id: string;
+  name: string;
+  color: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export default function Chat() {
   const [input, setInput] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -148,6 +157,11 @@ export default function Chat() {
   const [isDragging, setIsDragging] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState("");
+  const [folders, setFolders] = useState<ChatFolder[]>([]);
+  const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
+  const [renameFolderValue, setRenameFolderValue] = useState("");
+  const [showNewFolderInput, setShowNewFolderInput] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -177,6 +191,109 @@ export default function Chat() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Load folders from database
+  useEffect(() => {
+    const loadFolders = async () => {
+      const { supabase } = await import('@/integrations/supabase/client');
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('chat_folders')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('name');
+      
+      if (error) {
+        console.error('Error loading folders:', error);
+        return;
+      }
+      
+      setFolders(data || []);
+    };
+
+    loadFolders();
+  }, []);
+
+  // Folder CRUD handlers
+  const handleCreateFolder = async () => {
+    if (!newFolderName.trim()) {
+      setShowNewFolderInput(false);
+      return;
+    }
+
+    const { supabase } = await import('@/integrations/supabase/client');
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("You must be logged in to create folders");
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('chat_folders')
+      .insert({
+        user_id: user.id,
+        name: newFolderName.trim(),
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating folder:', error);
+      toast.error("Failed to create folder");
+      return;
+    }
+
+    setFolders(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+    setNewFolderName("");
+    setShowNewFolderInput(false);
+    toast.success("Folder created");
+  };
+
+  const handleRenameFolder = async (folderId: string) => {
+    if (!renameFolderValue.trim()) {
+      setRenamingFolderId(null);
+      return;
+    }
+
+    const { supabase } = await import('@/integrations/supabase/client');
+    const { error } = await supabase
+      .from('chat_folders')
+      .update({ name: renameFolderValue.trim() })
+      .eq('id', folderId);
+
+    if (error) {
+      console.error('Error renaming folder:', error);
+      toast.error("Failed to rename folder");
+      return;
+    }
+
+    setFolders(prev => 
+      prev.map(f => f.id === folderId ? { ...f, name: renameFolderValue.trim() } : f)
+        .sort((a, b) => a.name.localeCompare(b.name))
+    );
+    setRenamingFolderId(null);
+    setRenameFolderValue("");
+    toast.success("Folder renamed");
+  };
+
+  const handleDeleteFolder = async (folderId: string) => {
+    const { supabase } = await import('@/integrations/supabase/client');
+    const { error } = await supabase
+      .from('chat_folders')
+      .delete()
+      .eq('id', folderId);
+
+    if (error) {
+      console.error('Error deleting folder:', error);
+      toast.error("Failed to delete folder");
+      return;
+    }
+
+    setFolders(prev => prev.filter(f => f.id !== folderId));
+    toast.success("Folder deleted");
+  };
 
   // Handle sending a message
   const handleSendMessage = async () => {
@@ -487,9 +604,6 @@ export default function Chat() {
     conv.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Get unique folders from conversations (using mock data structure)
-  const folders = ["Work", "Personal", "Research"];
-
   // Format timestamp for display
   const formatTime = (timestamp: Date | string) => {
     const date = new Date(timestamp);
@@ -590,18 +704,131 @@ export default function Chat() {
             <div className="flex-1 overflow-y-auto px-2 pb-2">
               {/* Folders Section */}
               <div className="mb-4">
-                <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Folders
-                </div>
-                {folders.map((folder) => (
+                <div className="flex items-center justify-between px-2 py-1.5">
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Folders
+                  </span>
                   <button
-                    key={folder}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 rounded-lg text-sm transition-colors"
+                    onClick={() => setShowNewFolderInput(true)}
+                    className="p-1 hover:bg-muted rounded transition-colors"
+                    title="New Folder"
                   >
-                    <Folder className="w-4 h-4 text-muted-foreground" />
-                    {folder}
+                    <Plus className="w-3 h-3 text-muted-foreground" />
                   </button>
+                </div>
+                
+                {/* New folder input */}
+                {showNewFolderInput && (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleCreateFolder();
+                    }}
+                    className="flex items-center gap-1 px-2 py-1"
+                  >
+                    <Folder className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    <input
+                      type="text"
+                      value={newFolderName}
+                      onChange={(e) => setNewFolderName(e.target.value)}
+                      placeholder="Folder name..."
+                      className="flex-1 bg-muted/50 px-2 py-1 rounded text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                      autoFocus
+                      onBlur={() => {
+                        if (!newFolderName.trim()) {
+                          setShowNewFolderInput(false);
+                        }
+                      }}
+                    />
+                    <button
+                      type="submit"
+                      className="p-1 hover:bg-muted rounded"
+                    >
+                      <Check className="w-3 h-3" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowNewFolderInput(false);
+                        setNewFolderName("");
+                      }}
+                      className="p-1 hover:bg-muted rounded"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </form>
+                )}
+                
+                {folders.map((folder) => (
+                  <div
+                    key={folder.id}
+                    className="group w-full flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 rounded-lg text-sm transition-colors"
+                  >
+                    <Folder className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    <div className="flex-1 text-left truncate">
+                      {renamingFolderId === folder.id ? (
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            handleRenameFolder(folder.id);
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="flex items-center gap-1"
+                        >
+                          <input
+                            type="text"
+                            value={renameFolderValue}
+                            onChange={(e) => setRenameFolderValue(e.target.value)}
+                            className="flex-1 bg-background px-1 py-0.5 rounded text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                            autoFocus
+                            onBlur={() => {
+                              if (!renameFolderValue.trim()) {
+                                setRenamingFolderId(null);
+                              }
+                            }}
+                          />
+                          <button
+                            type="submit"
+                            className="p-0.5 hover:bg-muted rounded"
+                          >
+                            <Check className="w-3 h-3" />
+                          </button>
+                        </form>
+                      ) : (
+                        <span className="font-medium truncate block">{folder.name}</span>
+                      )}
+                    </div>
+                    {renamingFolderId !== folder.id && (
+                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRenamingFolderId(folder.id);
+                            setRenameFolderValue(folder.name);
+                          }}
+                          className="p-1 hover:bg-muted rounded"
+                          title="Rename folder"
+                        >
+                          <Edit2 className="w-3 h-3 text-muted-foreground" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteFolder(folder.id);
+                          }}
+                          className="p-1 hover:bg-destructive/10 rounded"
+                          title="Delete folder"
+                        >
+                          <Trash2 className="w-3 h-3 text-destructive" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 ))}
+                
+                {folders.length === 0 && !showNewFolderInput && (
+                  <p className="px-2 py-1 text-xs text-muted-foreground italic">No folders yet</p>
+                )}
               </div>
 
               {/* Chats Section */}
