@@ -692,7 +692,6 @@ export default function Chat() {
               <Menu className="w-5 h-5" />
             )}
           </button>
-          <div className="font-medium text-foreground">Arlo</div>
         </div>
 
         {/* Messages Area */}
