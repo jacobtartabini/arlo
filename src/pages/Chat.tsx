@@ -30,6 +30,9 @@ import {
   Palette,
   FolderInput,
   MoreHorizontal,
+  ChevronRight,
+  ChevronDown,
+  GripVertical,
 } from "lucide-react";
 import { dataApiHelpers } from "@/lib/data-api";
 import { useArlo } from "@/providers/ArloProvider";
@@ -169,6 +172,10 @@ export default function Chat() {
   const [newFolderColor, setNewFolderColor] = useState("#3b82f6");
   const [editingFolderColor, setEditingFolderColor] = useState<string | null>(null);
   const [movingConversationId, setMovingConversationId] = useState<string | null>(null);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [draggingConversationId, setDraggingConversationId] = useState<string | null>(null);
+  const [draggingFolderId, setDraggingFolderId] = useState<string | null>(null);
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -320,8 +327,54 @@ export default function Chat() {
     }
 
     setMovingConversationId(null);
-    toast.success(folderId ? "Conversation moved to folder" : "Conversation removed from folder");
+    // Force reload of conversations to update folder assignments
+    window.location.reload();
   };
+
+  // Toggle folder expanded/collapsed
+  const toggleFolder = (folderId: string) => {
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(folderId)) {
+        next.delete(folderId);
+      } else {
+        next.add(folderId);
+      }
+      return next;
+    });
+  };
+
+  // Drag and drop handlers for conversations
+  const handleConversationDragStart = (e: React.DragEvent, conversationId: string) => {
+    e.dataTransfer.setData('conversationId', conversationId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggingConversationId(conversationId);
+  };
+
+  const handleConversationDragEnd = () => {
+    setDraggingConversationId(null);
+    setDragOverFolderId(null);
+  };
+
+  const handleFolderDragOver = (e: React.DragEvent, folderId: string | null) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverFolderId(folderId);
+  };
+
+  const handleFolderDragLeave = () => {
+    setDragOverFolderId(null);
+  };
+
+  const handleFolderDrop = async (e: React.DragEvent, folderId: string | null) => {
+    e.preventDefault();
+    const conversationId = e.dataTransfer.getData('conversationId');
+    if (conversationId) {
+      await handleMoveConversationToFolder(conversationId, folderId);
+    }
+    setDragOverFolderId(null);
+  };
+
 
   // Handle sending a message
   const handleSendMessage = async () => {
@@ -632,6 +685,12 @@ export default function Chat() {
     conv.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // Get conversations grouped by folder
+  const conversationsInFolder = (folderId: string) => {
+    return filteredConversations.filter(c => c.folderId === folderId);
+  };
+
+  const conversationsWithoutFolder = filteredConversations.filter(c => !c.folderId);
   // Format timestamp for display
   const formatTime = (timestamp: Date | string) => {
     const date = new Date(timestamp);
@@ -799,124 +858,237 @@ export default function Chat() {
                   </div>
                 )}
                 
-                {folders.map((folder) => (
-                  <div key={folder.id} className="relative">
-                    <div
-                      className="group w-full flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 rounded-lg text-sm transition-colors"
-                    >
-                      <Folder className="w-4 h-4 flex-shrink-0" style={{ color: folder.color }} />
-                      <div className="flex-1 text-left truncate">
-                        {renamingFolderId === folder.id ? (
-                          <form
-                            onSubmit={(e) => {
-                              e.preventDefault();
-                              handleRenameFolder(folder.id);
-                            }}
-                            onClick={(e) => e.stopPropagation()}
-                            className="flex items-center gap-1"
-                          >
-                            <input
-                              type="text"
-                              value={renameFolderValue}
-                              onChange={(e) => setRenameFolderValue(e.target.value)}
-                              className="flex-1 bg-background px-1 py-0.5 rounded text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                              autoFocus
-                              onBlur={() => {
-                                if (!renameFolderValue.trim()) {
-                                  setRenamingFolderId(null);
-                                }
+                {folders.map((folder) => {
+                  const folderConversations = conversationsInFolder(folder.id);
+                  const isExpanded = expandedFolders.has(folder.id);
+                  const isDragOver = dragOverFolderId === folder.id;
+                  
+                  return (
+                    <div key={folder.id} className="relative">
+                      <div
+                        className={cn(
+                          "group w-full flex items-center gap-1 px-2 py-1.5 hover:bg-muted/50 rounded-lg text-sm transition-colors cursor-pointer",
+                          isDragOver && "bg-primary/10 ring-1 ring-primary"
+                        )}
+                        onClick={() => toggleFolder(folder.id)}
+                        onDragOver={(e) => handleFolderDragOver(e, folder.id)}
+                        onDragLeave={handleFolderDragLeave}
+                        onDrop={(e) => handleFolderDrop(e, folder.id)}
+                      >
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleFolder(folder.id);
+                          }}
+                          className="p-0.5 hover:bg-muted rounded"
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="w-3 h-3 text-muted-foreground" />
+                          )}
+                        </button>
+                        <Folder className="w-4 h-4 flex-shrink-0" style={{ color: folder.color }} />
+                        <div className="flex-1 text-left truncate">
+                          {renamingFolderId === folder.id ? (
+                            <form
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                handleRenameFolder(folder.id);
                               }}
-                            />
-                            <button
-                              type="submit"
-                              className="p-0.5 hover:bg-muted rounded"
+                              onClick={(e) => e.stopPropagation()}
+                              className="flex items-center gap-1"
                             >
-                              <Check className="w-3 h-3" />
+                              <input
+                                type="text"
+                                value={renameFolderValue}
+                                onChange={(e) => setRenameFolderValue(e.target.value)}
+                                className="flex-1 bg-background px-1 py-0.5 rounded text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                                autoFocus
+                                onBlur={() => {
+                                  if (!renameFolderValue.trim()) {
+                                    setRenamingFolderId(null);
+                                  }
+                                }}
+                              />
+                              <button
+                                type="submit"
+                                className="p-0.5 hover:bg-muted rounded"
+                              >
+                                <Check className="w-3 h-3" />
+                              </button>
+                            </form>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <span className="font-medium truncate">{folder.name}</span>
+                              {folderConversations.length > 0 && (
+                                <span className="text-xs text-muted-foreground">({folderConversations.length})</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        {renamingFolderId !== folder.id && (
+                          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingFolderColor(editingFolderColor === folder.id ? null : folder.id);
+                              }}
+                              className="p-1 hover:bg-muted rounded"
+                              title="Change color"
+                            >
+                              <Palette className="w-3 h-3 text-muted-foreground" />
                             </button>
-                          </form>
-                        ) : (
-                          <span className="font-medium truncate block">{folder.name}</span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRenamingFolderId(folder.id);
+                                setRenameFolderValue(folder.name);
+                              }}
+                              className="p-1 hover:bg-muted rounded"
+                              title="Rename folder"
+                            >
+                              <Edit2 className="w-3 h-3 text-muted-foreground" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteFolder(folder.id);
+                              }}
+                              className="p-1 hover:bg-destructive/10 rounded"
+                              title="Delete folder"
+                            >
+                              <Trash2 className="w-3 h-3 text-destructive" />
+                            </button>
+                          </div>
                         )}
                       </div>
-                      {renamingFolderId !== folder.id && (
-                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingFolderColor(editingFolderColor === folder.id ? null : folder.id);
-                            }}
-                            className="p-1 hover:bg-muted rounded"
-                            title="Change color"
-                          >
-                            <Palette className="w-3 h-3 text-muted-foreground" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setRenamingFolderId(folder.id);
-                              setRenameFolderValue(folder.name);
-                            }}
-                            className="p-1 hover:bg-muted rounded"
-                            title="Rename folder"
-                          >
-                            <Edit2 className="w-3 h-3 text-muted-foreground" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteFolder(folder.id);
-                            }}
-                            className="p-1 hover:bg-destructive/10 rounded"
-                            title="Delete folder"
-                          >
-                            <Trash2 className="w-3 h-3 text-destructive" />
-                          </button>
+                      
+                      {/* Color picker dropdown */}
+                      {editingFolderColor === folder.id && (
+                        <div className="absolute left-6 top-full mt-1 z-20 bg-popover border border-border rounded-lg shadow-lg p-2">
+                          <div className="flex items-center gap-1">
+                            {folderColors.map((color) => (
+                              <button
+                                key={color}
+                                type="button"
+                                onClick={() => handleUpdateFolderColor(folder.id, color)}
+                                className={cn(
+                                  "w-5 h-5 rounded-full transition-transform hover:scale-110",
+                                  folder.color === color && "ring-2 ring-offset-1 ring-offset-background ring-foreground/50"
+                                )}
+                                style={{ backgroundColor: color }}
+                              />
+                            ))}
+                          </div>
                         </div>
                       )}
-                    </div>
-                    {/* Color picker dropdown */}
-                    {editingFolderColor === folder.id && (
-                      <div className="absolute left-6 top-full mt-1 z-10 bg-popover border border-border rounded-lg shadow-lg p-2">
-                        <div className="flex items-center gap-1">
-                          {folderColors.map((color) => (
-                            <button
-                              key={color}
-                              type="button"
-                              onClick={() => handleUpdateFolderColor(folder.id, color)}
-                              className={cn(
-                                "w-5 h-5 rounded-full transition-transform hover:scale-110",
-                                folder.color === color && "ring-2 ring-offset-1 ring-offset-background ring-foreground/50"
+                      
+                      {/* Expanded folder conversations */}
+                      <AnimatePresence>
+                        {isExpanded && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.15 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="pl-6 border-l border-border/50 ml-3 mt-1">
+                              {folderConversations.length > 0 ? (
+                                folderConversations
+                                  .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+                                  .map((conv) => (
+                                    <div
+                                      key={conv.id}
+                                      draggable
+                                      onDragStart={(e) => handleConversationDragStart(e, conv.id)}
+                                      onDragEnd={handleConversationDragEnd}
+                                      onClick={() => handleSelectConversation(conv.id)}
+                                      className={cn(
+                                        "group w-full flex items-center gap-2 px-2 py-1.5 hover:bg-muted/50 rounded-lg text-sm transition-colors cursor-pointer",
+                                        activeConversationId === conv.id && "bg-muted",
+                                        draggingConversationId === conv.id && "opacity-50"
+                                      )}
+                                    >
+                                      <GripVertical className="w-3 h-3 text-muted-foreground/50 opacity-0 group-hover:opacity-100 cursor-grab" />
+                                      <MessageSquare className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                                      <span className="font-medium truncate flex-1">{conv.title}</span>
+                                      <div className="hidden group-hover:flex items-center gap-0.5">
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleMoveConversationToFolder(conv.id, null);
+                                          }}
+                                          className="p-1 hover:bg-muted rounded transition-colors"
+                                          title="Remove from folder"
+                                        >
+                                          <X className="w-3 h-3 text-muted-foreground" />
+                                        </button>
+                                        <button
+                                          onClick={(e) => handleStartRename(e, conv)}
+                                          className="p-1 hover:bg-muted rounded transition-colors"
+                                          title="Rename"
+                                        >
+                                          <Edit2 className="w-3 h-3 text-muted-foreground" />
+                                        </button>
+                                        <button
+                                          onClick={(e) => handleDeleteConversation(e, conv.id)}
+                                          className="p-1 hover:bg-destructive/20 rounded transition-colors"
+                                          title="Delete"
+                                        >
+                                          <Trash2 className="w-3 h-3 text-destructive" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))
+                              ) : (
+                                <p className="px-2 py-1.5 text-xs text-muted-foreground italic">
+                                  Drop chats here
+                                </p>
                               )}
-                              style={{ backgroundColor: color }}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  );
+                })}
                 
                 {folders.length === 0 && !showNewFolderInput && (
                   <p className="px-2 py-1 text-xs text-muted-foreground italic">No folders yet</p>
                 )}
               </div>
 
-              {/* Chats Section */}
-              <div>
+              {/* Unfiled Chats Section */}
+              <div
+                onDragOver={(e) => handleFolderDragOver(e, null)}
+                onDragLeave={handleFolderDragLeave}
+                onDrop={(e) => handleFolderDrop(e, null)}
+                className={cn(
+                  "rounded-lg transition-colors",
+                  dragOverFolderId === null && draggingConversationId && "bg-muted/30"
+                )}
+              >
                 <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   Recent Chats
                 </div>
-                {filteredConversations
+                {conversationsWithoutFolder
                   .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
                   .map((conv) => (
                     <div key={conv.id} className="relative">
                       <div
+                        draggable
+                        onDragStart={(e) => handleConversationDragStart(e, conv.id)}
+                        onDragEnd={handleConversationDragEnd}
                         onClick={() => handleSelectConversation(conv.id)}
                         className={cn(
                           "group w-full flex items-center gap-2 px-2 py-2 hover:bg-muted/50 rounded-lg text-sm transition-colors cursor-pointer",
-                          activeConversationId === conv.id && "bg-muted"
+                          activeConversationId === conv.id && "bg-muted",
+                          draggingConversationId === conv.id && "opacity-50"
                         )}
                       >
+                        <GripVertical className="w-3 h-3 text-muted-foreground/50 opacity-0 group-hover:opacity-100 cursor-grab" />
                         <MessageSquare className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                         <div className="flex-1 text-left truncate">
                           {renamingId === conv.id ? (
@@ -975,7 +1147,7 @@ export default function Chat() {
                       </div>
                       {/* Move to folder dropdown */}
                       {movingConversationId === conv.id && (
-                        <div className="absolute left-6 top-full mt-1 z-10 bg-popover border border-border rounded-lg shadow-lg p-1 min-w-[140px]">
+                        <div className="absolute left-6 top-full mt-1 z-20 bg-popover border border-border rounded-lg shadow-lg p-1 min-w-[140px]">
                           {folders.length > 0 ? (
                             <>
                               {folders.map((folder) => (
@@ -991,17 +1163,6 @@ export default function Chat() {
                                   <span className="truncate">{folder.name}</span>
                                 </button>
                               ))}
-                              <div className="border-t border-border my-1" />
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleMoveConversationToFolder(conv.id, null);
-                                }}
-                                className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-muted rounded text-sm text-left text-muted-foreground"
-                              >
-                                <X className="w-3 h-3" />
-                                <span>Remove from folder</span>
-                              </button>
                             </>
                           ) : (
                             <p className="px-2 py-1.5 text-xs text-muted-foreground italic">No folders available</p>
@@ -1010,7 +1171,7 @@ export default function Chat() {
                       )}
                     </div>
                   ))}
-                {filteredConversations.length === 0 && (
+                {conversationsWithoutFolder.length === 0 && filteredConversations.length === 0 && (
                   <div className="px-2 py-4 text-center text-sm text-muted-foreground">
                     No conversations yet
                   </div>

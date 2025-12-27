@@ -252,6 +252,7 @@ export function ChatHistoryProvider({
         title,
         createdAt: now,
         updatedAt,
+        folderId: null,
         messages: sortMessages(preparedMessages),
       };
 
@@ -361,6 +362,7 @@ export function ChatHistoryProvider({
                     : "New Chat",
                 createdAt: timestamp,
                 updatedAt: timestamp,
+                folderId: null,
                 messages: [message],
               },
             ];
