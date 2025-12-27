@@ -75,14 +75,14 @@ export const APP_MODULES: Module[] = [
     keywords: ["flights", "bookings", "trips", "itinerary"]
   },
   {
-    id: "system",
-    title: "System & Security",
+    id: "security",
+    title: "Security",
     icon: ShieldCheck,
-    route: "/system",
+    route: "/security",
     color: "accent",
     size: "medium",
     summary: "All systems secure • 6 devices",
-    keywords: ["uptime", "security", "device", "monitoring"]
+    keywords: ["uptime", "security", "device", "monitoring", "tailscale"]
   },
   {
     id: "health",
@@ -237,12 +237,12 @@ export const APP_RESOURCES: NavigationItem[] = [
     keywords: ["meeting", "booking", "calendar", "availability"]
   },
   {
-    id: "system-status",
-    title: "System Status",
-    description: "Live operational health and alerts",
-    route: "/system",
-    icon: Activity,
-    keywords: ["uptime", "monitoring", "status"]
+    id: "security-status",
+    title: "Security Status",
+    description: "Live security health and Tailscale devices",
+    route: "/security",
+    icon: ShieldCheck,
+    keywords: ["uptime", "monitoring", "status", "tailscale", "security"]
   },
   {
     id: "knowledge-brief",
