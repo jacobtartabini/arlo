@@ -227,7 +227,7 @@ const handler = async (req: Request): Promise<Response> => {
         `;
 
         const emailResponse = await resend.emails.send({
-          from: "Arlo <onboarding@resend.dev>",
+          from: "Arlo Calendar <calendar@jacobtartabini.com>",
           to: [email],
           subject: `Meeting Confirmed - ${formatDateForDisplay(startDate)} at ${time}`,
           html: emailHtml,
