@@ -23,7 +23,6 @@ import ArloCommandLauncher from "./components/ArloCommandLauncher";
 import Finance from "./pages/modules/Finance";
 import Productivity from "./pages/modules/Productivity";
 import Travel from "./pages/modules/Travel";
-import SystemSecurity from "./pages/modules/SystemSecurity";
 import Services from "./pages/modules/Services";
 import Health from "./pages/modules/Health";
 import Files from "./pages/modules/Files";
@@ -103,9 +102,9 @@ const App = () => (
                       <Travel />
                     </ProtectedRoute>
                   } />
-                  <Route path="/system" element={
+                  <Route path="/security" element={
                     <ProtectedRoute>
-                      <SystemSecurity />
+                      <Services />
                     </ProtectedRoute>
                   } />
                   <Route path="/files" element={
@@ -156,11 +155,6 @@ const App = () => (
                   <Route path="/habits" element={
                     <ProtectedRoute>
                       <Habits />
-                    </ProtectedRoute>
-                  } />
-                  <Route path="/services" element={
-                    <ProtectedRoute>
-                      <Services />
                     </ProtectedRoute>
                   } />
 
