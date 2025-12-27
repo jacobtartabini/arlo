@@ -6,6 +6,7 @@ export interface DbConversation {
   id: string;
   user_id: string;
   title: string;
+  folder_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -29,6 +30,7 @@ export const dbToConversation = (
   title: dbConv.title,
   createdAt: dbConv.created_at,
   updatedAt: dbConv.updated_at,
+  folderId: dbConv.folder_id,
   messages: messages
     .filter(m => m.conversation_id === dbConv.id)
     .map(dbToMessage)

@@ -16,5 +16,6 @@ export interface Conversation {
   title: string;
   createdAt: string;
   updatedAt: string;
+  folderId: string | null;
   messages: ConversationMessage[];
 }
