@@ -1,40 +1,30 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Shield,
   ShieldCheck,
-  ShieldAlert,
   RefreshCw,
   Download,
   Laptop,
   Smartphone,
   Monitor,
   Clock,
-  MapPin,
   AlertTriangle,
   CheckCircle,
-  XCircle,
-  ChevronDown,
   ChevronRight,
   Search,
   Globe,
   Key,
-  Activity,
   Wifi,
-  Database,
-  Mail,
-  User,
-  FileText,
-  ExternalLink,
-  Info,
-  Fingerprint,
-  Server,
-  Link,
   Eye,
   TrendingUp,
-  Layers,
   Loader2,
+  ArrowLeft,
+  Server,
+  FileText,
+  ExternalLink,
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -48,6 +38,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { cn } from '@/lib/utils';
 
 interface Device {
   id: string;
@@ -114,12 +105,97 @@ interface IntelligenceFinding {
   };
 }
 
+// Static intelligence findings data
+const intelligenceFindings: IntelligenceFinding[] = [
+  {
+    id: '1',
+    category: 'breach',
+    title: 'Credential Exposure in Historical Breach',
+    insight: 'Email address and hashed credentials were exposed in a 2021 data breach affecting a major professional networking platform.',
+    significance: 'While passwords were cryptographically protected, the exposure creates ongoing risk for targeted phishing and social engineering attempts.',
+    confidence: 95,
+    severity: 'moderate',
+    discovered: '2024-01-15',
+    lastVerified: '2 hours ago',
+    sources: [
+      { type: 'Breach Database', name: 'HaveIBeenPwned', methodology: 'Monitored breach aggregation and hash verification' },
+    ],
+    evidence: [
+      { type: 'metadata', label: 'Breach Event', content: 'LinkedIn Data Breach — June 2021 — 700M records' },
+      { type: 'list', label: 'Exposed Data Types', content: ['Email address', 'Full name', 'Phone number', 'Professional title'] },
+    ],
+    context: {
+      background: 'This breach resulted from an API vulnerability that allowed large-scale data scraping.',
+      implications: ['Email address is confirmed present in threat actor databases', 'Professional context enables targeted spear-phishing campaigns'],
+      recommendations: ['Rotate passwords for the affected platform', 'Enable two-factor authentication on all critical accounts'],
+    },
+  },
+  {
+    id: '2',
+    category: 'identity',
+    title: 'Cross-Platform Identity Correlation',
+    insight: 'A consistent digital identity was reconstructed across multiple public platforms using username patterns and biographical details.',
+    significance: 'This demonstrates how easily a comprehensive profile can be assembled from public sources.',
+    confidence: 92,
+    severity: 'informational',
+    discovered: '2024-01-15',
+    lastVerified: '1 hour ago',
+    sources: [
+      { type: 'Search Engine Intelligence', name: 'Google Dorking', methodology: 'Advanced search operators and pattern analysis' },
+    ],
+    evidence: [
+      { type: 'list', label: 'Confirmed Profiles', content: ['LinkedIn — Full professional history', 'GitHub — 47 public repositories', 'Twitter — Active account'] },
+    ],
+    context: {
+      recommendations: ['Review privacy settings on all identified platforms', 'Consider using distinct usernames for different contexts'],
+    },
+  },
+];
+
+const StatCard = ({ 
+  label, 
+  value, 
+  helper, 
+  tone = 'neutral',
+  icon,
+}: { 
+  label: string; 
+  value: string; 
+  helper?: string; 
+  tone?: 'positive' | 'neutral' | 'negative' | 'info';
+  icon?: React.ReactNode;
+}) => {
+  const toneColors = {
+    positive: 'text-emerald-600 dark:text-emerald-400',
+    neutral: 'text-muted-foreground',
+    negative: 'text-rose-600 dark:text-rose-400',
+    info: 'text-sky-600 dark:text-sky-400',
+  };
+
+  return (
+    <Card className="group relative overflow-hidden border-border/50 bg-background/70 p-4 shadow-none backdrop-blur">
+      <div className="absolute inset-0 bg-gradient-to-br from-muted/40 via-transparent to-transparent opacity-0 transition group-hover:opacity-100" />
+      <div className="flex items-center gap-2 mb-2">
+        {icon && <span className="text-muted-foreground">{icon}</span>}
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+      </div>
+      <div className="flex items-baseline justify-between">
+        <span className="text-2xl font-semibold text-foreground">{value}</span>
+        {helper && (
+          <span className={cn("text-xs font-semibold", toneColors[tone])}>
+            {helper}
+          </span>
+        )}
+      </div>
+    </Card>
+  );
+};
+
 const Services = () => {
-  const [expandedSection, setExpandedSection] = useState<string | null>(null);
+  const navigate = useNavigate();
   const [expandedFinding, setExpandedFinding] = useState<string | null>(null);
-  const [osintQuery, setOsintQuery] = useState('');
   const [osintCategory, setOsintCategory] = useState('all');
-  const [investigationType, setInvestigationType] = useState('identity');
+  const [searchQuery, setSearchQuery] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastCheckTime, setLastCheckTime] = useState<string>('Never');
   
@@ -133,7 +209,7 @@ const Services = () => {
   const [apiError, setApiError] = useState<string | null>(null);
 
   useEffect(() => {
-    document.title = "Security — Arlo";
+    document.title = "Arlo";
   }, []);
 
   const formatLastSeen = (isoDate: string): string => {
@@ -146,25 +222,22 @@ const Services = () => {
     const diffDays = Math.floor(diffMs / 86400000);
     
     if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
-    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return `${diffDays}d ago`;
   };
 
   const fetchTailscaleData = useCallback(async (action: string) => {
     try {
       const { data, error } = await supabase.functions.invoke('tailscale-api', {
         body: { action },
-        headers: {
-          'x-tailscale-verified': 'true',
-        },
+        headers: { 'x-tailscale-verified': 'true' },
       });
 
       if (error) {
         console.error(`Tailscale API error (${action}):`, error);
         throw new Error(error.message || 'Failed to fetch Tailscale data');
       }
-
       return data;
     } catch (err) {
       console.error(`Error fetching ${action}:`, err);
@@ -218,9 +291,6 @@ const Services = () => {
           eventType: e.eventType,
         }));
         setRecentEvents(formattedEvents);
-      } else if (data?.message) {
-        // Audit logs not available on this plan
-        console.log('Audit logs:', data.message);
       }
     } catch (err) {
       console.error('Failed to load audit events:', err);
@@ -250,400 +320,19 @@ const Services = () => {
     setIsRefreshing(false);
   }, [loadDevices, loadAuditEvents, loadAuthKeys]);
 
-  // Load data on mount and when access section is expanded
   useEffect(() => {
     loadAllData();
   }, []);
 
-  const securityStatus = 'secure' as 'secure' | 'attention' | 'risk';
-
-  // Calculate expiring keys
-  const expiringKeys = authKeys.filter((key) => {
-    if (!key.expires) return false;
-    const expiresDate = new Date(key.expires);
-    const now = new Date();
-    const daysUntilExpiry = Math.floor((expiresDate.getTime() - now.getTime()) / 86400000);
-    return daysUntilExpiry <= 7 && daysUntilExpiry >= 0;
-  });
-
-  const intelligenceFindings: IntelligenceFinding[] = [
-    {
-      id: '1',
-      category: 'breach',
-      title: 'Credential Exposure in Historical Breach',
-      insight: 'Email address and hashed credentials were exposed in a 2021 data breach affecting a major professional networking platform.',
-      significance: 'While passwords were cryptographically protected, the exposure creates ongoing risk for targeted phishing and social engineering attempts.',
-      confidence: 95,
-      severity: 'moderate',
-      discovered: '2024-01-15',
-      lastVerified: '2 hours ago',
-      sources: [
-        {
-          type: 'Breach Database',
-          name: 'HaveIBeenPwned',
-          methodology: 'Monitored breach aggregation and hash verification',
-        },
-        {
-          type: 'Dark Web Intelligence',
-          name: 'DeHashed',
-          methodology: 'Historical leak correlation and pattern matching',
-        },
-      ],
-      evidence: [
-        {
-          type: 'metadata',
-          label: 'Breach Event',
-          content: 'LinkedIn Data Breach — June 2021 — 700M records',
-        },
-        {
-          type: 'list',
-          label: 'Exposed Data Types',
-          content: ['Email address', 'Full name', 'Phone number', 'Professional title', 'Employer information'],
-        },
-        {
-          type: 'text',
-          label: 'Password Status',
-          content: 'Stored as salted hash (SHA-256) — not recovered in plaintext',
-        },
-      ],
-      context: {
-        background: 'This breach resulted from an API vulnerability that allowed large-scale data scraping. The exposed data was widely distributed and indexed by multiple threat intelligence platforms.',
-        implications: [
-          'Email address is confirmed present in threat actor databases',
-          'Professional context enables highly targeted spear-phishing campaigns',
-          'Phone number may receive social engineering calls or SMS-based attacks',
-        ],
-        recommendations: [
-          'Rotate passwords for the affected platform and any reused credentials',
-          'Enable two-factor authentication on all critical accounts',
-          'Monitor for suspicious login attempts or account recovery requests',
-          'Brief close contacts about potential impersonation attempts',
-        ],
-      },
-    },
-    {
-      id: '2',
-      category: 'identity',
-      title: 'Cross-Platform Identity Correlation',
-      insight: 'A consistent digital identity was reconstructed across multiple public platforms using username patterns, biographical details, and linked accounts.',
-      significance: 'This level of correlation demonstrates how easily a comprehensive profile can be assembled from public sources, which could be used for reconnaissance or social engineering.',
-      confidence: 92,
-      severity: 'informational',
-      discovered: '2024-01-15',
-      lastVerified: '1 hour ago',
-      sources: [
-        {
-          type: 'Search Engine Intelligence',
-          name: 'Google Dorking',
-          methodology: 'Advanced search operators and pattern analysis',
-        },
-        {
-          type: 'Social Graph Analysis',
-          name: 'LinkedIn + GitHub',
-          methodology: 'Public profile enumeration and biographical matching',
-        },
-      ],
-      evidence: [
-        {
-          type: 'list',
-          label: 'Confirmed Profiles',
-          content: [
-            'LinkedIn — Full professional history and network',
-            'GitHub — 47 public repositories, contribution history',
-            'Twitter — Active account with 200+ followers',
-            'Personal website — Contact information and portfolio',
-          ],
-        },
-        {
-          type: 'list',
-          label: 'Correlating Factors',
-          content: [
-            'Consistent username pattern across platforms',
-            'Matching employment history and timeline',
-            'Cross-linked social accounts and email references',
-            'Shared professional interests and technical specializations',
-          ],
-        },
-      ],
-      context: {
-        background: 'Modern OSINT techniques can aggregate scattered public information into a unified identity profile. This finding represents what a sophisticated adversary could learn through patient observation.',
-        implications: [
-          'Professional background and technical skills are publicly documented',
-          'Social network connections provide context for targeted attacks',
-          'Activity patterns reveal interests and potential pressure points',
-        ],
-        recommendations: [
-          'Review privacy settings on all identified platforms',
-          'Consider using distinct usernames for personal vs. professional contexts',
-          'Limit public exposure of employment history and technical specializations',
-          'Periodically search for your own identity to understand your exposure',
-        ],
-      },
-    },
-    {
-      id: '3',
-      category: 'infrastructure',
-      title: 'Domain Ownership Attribution',
-      insight: 'Two active domain registrations were linked to monitored email addresses through WHOIS records and DNS intelligence.',
-      significance: 'These domains create an extended attack surface and can be used to infer organizational structure, technical interests, or personal projects.',
-      confidence: 100,
-      severity: 'low',
-      discovered: '2024-01-15',
-      lastVerified: '3 hours ago',
-      sources: [
-        {
-          type: 'Domain Intelligence',
-          name: 'WHOIS Lookup',
-          methodology: 'Registration record analysis and historical tracking',
-        },
-        {
-          type: 'DNS Analysis',
-          name: 'Passive DNS',
-          methodology: 'Resolution history and infrastructure mapping',
-        },
-      ],
-      evidence: [
-        {
-          type: 'timeline',
-          label: 'Domain Timeline',
-          content: [
-            { date: '2019-03-12', event: 'example.com registered' },
-            { date: '2019-03-15', event: 'DNS records configured, site became active' },
-            { date: '2022-08-03', event: 'personal-site.io registered' },
-            { date: '2022-08-05', event: 'Portfolio site deployed' },
-          ],
-        },
-        {
-          type: 'list',
-          label: 'Infrastructure Details',
-          content: [
-            'example.com — Active site, hosted on Vercel',
-            'personal-site.io — Portfolio site, hosted on Netlify',
-            'Both domains use privacy-protected registration (current)',
-            'Historical WHOIS showed direct email linkage (2019-2021)',
-          ],
-        },
-      ],
-      context: {
-        background: 'Domain ownership leaves a permanent trail in public records. Even with privacy protection enabled today, historical WHOIS data remains accessible through various intelligence platforms.',
-        implications: [
-          'Domain ownership confirms control over web infrastructure',
-          'Hosting provider choices reveal technical preferences',
-          'Historical registration data may still be cached in databases',
-        ],
-        recommendations: [
-          'Ensure WHOIS privacy protection is enabled on all domains',
-          'Use separate registration emails for different contexts',
-          'Monitor domains for unauthorized DNS changes or subdomain takeovers',
-          'Consider using domain privacy services for sensitive projects',
-        ],
-      },
-    },
-    {
-      id: '4',
-      category: 'leak',
-      title: 'Legacy Data in Archived Breach',
-      insight: 'An older credential pair was recovered from a 2013 breach archive, representing a historical exposure with limited current risk.',
-      significance: 'This finding is primarily historical, but confirms that credentials from this era are permanently accessible to threat actors.',
-      confidence: 88,
-      severity: 'low',
-      discovered: '2024-01-14',
-      lastVerified: '6 hours ago',
-      sources: [
-        {
-          type: 'Breach Database',
-          name: 'HaveIBeenPwned',
-          methodology: 'Historical breach indexing',
-        },
-      ],
-      evidence: [
-        {
-          type: 'metadata',
-          label: 'Breach Event',
-          content: 'Adobe Systems Breach — October 2013 — 153M accounts',
-        },
-        {
-          type: 'list',
-          label: 'Exposed Data',
-          content: ['Email address', 'Encrypted password', 'Password hint (partial)'],
-        },
-        {
-          type: 'text',
-          label: 'Technical Note',
-          content: 'Passwords were encrypted using 3DES in ECB mode with weak key derivation. Many were subsequently decrypted by security researchers.',
-        },
-      ],
-      context: {
-        background: 'The 2013 Adobe breach was one of the largest of its era. While the encryption was weak, the age of this exposure significantly reduces its current threat value.',
-        implications: [
-          'If this password was reused elsewhere, those accounts remain vulnerable',
-          'Password patterns from this era may inform brute force attempts',
-          'Email address is confirmed in historical threat databases',
-        ],
-        recommendations: [
-          'Verify this password is not in active use on any current accounts',
-          'Update Adobe account credentials if still maintaining an account',
-          'Consider this when evaluating password reuse patterns',
-        ],
-      },
-    },
-    {
-      id: '5',
-      category: 'account',
-      title: 'Third-Party Service Enumeration',
-      insight: 'Email-based account enumeration identified active accounts on 12 major platforms and services.',
-      significance: 'This maps the digital footprint and reveals which platforms would be valuable targets for account takeover attempts.',
-      confidence: 85,
-      severity: 'informational',
-      discovered: '2024-01-15',
-      lastVerified: '30 minutes ago',
-      sources: [
-        {
-          type: 'Account Enumeration',
-          name: 'Holehe + Custom Methods',
-          methodology: 'Password reset flows and registration verification',
-        },
-      ],
-      evidence: [
-        {
-          type: 'list',
-          label: 'Confirmed Active Accounts',
-          content: [
-            'Google / Gmail — Primary email service',
-            'Microsoft / Outlook — Secondary account',
-            'GitHub — Development platform',
-            'LinkedIn — Professional network',
-            'Twitter — Social media',
-            'Spotify — Entertainment',
-            'Amazon — Commerce',
-            'Dropbox — Cloud storage',
-            'Notion — Productivity',
-            'Figma — Design tools',
-            'Vercel — Infrastructure',
-            'Stripe — Payment processing',
-          ],
-        },
-      ],
-      context: {
-        background: 'Account enumeration uses legitimate platform features (like password reset flows) to determine whether an email address has an active account. This is entirely passive and leaves no trace.',
-        implications: [
-          'These platforms represent high-value targets for attackers',
-          'Compromise of any account could enable lateral movement',
-          'Account recovery flows may be exploitable through social engineering',
-        ],
-        recommendations: [
-          'Enable two-factor authentication on all identified accounts',
-          'Review connected applications and revoke unused access',
-          'Use unique passwords for each critical platform',
-          'Monitor for unusual login locations or device authorizations',
-        ],
-      },
-    },
-  ];
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'secure':
-      case 'pass':
-      case 'online':
-        return 'text-green-600 dark:text-green-400';
-      case 'attention':
-      case 'warning':
-        return 'text-amber-600 dark:text-amber-400';
-      case 'risk':
-      case 'fail':
-      case 'offline':
-        return 'text-red-600 dark:text-red-400';
-      default:
-        return 'text-muted-foreground';
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'secure':
-        return <ShieldCheck className="h-5 w-5" />;
-      case 'attention':
-        return <ShieldAlert className="h-5 w-5" />;
-      case 'risk':
-        return <Shield className="h-5 w-5" />;
-      default:
-        return <Shield className="h-5 w-5" />;
-    }
-  };
-
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case 'high':
-        return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400 border-red-200 dark:border-red-800';
-      case 'elevated':
-        return 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-400 border-orange-200 dark:border-orange-800';
-      case 'moderate':
-        return 'bg-amber-100 text-amber-800 dark:bg-amber-900/20 dark:text-amber-400 border-amber-200 dark:border-amber-800';
-      case 'low':
-        return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400 border-blue-200 dark:border-blue-800';
-      case 'informational':
-        return 'bg-slate-100 text-slate-800 dark:bg-slate-900/20 dark:text-slate-400 border-slate-200 dark:border-slate-800';
-      default:
-        return 'bg-muted text-muted-foreground border-border';
-    }
-  };
-
-  const getCategoryIcon = (category: string) => {
-    switch (category) {
-      case 'breach':
-        return <Database className="h-4 w-4" />;
-      case 'identity':
-        return <Fingerprint className="h-4 w-4" />;
-      case 'infrastructure':
-        return <Server className="h-4 w-4" />;
-      case 'account':
-        return <Key className="h-4 w-4" />;
-      case 'association':
-        return <Link className="h-4 w-4" />;
-      case 'leak':
-        return <Eye className="h-4 w-4" />;
-      default:
-        return <Info className="h-4 w-4" />;
-    }
-  };
-
-  const getEventIcon = (type: string) => {
-    switch (type) {
-      case 'login':
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
-      case 'failed':
-        return <XCircle className="h-4 w-4 text-red-500" />;
-      case 'refresh':
-        return <RefreshCw className="h-4 w-4 text-blue-500" />;
-      default:
-        return <Activity className="h-4 w-4" />;
-    }
-  };
-
-  const toggleSection = (section: string) => {
-    setExpandedSection(expandedSection === section ? null : section);
-  };
-
-  const toggleFinding = (findingId: string) => {
-    setExpandedFinding(expandedFinding === findingId ? null : findingId);
-  };
-
-  const handleRefresh = async () => {
-    toast.info('Refreshing security status...');
-    await loadAllData();
-    toast.success('Security status updated');
-  };
-
   const handleExport = () => {
-    const reportData = {
-      generatedAt: new Date().toISOString(),
+    const report = {
+      exportedAt: new Date().toISOString(),
       devices,
       recentEvents,
+      authKeys,
       intelligenceFindings,
-      securityStatus,
     };
-    const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -653,672 +342,383 @@ const Services = () => {
     toast.success('Security report exported');
   };
 
-  const handleInvestigate = () => {
-    if (!osintQuery.trim()) {
-      toast.error('Please enter a query to investigate');
-      return;
-    }
-    toast.info(`Starting ${investigationType} investigation for: ${osintQuery}`);
-    // Future: integrate with actual OSINT APIs
-    setTimeout(() => {
-      toast.success('Investigation complete. Results added to findings.');
-    }, 3000);
-  };
-
-  const filteredFindings = intelligenceFindings.filter((finding) => {
-    if (osintCategory === 'all') return true;
-    if (osintCategory === 'high-severity') return finding.severity === 'high' || finding.severity === 'elevated';
-    return finding.category === osintCategory;
+  const onlineDevices = devices.filter(d => d.status === 'online').length;
+  const failedEvents = recentEvents.filter(e => e.type === 'failed').length;
+  const expiringKeys = authKeys.filter(key => {
+    if (!key.expires) return false;
+    const expiresDate = new Date(key.expires);
+    const daysUntilExpiry = Math.floor((expiresDate.getTime() - Date.now()) / 86400000);
+    return daysUntilExpiry <= 7 && daysUntilExpiry >= 0;
   });
 
+  const filteredFindings = useMemo(() => {
+    return intelligenceFindings.filter(finding => {
+      const matchesCategory = osintCategory === 'all' || 
+        (osintCategory === 'high-severity' ? ['high', 'elevated'].includes(finding.severity) : finding.category === osintCategory);
+      const matchesSearch = !searchQuery || 
+        finding.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        finding.insight.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesCategory && matchesSearch;
+    });
+  }, [osintCategory, searchQuery]);
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case 'high': return 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
+      case 'elevated': return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
+      case 'moderate': return 'bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20';
+      case 'low': return 'bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20';
+      default: return 'bg-muted/50 text-muted-foreground border-border/50';
+    }
+  };
+
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case 'breach': return <AlertTriangle className="h-4 w-4" />;
+      case 'identity': return <Eye className="h-4 w-4" />;
+      case 'infrastructure': return <Server className="h-4 w-4" />;
+      case 'account': return <Key className="h-4 w-4" />;
+      case 'leak': return <FileText className="h-4 w-4" />;
+      default: return <Globe className="h-4 w-4" />;
+    }
+  };
+
+  const getDeviceIcon = (os: string) => {
+    const lower = os.toLowerCase();
+    if (lower.includes('macos') || lower.includes('darwin')) return <Laptop className="h-5 w-5" />;
+    if (lower.includes('ios') || lower.includes('android')) return <Smartphone className="h-5 w-5" />;
+    return <Monitor className="h-5 w-5" />;
+  };
+
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-5xl mx-auto px-4 py-8 space-y-8">
+    <div className="min-h-screen bg-background bg-[radial-gradient(circle_at_20%_20%,rgba(16,185,129,0.06),transparent_30%),radial-gradient(circle_at_80%_0%,rgba(5,150,105,0.06),transparent_28%)]">
+      <div className="mx-auto flex max-w-6xl flex-col gap-7 px-6 py-10">
         {/* Header */}
-        <div className="space-y-6">
-          <div className="flex items-start justify-between">
-            <div className="space-y-1">
-              <h1 className="text-2xl font-semibold text-foreground tracking-tight">Security</h1>
-              <p className="text-sm text-muted-foreground">
-                Monitor access, verify devices, and track exposure across the internet
-              </p>
+        <header className="relative overflow-hidden rounded-3xl border border-border/60 bg-card/80 p-6 shadow-sm backdrop-blur">
+          <div className="absolute inset-0 opacity-50" aria-hidden>
+            <div className="absolute -left-12 top-6 h-24 w-24 rounded-full bg-emerald-500/10 blur-3xl" />
+            <div className="absolute right-4 top-0 h-28 w-28 rounded-full bg-muted/50 blur-3xl" />
+          </div>
+
+          <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                <button
+                  type="button"
+                  onClick={() => navigate("/dashboard")}
+                  className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/50 px-3 py-1 text-xs font-medium transition hover:border-border hover:bg-background/80"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" /> Back to dashboard
+                </button>
+                <Separator orientation="vertical" className="h-5" />
+                <div className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                  <Wifi className="h-3 w-3" />
+                  Tailnet connected
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shadow-inner">
+                  <ShieldCheck className="h-6 w-6" />
+                </div>
+                <div className="space-y-1">
+                  <h1 className="text-3xl font-semibold text-foreground tracking-tight">Security</h1>
+                  <p className="max-w-2xl text-base text-muted-foreground leading-relaxed">
+                    Monitor access, verify devices, and track exposure across your network.
+                  </p>
+                </div>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing}>
-                <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                Refresh
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleExport}>
-                <Download className="h-4 w-4 mr-2" />
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button 
+                variant="ghost" 
+                className="min-w-[120px] border border-border/70 bg-background/40 transition-all hover:scale-[1.02]"
+                onClick={handleExport}
+              >
+                <Download className="mr-2 h-4 w-4" />
                 Export
               </Button>
+              <Button 
+                className="min-w-[120px] shadow-sm transition-all hover:scale-[1.02] hover:shadow-md"
+                onClick={loadAllData}
+                disabled={isRefreshing}
+              >
+                <RefreshCw className={cn("mr-2 h-4 w-4", isRefreshing && "animate-spin")} />
+                Refresh
+              </Button>
             </div>
           </div>
 
-          {/* Status Modules */}
-          <div className="grid grid-cols-3 gap-4">
-            <Card className="bg-card/50 border-border/50">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                  <Shield className="h-3.5 w-3.5" />
-                  Devices
-                </div>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl font-semibold text-foreground">
-                    {devices.filter((d) => d.status === 'online').length}
-                  </span>
-                  <span className="text-sm text-muted-foreground">of {devices.length} online</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="bg-card/50 border-border/50">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                  <Clock className="h-3.5 w-3.5" />
-                  Last Activity
-                </div>
-                {devices.length > 0 ? (
-                  <>
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-2xl font-semibold text-foreground">
-                        {devices.find(d => d.status === 'online')?.lastSeen?.split(' ')[0] || '--'}
-                      </span>
-                      <span className="text-sm text-muted-foreground">
-                        {devices.find(d => d.status === 'online')?.lastSeen?.includes('minute') ? 'min ago' : 
-                         devices.find(d => d.status === 'online')?.lastSeen?.includes('hour') ? 'hrs ago' : 'ago'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {devices.find(d => d.status === 'online')?.name || 'No active device'}
-                    </p>
-                  </>
-                ) : (
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="text-2xl font-semibold text-foreground">--</span>
-                    <span className="text-sm text-muted-foreground">loading</span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="bg-card/50 border-border/50">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 text-muted-foreground text-xs mb-1">
-                  <TrendingUp className="h-3.5 w-3.5" />
-                  Intelligence
-                </div>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl font-semibold text-foreground">
-                    {intelligenceFindings.length}
-                  </span>
-                  <span className="text-sm text-muted-foreground">findings</span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {intelligenceFindings.filter((f) => f.severity === 'elevated' || f.severity === 'high').length > 0
-                    ? `${intelligenceFindings.filter((f) => f.severity === 'elevated' || f.severity === 'high').length} require review`
-                    : 'All reviewed'}
-                </p>
-              </CardContent>
-            </Card>
+          {/* Stats Row */}
+          <div className="relative mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              label="Devices Online"
+              value={String(onlineDevices)}
+              helper={`of ${devices.length} total`}
+              tone={onlineDevices > 0 ? 'positive' : 'neutral'}
+              icon={<Shield className="h-4 w-4" />}
+            />
+            <StatCard
+              label="Auth Keys"
+              value={String(authKeys.length)}
+              helper={expiringKeys.length > 0 ? `${expiringKeys.length} expiring soon` : 'All valid'}
+              tone={expiringKeys.length > 0 ? 'negative' : 'positive'}
+              icon={<Key className="h-4 w-4" />}
+            />
+            <StatCard
+              label="Last Activity"
+              value={devices.find(d => d.status === 'online')?.lastSeen?.split(' ')[0] || '--'}
+              helper={devices.find(d => d.status === 'online')?.name || 'No active'}
+              tone="info"
+              icon={<Clock className="h-4 w-4" />}
+            />
+            <StatCard
+              label="Intelligence"
+              value={String(intelligenceFindings.length)}
+              helper={`${intelligenceFindings.filter(f => ['elevated', 'high'].includes(f.severity)).length} need review`}
+              tone="neutral"
+              icon={<TrendingUp className="h-4 w-4" />}
+            />
           </div>
+        </header>
 
-          {/* Tailnet Status */}
-          <div className="flex items-center gap-2 text-sm">
-            <div className={`flex items-center gap-1.5 ${getStatusColor('secure')}`}>
-              <Wifi className="h-3.5 w-3.5" />
-              Tailnet connected
+        {/* Content Grid */}
+        <div className="grid gap-4 lg:grid-cols-12">
+          {/* Devices Section */}
+          <Card className="relative overflow-hidden border-border/60 bg-card/80 p-5 shadow-sm backdrop-blur lg:col-span-7">
+            <div className="absolute inset-0 pointer-events-none opacity-60">
+              <div className="absolute right-6 top-4 h-12 w-12 rounded-full bg-muted/40 blur-2xl" />
             </div>
-            <span className="text-muted-foreground">·</span>
-            <span className="text-muted-foreground">
-              Last check {lastCheckTime}
-            </span>
-          </div>
-        </div>
-
-        {/* Section 1: Access & Authentication */}
-        <Card className="border-border/50">
-          <button
-            onClick={() => toggleSection('access')}
-            className="w-full flex items-center justify-between p-4 group hover:bg-muted/50 transition-colors rounded-t-lg"
-          >
-            <div className="text-left">
-              <h2 className="font-medium text-foreground">Access & Authentication</h2>
-              <p className="text-sm text-muted-foreground">
-                {devices.length} devices · {recentEvents.filter((e) => e.type === 'failed').length} failed
-              </p>
-            </div>
-            {expandedSection === 'access' ? (
-              <ChevronDown className="h-5 w-5 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="h-5 w-5 text-muted-foreground" />
-            )}
-          </button>
-          {expandedSection === 'access' && (
-            <CardContent className="pt-0 space-y-6">
-              {/* Devices */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-medium text-foreground">Connected Devices</h3>
-                  {isLoadingDevices && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-                </div>
-                <div className="space-y-2">
-                  {isLoadingDevices && devices.length === 0 ? (
-                    <div className="flex items-center justify-center p-6 text-muted-foreground">
-                      <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                      Loading devices...
-                    </div>
-                  ) : devices.length === 0 ? (
-                    <div className="text-center p-6 text-muted-foreground">
-                      No devices found. Check your Tailscale API configuration.
-                    </div>
-                  ) : (
-                    devices.map((device) => (
-                      <div
-                        key={device.id}
-                        className="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
-                      >
-                        <div className="flex items-center gap-3">
-                          {device.os.toLowerCase().includes('macos') || device.os.toLowerCase().includes('darwin') ? (
-                            <Laptop className="h-5 w-5 text-muted-foreground" />
-                          ) : device.os.toLowerCase().includes('ios') || device.os.toLowerCase().includes('android') ? (
-                            <Smartphone className="h-5 w-5 text-muted-foreground" />
-                          ) : (
-                            <Monitor className="h-5 w-5 text-muted-foreground" />
-                          )}
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <p className="text-sm font-medium text-foreground">{device.name}</p>
-                              {device.updateAvailable && (
-                                <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/50">
-                                  Update available
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                              {device.tailnetIp} · {device.lastSeen} · {device.os}
-                            </p>
-                            {device.user && (
-                              <p className="text-xs text-muted-foreground/70">{device.user}</p>
-                            )}
-                          </div>
-                        </div>
-                        <Badge variant={device.status === 'online' ? 'default' : 'secondary'}>
-                          {device.status}
-                        </Badge>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Recent Activity */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-medium text-foreground">Recent Activity</h3>
-                  {isLoadingEvents && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-                </div>
-                <div className="space-y-2">
-                  {isLoadingEvents && recentEvents.length === 0 ? (
-                    <div className="flex items-center justify-center p-6 text-muted-foreground">
-                      <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                      Loading activity...
-                    </div>
-                  ) : recentEvents.length === 0 ? (
-                    <div className="text-center p-6 text-muted-foreground">
-                      No recent activity. Audit logs may not be available on your Tailscale plan.
-                    </div>
-                  ) : (
-                    recentEvents.map((event) => (
-                      <div
-                        key={event.id}
-                        className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg"
-                      >
-                        <div className="mt-0.5">{getEventIcon(event.type)}</div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-foreground capitalize">{event.type}</span>
-                            <Badge variant="outline" className="text-xs">
-                              {event.source}
-                            </Badge>
-                            {event.eventType && (
-                              <span className="text-xs text-muted-foreground">{event.eventType}</span>
-                            )}
-                          </div>
-                          <div className="mt-0.5">
-                            <p className="text-sm text-foreground">
-                              {event.device} {event.actor && `by ${event.actor}`}
-                            </p>
-                            <p className="text-xs text-muted-foreground flex items-center gap-1">
-                              {event.ip && <span>{event.ip}</span>}
-                              {event.ip && event.location && <span>·</span>}
-                              {event.location && (
-                                <>
-                                  <MapPin className="h-3 w-3" />
-                                  <span>{event.location}</span>
-                                </>
-                              )}
-                            </p>
-                          </div>
-                        </div>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                          {event.timestamp}
-                        </span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          )}
-        </Card>
-
-        <Separator />
-
-        {/* Section 2: Intelligence & Exposure Analysis */}
-        <Card className="border-border/50">
-          <button
-            onClick={() => toggleSection('intelligence')}
-            className="w-full flex items-center justify-between p-4 group hover:bg-muted/50 transition-colors rounded-t-lg"
-          >
-            <div className="text-left">
-              <h2 className="font-medium text-foreground">Intelligence & Exposure Analysis</h2>
-              <p className="text-sm text-muted-foreground">
-                {filteredFindings.length} findings
-              </p>
-            </div>
-            {expandedSection === 'intelligence' ? (
-              <ChevronDown className="h-5 w-5 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="h-5 w-5 text-muted-foreground" />
-            )}
-          </button>
-          {expandedSection === 'intelligence' && (
-            <CardContent className="pt-0 space-y-6">
-              {/* Investigation Input */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium text-foreground">New Investigation</h3>
-                <div className="flex gap-2">
-                  <Select value={investigationType} onValueChange={setInvestigationType}>
-                    <SelectTrigger className="w-40">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="identity">Identity</SelectItem>
-                      <SelectItem value="email">Email Address</SelectItem>
-                      <SelectItem value="domain">Domain</SelectItem>
-                      <SelectItem value="username">Username</SelectItem>
-                      <SelectItem value="ip">IP Address</SelectItem>
-                      <SelectItem value="organization">Organization</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    placeholder="Enter query..."
-                    value={osintQuery}
-                    onChange={(e) => setOsintQuery(e.target.value)}
-                    className="flex-1"
-                    onKeyDown={(e) => e.key === 'Enter' && handleInvestigate()}
-                  />
-                  <Button onClick={handleInvestigate}>
-                    <Search className="h-4 w-4 mr-2" />
-                    Investigate
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Results will be synthesized into a structured intelligence report with findings, confidence scores, and contextual analysis.
+            
+            <div className="relative mb-4 flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <h2 className="text-base font-semibold text-foreground">Connected Devices</h2>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Active devices on your Tailnet
                 </p>
               </div>
+              {isLoadingDevices && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+            </div>
 
-              {/* Category Filter */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-muted-foreground">Category:</span>
-                <div className="flex gap-1 flex-wrap">
-                  {[
-                    { value: 'all', label: 'All' },
-                    { value: 'high-severity', label: 'High Severity' },
-                    { value: 'breach', label: 'Breaches' },
-                    { value: 'identity', label: 'Identity' },
-                    { value: 'infrastructure', label: 'Infrastructure' },
-                    { value: 'account', label: 'Accounts' },
-                    { value: 'leak', label: 'Leaks' },
-                  ].map((cat) => (
-                    <Badge
-                      key={cat.value}
-                      variant={osintCategory === cat.value ? 'default' : 'outline'}
-                      onClick={() => setOsintCategory(cat.value)}
-                      className="text-xs cursor-pointer hover:bg-primary/80"
-                    >
-                      {cat.label}
+            {devices.length > 0 ? (
+              <div className="space-y-2">
+                {devices.map((device) => (
+                  <div
+                    key={device.id}
+                    className="group relative flex items-center gap-4 rounded-2xl border border-border/60 bg-muted/30 p-4 transition-all hover:border-border hover:bg-muted/50"
+                  >
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-background/80 text-muted-foreground transition-transform group-hover:scale-105">
+                      {getDeviceIcon(device.os)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-foreground truncate">{device.name}</p>
+                        {device.updateAvailable && (
+                          <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/50">
+                            Update
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground truncate">
+                        {device.tailnetIp} · {device.os}
+                      </p>
+                      <p className="text-xs text-muted-foreground/70">{device.lastSeen}</p>
+                    </div>
+                    <Badge variant={device.status === 'online' ? 'default' : 'secondary'} className="shrink-0">
+                      {device.status}
                     </Badge>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
-
-              {/* Intelligence Findings */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-medium text-foreground">Current Intelligence</h3>
-                  <span className="text-xs text-muted-foreground">
-                    Last updated: 30 minutes ago
-                  </span>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted/50 text-muted-foreground mb-4">
+                  <Monitor className="h-8 w-8" />
                 </div>
-                <div className="space-y-2">
-                  {filteredFindings.map((finding) => (
-                    <div key={finding.id} className="border border-border/50 rounded-lg overflow-hidden">
-                      <button
-                        onClick={() => toggleFinding(finding.id)}
-                        className="w-full flex items-start gap-3 p-4 text-left hover:bg-muted/30 transition-colors"
-                      >
-                        <div className="mt-0.5 text-muted-foreground">
-                          {getCategoryIcon(finding.category)}
+                <p className="font-medium text-foreground">No devices found</p>
+                <p className="text-sm text-muted-foreground mt-1">Check your Tailscale configuration</p>
+              </div>
+            )}
+          </Card>
+
+          {/* Auth Keys Section */}
+          <Card className="relative overflow-hidden border-border/60 bg-card/80 p-5 shadow-sm backdrop-blur lg:col-span-5">
+            <div className="absolute inset-0 pointer-events-none opacity-60">
+              <div className="absolute right-6 top-4 h-12 w-12 rounded-full bg-muted/40 blur-2xl" />
+            </div>
+            
+            <div className="relative mb-4 space-y-1">
+              <h2 className="text-base font-semibold text-foreground">Auth Keys</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Manage authentication keys
+              </p>
+            </div>
+
+            {authKeys.length > 0 ? (
+              <div className="space-y-2">
+                {authKeys.slice(0, 4).map((key) => {
+                  const expiresDate = key.expires ? new Date(key.expires) : null;
+                  const daysUntilExpiry = expiresDate ? Math.floor((expiresDate.getTime() - Date.now()) / 86400000) : null;
+                  const isExpiringSoon = daysUntilExpiry !== null && daysUntilExpiry <= 7 && daysUntilExpiry >= 0;
+                  
+                  return (
+                    <div
+                      key={key.id}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/30 p-3 transition-all hover:bg-muted/50"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-background/80 text-muted-foreground">
+                          <Key className="h-4 w-4" />
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <h4 className="text-sm font-medium text-foreground">{finding.title}</h4>
-                              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                                {finding.insight}
-                              </p>
-                            </div>
-                            <Badge className={`shrink-0 ${getSeverityColor(finding.severity)}`}>
-                              {finding.severity}
-                            </Badge>
-                          </div>
-                          <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <TrendingUp className="h-3 w-3" />
-                              {finding.confidence}% confidence
-                            </span>
-                            <span>·</span>
-                            <span className="flex items-center gap-1">
-                              <Layers className="h-3 w-3" />
-                              {finding.sources.length} sources
-                            </span>
-                            <span>·</span>
-                            <span className="capitalize">{finding.category}</span>
-                          </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {key.description || 'Unnamed key'}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {key.reusable ? 'Reusable' : 'Single-use'}
+                            {key.ephemeral && ' · Ephemeral'}
+                          </p>
                         </div>
-                        <div className="mt-0.5 text-muted-foreground">
-                          {expandedFinding === finding.id ? (
-                            <ChevronDown className="h-4 w-4" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4" />
-                          )}
-                        </div>
-                      </button>
-                      {expandedFinding === finding.id && (
-                        <div className="px-4 pb-4 space-y-4 bg-muted/20">
-                          {/* Significance */}
-                          <div className="pt-4 border-t border-border/50">
-                            <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                              Significance
-                            </h5>
-                            <p className="text-sm text-foreground">
-                              {finding.significance}
-                            </p>
-                          </div>
-
-                          {/* Evidence */}
-                          <div>
-                            <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                              Evidence
-                            </h5>
-                            {finding.evidence.map((ev, idx) => (
-                              <div key={idx} className="mb-3">
-                                <p className="text-xs font-medium text-foreground mb-1">
-                                  {ev.label}
-                                </p>
-                                {ev.type === 'text' && (
-                                  <p className="text-sm text-muted-foreground">{ev.content as string}</p>
-                                )}
-                                {ev.type === 'metadata' && (
-                                  <div className="text-sm bg-muted/50 rounded px-2 py-1 font-mono">
-                                    {ev.content as string}
-                                  </div>
-                                )}
-                                {ev.type === 'list' && (
-                                  <ul className="space-y-1">
-                                    {(ev.content as string[]).map((item, i) => (
-                                      <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
-                                        <span className="text-muted-foreground">•</span>
-                                        <span>{item}</span>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                )}
-                                {ev.type === 'timeline' && (
-                                  <div className="space-y-2">
-                                    {(ev.content as { date: string; event: string }[]).map((item, i) => (
-                                      <div key={i} className="flex items-start gap-3 text-sm">
-                                        <span className="text-xs text-muted-foreground font-mono whitespace-nowrap">
-                                          {item.date}
-                                        </span>
-                                        <span className="text-foreground">{item.event}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-
-                          {/* Context */}
-                          {finding.context && (
-                            <div>
-                              <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                                Context & Analysis
-                              </h5>
-                              <div className="space-y-3">
-                                {finding.context.background && (
-                                  <div>
-                                    <p className="text-xs font-medium text-foreground mb-1">
-                                      Background
-                                    </p>
-                                    <p className="text-sm text-muted-foreground">
-                                      {finding.context.background}
-                                    </p>
-                                  </div>
-                                )}
-
-                                {finding.context.implications && (
-                                  <div>
-                                    <p className="text-xs font-medium text-foreground mb-1">
-                                      Implications
-                                    </p>
-                                    <ul className="space-y-1">
-                                      {finding.context.implications.map((impl, i) => (
-                                        <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
-                                          <AlertTriangle className="h-3 w-3 mt-0.5 text-amber-500 shrink-0" />
-                                          <span>{impl}</span>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-
-                                {finding.context.recommendations && (
-                                  <div>
-                                    <p className="text-xs font-medium text-foreground mb-1">
-                                      Recommended Actions
-                                    </p>
-                                    <ul className="space-y-1">
-                                      {finding.context.recommendations.map((rec, i) => (
-                                        <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
-                                          <CheckCircle className="h-3 w-3 mt-0.5 text-green-500 shrink-0" />
-                                          <span>{rec}</span>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Sources */}
-                          <div>
-                            <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                              Intelligence Sources
-                            </h5>
-                            <div className="space-y-2">
-                              {finding.sources.map((source, idx) => (
-                                <div key={idx} className="flex items-start gap-2 text-sm">
-                                  <Globe className="h-3.5 w-3.5 mt-0.5 text-muted-foreground" />
-                                  <div>
-                                    <p className="font-medium text-foreground">{source.name}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {source.type} — {source.methodology}
-                                    </p>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
-                          {/* Metadata */}
-                          <div className="flex items-center gap-3 text-xs text-muted-foreground pt-2 border-t border-border/50">
-                            <span className="flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              Discovered {finding.discovered}
-                            </span>
-                            <span>·</span>
-                            <span>Last verified {finding.lastVerified}</span>
-                          </div>
-                        </div>
+                      </div>
+                      {isExpiringSoon ? (
+                        <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/50 shrink-0">
+                          {daysUntilExpiry}d left
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="text-xs shrink-0">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Valid
+                        </Badge>
                       )}
                     </div>
-                  ))}
-                </div>
-
-                {filteredFindings.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No findings match the selected category
-                  </div>
-                )}
+                  );
+                })}
               </div>
-            </CardContent>
-          )}
-        </Card>
-
-        <Separator />
-
-        {/* Section 3: Security Health */}
-        <Card className="border-border/50">
-          <button
-            onClick={() => toggleSection('health')}
-            className="w-full flex items-center justify-between p-4 group hover:bg-muted/50 transition-colors rounded-t-lg"
-          >
-            <div className="text-left">
-              <h2 className="font-medium text-foreground">Security Health</h2>
-              <p className="text-sm text-muted-foreground">
-                {expiringKeys.length > 0 ? `${expiringKeys.length} warning${expiringKeys.length > 1 ? 's' : ''}` : 'All healthy'}
-              </p>
-            </div>
-            {expandedSection === 'health' ? (
-              <ChevronDown className="h-5 w-5 text-muted-foreground" />
             ) : (
-              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted/50 text-muted-foreground mb-3">
+                  <Key className="h-6 w-6" />
+                </div>
+                <p className="text-sm font-medium text-foreground">No auth keys</p>
+                <p className="text-xs text-muted-foreground mt-1">Create keys in Tailscale admin</p>
+              </div>
             )}
-          </button>
-          {expandedSection === 'health' && (
-            <CardContent className="pt-0 space-y-3">
-              <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
-                {devices.filter(d => d.status === 'online').length > 0 ? (
-                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
-                ) : (
-                  <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />
-                )}
-                <div>
-                  <p className="text-sm font-medium text-foreground">Tailnet Connectivity</p>
-                  <p className="text-xs text-muted-foreground">
-                    {devices.filter(d => d.status === 'online').length > 0 
-                      ? `${devices.filter(d => d.status === 'online').length} of ${devices.length} devices online`
-                      : 'No devices currently online'}
-                  </p>
-                </div>
-              </div>
+          </Card>
 
-              <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
-                <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-foreground">Device Updates</p>
-                  <p className="text-xs text-muted-foreground">
-                    {devices.filter(d => d.updateAvailable).length > 0 
-                      ? `${devices.filter(d => d.updateAvailable).length} device${devices.filter(d => d.updateAvailable).length > 1 ? 's' : ''} have updates available`
-                      : 'All devices up to date'}
-                  </p>
-                </div>
+          {/* Intelligence Findings */}
+          <Card className="relative overflow-hidden border-border/60 bg-card/80 p-5 shadow-sm backdrop-blur lg:col-span-12">
+            <div className="absolute inset-0 pointer-events-none opacity-60">
+              <div className="absolute right-6 top-4 h-12 w-12 rounded-full bg-muted/40 blur-2xl" />
+            </div>
+            
+            <div className="relative mb-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+              <div className="space-y-1">
+                <h2 className="text-base font-semibold text-foreground">Intelligence & Exposure</h2>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Security findings and exposure analysis
+                </p>
               </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search findings..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9 h-9 w-[200px] bg-background/50"
+                  />
+                </div>
+                <Select value={osintCategory} onValueChange={setOsintCategory}>
+                  <SelectTrigger className="w-[140px] h-9 bg-background/50">
+                    <SelectValue placeholder="Category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    <SelectItem value="high-severity">High Severity</SelectItem>
+                    <SelectItem value="breach">Breaches</SelectItem>
+                    <SelectItem value="identity">Identity</SelectItem>
+                    <SelectItem value="infrastructure">Infrastructure</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
-              {expiringKeys.length > 0 ? (
-                expiringKeys.map((key) => {
-                  const expiresDate = new Date(key.expires);
-                  const now = new Date();
-                  const daysUntilExpiry = Math.floor((expiresDate.getTime() - now.getTime()) / 86400000);
-                  return (
-                    <div key={key.id} className="flex items-start gap-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-                      <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-foreground">Auth Key Expiration</p>
-                        <p className="text-xs text-muted-foreground">
-                          "{key.description}" expires in {daysUntilExpiry} day{daysUntilExpiry !== 1 ? 's' : ''}
-                        </p>
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="mt-2" 
-                          onClick={() => toast.info('Key rotation initiated - visit Tailscale admin console to complete')}
-                        >
-                          <Key className="h-3.5 w-3.5 mr-1.5" />
-                          Rotate Key
-                        </Button>
+            <div className="space-y-3">
+              {filteredFindings.map((finding) => (
+                <div
+                  key={finding.id}
+                  className="rounded-2xl border border-border/60 bg-muted/30 overflow-hidden transition-all hover:border-border"
+                >
+                  <button
+                    onClick={() => setExpandedFinding(expandedFinding === finding.id ? null : finding.id)}
+                    className="w-full flex items-center gap-4 p-4 text-left"
+                  >
+                    <div className={cn(
+                      "flex h-10 w-10 items-center justify-center rounded-xl shrink-0",
+                      getSeverityColor(finding.severity)
+                    )}>
+                      {getCategoryIcon(finding.category)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-semibold text-foreground">{finding.title}</p>
+                        <Badge variant="outline" className={cn("text-xs", getSeverityColor(finding.severity))}>
+                          {finding.severity}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground line-clamp-1 mt-1">{finding.insight}</p>
+                    </div>
+                    <ChevronRight className={cn(
+                      "h-5 w-5 text-muted-foreground shrink-0 transition-transform",
+                      expandedFinding === finding.id && "rotate-90"
+                    )} />
+                  </button>
+                  
+                  {expandedFinding === finding.id && (
+                    <div className="px-4 pb-4 pt-0 border-t border-border/40 mt-0">
+                      <div className="pt-4 space-y-4">
+                        <p className="text-sm text-muted-foreground">{finding.significance}</p>
+                        
+                        {finding.context?.recommendations && (
+                          <div className="space-y-2">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recommendations</p>
+                            <ul className="space-y-1">
+                              {finding.context.recommendations.map((rec, i) => (
+                                <li key={i} className="flex items-start gap-2 text-sm text-foreground">
+                                  <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                                  {rec}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2">
+                          <span>Confidence: {finding.confidence}%</span>
+                          <span>·</span>
+                          <span>Verified: {finding.lastVerified}</span>
+                          <span>·</span>
+                          <span className="capitalize">{finding.category}</span>
+                        </div>
                       </div>
                     </div>
-                  );
-                })
-              ) : (
-                <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
-                  <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-foreground">Auth Keys</p>
-                    <p className="text-xs text-muted-foreground">
-                      {authKeys.length > 0 ? `All ${authKeys.length} auth keys are valid` : 'No auth keys configured'}
-                    </p>
+                  )}
+                </div>
+              ))}
+
+              {filteredFindings.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted/50 text-muted-foreground mb-4">
+                    <Eye className="h-8 w-8" />
                   </div>
+                  <p className="font-medium text-foreground">No findings match your filter</p>
+                  <p className="text-sm text-muted-foreground mt-1">Try adjusting your search or category</p>
                 </div>
               )}
-
-              <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
-                <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-foreground">Access Rules</p>
-                  <p className="text-xs text-muted-foreground">
-                    All access rules match expected behavior
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          )}
-        </Card>
-
-        {/* API Error Notice */}
-        {apiError && (
-          <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-            <AlertTriangle className="h-4 w-4 text-amber-500" />
-            <p className="text-sm text-muted-foreground">
-              Unable to fetch live Tailscale data: {apiError}
-            </p>
-            <Button variant="ghost" size="sm" onClick={handleRefresh} className="ml-auto">
-              Retry
-            </Button>
-          </div>
-        )}
-
-        {/* Footer */}
-        <p className="text-xs text-center text-muted-foreground">
-          Last security check: {lastCheckTime} · {isRefreshing && <Loader2 className="inline h-3 w-3 animate-spin mr-1" />}
-          {isRefreshing ? 'Refreshing...' : 'Next check: in 22 hours'}
-        </p>
+            </div>
+          </Card>
+        </div>
       </div>
     </div>
   );
