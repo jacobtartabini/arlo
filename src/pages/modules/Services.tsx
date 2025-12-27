@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Shield,
@@ -23,6 +23,9 @@ import {
   Server,
   FileText,
   ExternalLink,
+  Plus,
+  Radar,
+  Target,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -39,6 +42,7 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { format } from 'date-fns';
 
 interface Device {
   id: string;
@@ -320,9 +324,23 @@ const Services = () => {
     setIsRefreshing(false);
   }, [loadDevices, loadAuditEvents, loadAuthKeys]);
 
+  // Initial load and realtime polling
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
   useEffect(() => {
     loadAllData();
-  }, []);
+    
+    // Set up polling for realtime updates (every 30 seconds)
+    pollingIntervalRef.current = setInterval(() => {
+      loadAllData();
+    }, 30000);
+    
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, [loadAllData]);
 
   const handleExport = () => {
     const report = {
@@ -503,33 +521,51 @@ const Services = () => {
 
             {devices.length > 0 ? (
               <div className="space-y-2">
-                {devices.map((device) => (
-                  <div
-                    key={device.id}
-                    className="group relative flex items-center gap-4 rounded-2xl border border-border/60 bg-muted/30 p-4 transition-all hover:border-border hover:bg-muted/50"
-                  >
-                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-background/80 text-muted-foreground transition-transform group-hover:scale-105">
-                      {getDeviceIcon(device.os)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-semibold text-foreground truncate">{device.name}</p>
-                        {device.updateAvailable && (
-                          <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/50">
-                            Update
-                          </Badge>
-                        )}
+                {devices.map((device) => {
+                  const isOnline = device.status === 'online';
+                  return (
+                    <div
+                      key={device.id}
+                      className="group relative flex items-center gap-4 rounded-2xl border border-border/60 bg-muted/30 p-4 transition-all hover:border-border hover:bg-muted/50"
+                    >
+                      <div className="relative">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-background/80 text-muted-foreground transition-transform group-hover:scale-105">
+                          {getDeviceIcon(device.os)}
+                        </div>
+                        {/* Status indicator dot */}
+                        <div className={cn(
+                          "absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-card",
+                          isOnline ? "bg-emerald-500" : "bg-muted-foreground/40"
+                        )} />
                       </div>
-                      <p className="text-sm text-muted-foreground truncate">
-                        {device.tailnetIp} · {device.os}
-                      </p>
-                      <p className="text-xs text-muted-foreground/70">{device.lastSeen}</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-foreground truncate">{device.name}</p>
+                          {device.updateAvailable && (
+                            <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/50">
+                              Update
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground truncate">
+                          {device.tailnetIp} · {device.os}
+                        </p>
+                        <p className="text-xs text-muted-foreground/70">
+                          {isOnline ? 'Connected now' : `Last seen ${device.lastSeen}`}
+                        </p>
+                      </div>
+                      <Badge 
+                        variant={isOnline ? 'default' : 'secondary'} 
+                        className={cn(
+                          "shrink-0",
+                          isOnline && "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                        )}
+                      >
+                        {isOnline ? 'online' : 'offline'}
+                      </Badge>
                     </div>
-                    <Badge variant={device.status === 'online' ? 'default' : 'secondary'} className="shrink-0">
-                      {device.status}
-                    </Badge>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -561,6 +597,7 @@ const Services = () => {
                   const expiresDate = key.expires ? new Date(key.expires) : null;
                   const daysUntilExpiry = expiresDate ? Math.floor((expiresDate.getTime() - Date.now()) / 86400000) : null;
                   const isExpiringSoon = daysUntilExpiry !== null && daysUntilExpiry <= 7 && daysUntilExpiry >= 0;
+                  const isExpired = daysUntilExpiry !== null && daysUntilExpiry < 0;
                   
                   return (
                     <div
@@ -575,22 +612,33 @@ const Services = () => {
                           <p className="text-sm font-medium text-foreground truncate">
                             {key.description || 'Unnamed key'}
                           </p>
-                          <p className="text-xs text-muted-foreground">
-                            {key.reusable ? 'Reusable' : 'Single-use'}
-                            {key.ephemeral && ' · Ephemeral'}
-                          </p>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{key.reusable ? 'Reusable' : 'Single-use'}</span>
+                            {key.ephemeral && <span>· Ephemeral</span>}
+                          </div>
                         </div>
                       </div>
-                      {isExpiringSoon ? (
-                        <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/50 shrink-0">
-                          {daysUntilExpiry}d left
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="text-xs shrink-0">
-                          <CheckCircle className="h-3 w-3 mr-1" />
-                          Valid
-                        </Badge>
-                      )}
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        {isExpired ? (
+                          <Badge variant="outline" className="text-xs text-rose-500 border-rose-500/50">
+                            Expired
+                          </Badge>
+                        ) : isExpiringSoon ? (
+                          <Badge variant="outline" className="text-xs text-amber-500 border-amber-500/50">
+                            {daysUntilExpiry}d left
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-xs">
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                            Valid
+                          </Badge>
+                        )}
+                        {expiresDate && (
+                          <span className="text-[10px] text-muted-foreground/70">
+                            {isExpired ? 'Expired' : 'Expires'}: {format(expiresDate, 'MMM d, yyyy')}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
@@ -606,7 +654,7 @@ const Services = () => {
             )}
           </Card>
 
-          {/* Intelligence Findings */}
+          {/* Threat Research & Intelligence */}
           <Card className="relative overflow-hidden border-border/60 bg-card/80 p-5 shadow-sm backdrop-blur lg:col-span-12">
             <div className="absolute inset-0 pointer-events-none opacity-60">
               <div className="absolute right-6 top-4 h-12 w-12 rounded-full bg-muted/40 blur-2xl" />
@@ -614,108 +662,174 @@ const Services = () => {
             
             <div className="relative mb-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
               <div className="space-y-1">
-                <h2 className="text-base font-semibold text-foreground">Intelligence & Exposure</h2>
+                <div className="flex items-center gap-2">
+                  <Radar className="h-5 w-5 text-emerald-500" />
+                  <h2 className="text-base font-semibold text-foreground">Threat Research</h2>
+                </div>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  Security findings and exposure analysis
+                  Investigate exposure, track breaches, and conduct security research
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Search findings..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 h-9 w-[200px] bg-background/50"
-                  />
-                </div>
-                <Select value={osintCategory} onValueChange={setOsintCategory}>
-                  <SelectTrigger className="w-[140px] h-9 bg-background/50">
-                    <SelectValue placeholder="Category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Categories</SelectItem>
-                    <SelectItem value="high-severity">High Severity</SelectItem>
-                    <SelectItem value="breach">Breaches</SelectItem>
-                    <SelectItem value="identity">Identity</SelectItem>
-                    <SelectItem value="infrastructure">Infrastructure</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 bg-background/50 hover:bg-emerald-500/10 hover:text-emerald-600 hover:border-emerald-500/50"
+                  onClick={() => toast.info('New investigation coming soon')}
+                >
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  New Investigation
+                </Button>
               </div>
             </div>
 
-            <div className="space-y-3">
-              {filteredFindings.map((finding) => (
-                <div
-                  key={finding.id}
-                  className="rounded-2xl border border-border/60 bg-muted/30 overflow-hidden transition-all hover:border-border"
-                >
-                  <button
-                    onClick={() => setExpandedFinding(expandedFinding === finding.id ? null : finding.id)}
-                    className="w-full flex items-center gap-4 p-4 text-left"
-                  >
-                    <div className={cn(
-                      "flex h-10 w-10 items-center justify-center rounded-xl shrink-0",
-                      getSeverityColor(finding.severity)
-                    )}>
-                      {getCategoryIcon(finding.category)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold text-foreground">{finding.title}</p>
-                        <Badge variant="outline" className={cn("text-xs", getSeverityColor(finding.severity))}>
-                          {finding.severity}
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-muted-foreground line-clamp-1 mt-1">{finding.insight}</p>
-                    </div>
-                    <ChevronRight className={cn(
-                      "h-5 w-5 text-muted-foreground shrink-0 transition-transform",
-                      expandedFinding === finding.id && "rotate-90"
-                    )} />
-                  </button>
-                  
-                  {expandedFinding === finding.id && (
-                    <div className="px-4 pb-4 pt-0 border-t border-border/40 mt-0">
-                      <div className="pt-4 space-y-4">
-                        <p className="text-sm text-muted-foreground">{finding.significance}</p>
-                        
-                        {finding.context?.recommendations && (
-                          <div className="space-y-2">
-                            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recommendations</p>
-                            <ul className="space-y-1">
-                              {finding.context.recommendations.map((rec, i) => (
-                                <li key={i} className="flex items-start gap-2 text-sm text-foreground">
-                                  <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-                                  {rec}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
+            {/* Research Actions */}
+            <div className="grid gap-3 sm:grid-cols-3 mb-5">
+              <button
+                onClick={() => toast.info('Breach monitoring coming soon')}
+                className="group flex items-center gap-3 rounded-xl border border-border/60 bg-muted/30 p-4 text-left transition-all hover:border-emerald-500/50 hover:bg-emerald-500/5"
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-rose-500/10 text-rose-500">
+                  <AlertTriangle className="h-5 w-5" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-foreground text-sm">Breach Monitor</p>
+                  <p className="text-xs text-muted-foreground">Check for exposed credentials</p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+              </button>
+              
+              <button
+                onClick={() => toast.info('Identity search coming soon')}
+                className="group flex items-center gap-3 rounded-xl border border-border/60 bg-muted/30 p-4 text-left transition-all hover:border-emerald-500/50 hover:bg-emerald-500/5"
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sky-500/10 text-sky-500">
+                  <Target className="h-5 w-5" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-foreground text-sm">Identity Trace</p>
+                  <p className="text-xs text-muted-foreground">Map digital footprint</p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+              </button>
+              
+              <button
+                onClick={() => toast.info('Infrastructure scan coming soon')}
+                className="group flex items-center gap-3 rounded-xl border border-border/60 bg-muted/30 p-4 text-left transition-all hover:border-emerald-500/50 hover:bg-emerald-500/5"
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10 text-amber-500">
+                  <Server className="h-5 w-5" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-foreground text-sm">Infrastructure Scan</p>
+                  <p className="text-xs text-muted-foreground">Analyze attack surface</p>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+              </button>
+            </div>
 
-                        <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2">
-                          <span>Confidence: {finding.confidence}%</span>
-                          <span>·</span>
-                          <span>Verified: {finding.lastVerified}</span>
-                          <span>·</span>
-                          <span className="capitalize">{finding.category}</span>
+            {/* Findings Section */}
+            <div className="border-t border-border/40 pt-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                <p className="text-sm font-medium text-foreground">Research Findings</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search findings..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9 h-8 w-[180px] bg-background/50 text-sm"
+                    />
+                  </div>
+                  <Select value={osintCategory} onValueChange={setOsintCategory}>
+                    <SelectTrigger className="w-[130px] h-8 bg-background/50 text-sm">
+                      <SelectValue placeholder="Category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Categories</SelectItem>
+                      <SelectItem value="high-severity">High Severity</SelectItem>
+                      <SelectItem value="breach">Breaches</SelectItem>
+                      <SelectItem value="identity">Identity</SelectItem>
+                      <SelectItem value="infrastructure">Infrastructure</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {filteredFindings.map((finding) => (
+                  <div
+                    key={finding.id}
+                    className="rounded-2xl border border-border/60 bg-muted/30 overflow-hidden transition-all hover:border-border"
+                  >
+                    <button
+                      onClick={() => setExpandedFinding(expandedFinding === finding.id ? null : finding.id)}
+                      className="w-full flex items-center gap-4 p-4 text-left"
+                    >
+                      <div className={cn(
+                        "flex h-10 w-10 items-center justify-center rounded-xl shrink-0",
+                        getSeverityColor(finding.severity)
+                      )}>
+                        {getCategoryIcon(finding.category)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold text-foreground">{finding.title}</p>
+                          <Badge variant="outline" className={cn("text-xs", getSeverityColor(finding.severity))}>
+                            {finding.severity}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground line-clamp-1 mt-1">{finding.insight}</p>
+                      </div>
+                      <ChevronRight className={cn(
+                        "h-5 w-5 text-muted-foreground shrink-0 transition-transform",
+                        expandedFinding === finding.id && "rotate-90"
+                      )} />
+                    </button>
+                    
+                    {expandedFinding === finding.id && (
+                      <div className="px-4 pb-4 pt-0 border-t border-border/40 mt-0">
+                        <div className="pt-4 space-y-4">
+                          <p className="text-sm text-muted-foreground">{finding.significance}</p>
+                          
+                          {finding.context?.recommendations && (
+                            <div className="space-y-2">
+                              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recommendations</p>
+                              <ul className="space-y-1">
+                                {finding.context.recommendations.map((rec, i) => (
+                                  <li key={i} className="flex items-start gap-2 text-sm text-foreground">
+                                    <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                                    {rec}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2">
+                            <span>Confidence: {finding.confidence}%</span>
+                            <span>·</span>
+                            <span>Verified: {finding.lastVerified}</span>
+                            <span>·</span>
+                            <span className="capitalize">{finding.category}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {filteredFindings.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted/50 text-muted-foreground mb-4">
-                    <Eye className="h-8 w-8" />
+                    )}
                   </div>
-                  <p className="font-medium text-foreground">No findings match your filter</p>
-                  <p className="text-sm text-muted-foreground mt-1">Try adjusting your search or category</p>
-                </div>
-              )}
+                ))}
+
+                {filteredFindings.length === 0 && (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted/50 text-muted-foreground mb-4">
+                      <Eye className="h-8 w-8" />
+                    </div>
+                    <p className="font-medium text-foreground">No findings match your filter</p>
+                    <p className="text-sm text-muted-foreground mt-1">Try adjusting your search or category</p>
+                  </div>
+                )}
+              </div>
             </div>
           </Card>
         </div>
