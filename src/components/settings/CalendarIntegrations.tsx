@@ -17,6 +17,9 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+// Fixed user ID for Tailscale-authenticated single-user app
+const TAILSCALE_USER_ID = 'tailscale-user';
+
 interface CalendarIntegration {
   id: string;
   provider: string;
@@ -56,7 +59,8 @@ export default function CalendarIntegrations() {
     try {
       const { data, error } = await supabase
         .from('calendar_integrations')
-        .select('*');
+        .select('*')
+        .eq('user_id', TAILSCALE_USER_ID);
 
       if (error) throw error;
       setIntegrations(data || []);
@@ -72,7 +76,7 @@ export default function CalendarIntegrations() {
     
     try {
       const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
-        body: { action: 'exchange_code', code, state },
+        body: { action: 'exchange_code', code, state, userId: TAILSCALE_USER_ID },
       });
 
       if (error) throw error;
@@ -94,37 +98,15 @@ export default function CalendarIntegrations() {
     setIsConnecting(prev => ({ ...prev, google: true }));
     
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        toast.error('Please log in first');
-        return;
-      }
-
       const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
-        body: {},
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-        },
+        body: { action: 'get_auth_url', userId: TAILSCALE_USER_ID },
       });
 
-      // Add action parameter via URL
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-calendar-auth?action=get_auth_url`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        }
-      );
-
-      const result = await response.json();
-
-      if (result.error) throw new Error(result.error);
-      if (result.url) {
-        window.location.href = result.url;
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      
+      if (data?.url) {
+        window.location.href = data.url;
       }
     } catch (error: any) {
       toast.error('Failed to start Google connection: ' + error.message);
@@ -134,26 +116,12 @@ export default function CalendarIntegrations() {
 
   const disconnectGoogle = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        toast.error('Please log in first');
-        return;
-      }
+      const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
+        body: { action: 'disconnect', userId: TAILSCALE_USER_ID },
+      });
 
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/google-calendar-auth?action=disconnect`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        }
-      );
-
-      const result = await response.json();
-      if (result.error) throw new Error(result.error);
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
       toast.success('Google Calendar disconnected');
       loadIntegrations();
@@ -171,15 +139,8 @@ export default function CalendarIntegrations() {
     setIsConnecting(prev => ({ ...prev, outlook: true }));
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        toast.error('Please log in first');
-        return;
-      }
-
       const { data, error } = await supabase.functions.invoke('outlook-ical', {
-        body: { action: 'connect', icalUrl: outlookUrl.trim() },
+        body: { action: 'connect', icalUrl: outlookUrl.trim(), userId: TAILSCALE_USER_ID },
       });
 
       if (error) throw error;
@@ -200,15 +161,8 @@ export default function CalendarIntegrations() {
 
   const disconnectOutlook = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        toast.error('Please log in first');
-        return;
-      }
-
       const { data, error } = await supabase.functions.invoke('outlook-ical', {
-        body: { action: 'disconnect' },
+        body: { action: 'disconnect', userId: TAILSCALE_USER_ID },
       });
 
       if (error) throw error;
@@ -225,18 +179,11 @@ export default function CalendarIntegrations() {
     setIsSyncing(prev => ({ ...prev, [provider]: true }));
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session) {
-        toast.error('Please log in first');
-        return;
-      }
-
       const { data, error } = await supabase.functions.invoke('calendar-sync', {
         body: { 
           action: 'sync_provider', 
           provider,
-          userId: session.user.id 
+          userId: TAILSCALE_USER_ID 
         },
       });
 

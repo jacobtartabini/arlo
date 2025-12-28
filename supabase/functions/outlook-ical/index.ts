@@ -15,26 +15,16 @@ serve(async (req: Request) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
+    const { action, icalUrl, userId } = await req.json();
+
+    if (!userId) {
+      return new Response(JSON.stringify({ error: "User ID is required" }), {
+        status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Invalid token" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const { action, icalUrl } = await req.json();
 
     // Add or update iCal URL
     if (action === "connect") {
@@ -65,7 +55,7 @@ serve(async (req: Request) => {
       const { error: upsertError } = await supabase
         .from("calendar_integrations")
         .upsert({
-          user_id: user.id,
+          user_id: userId,
           provider: "outlook_ics",
           enabled: true,
           ical_url: icalUrl,
@@ -82,7 +72,7 @@ serve(async (req: Request) => {
         });
       }
 
-      console.log("[outlook-ical] iCal URL configured for user:", user.id);
+      console.log("[outlook-ical] iCal URL configured for user:", userId);
 
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -95,17 +85,17 @@ serve(async (req: Request) => {
       await supabase
         .from("calendar_integrations")
         .delete()
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .eq("provider", "outlook_ics");
 
       // Delete synced Outlook events
       await supabase
         .from("calendar_events")
         .delete()
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .eq("source", "outlook_ics");
 
-      console.log("[outlook-ical] Disconnected Outlook iCal for user:", user.id);
+      console.log("[outlook-ical] Disconnected Outlook iCal for user:", userId);
 
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
