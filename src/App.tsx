@@ -9,6 +9,7 @@ import Unauthorized from "./pages/Unauthorized";
 import NotFound from "./pages/NotFound";
 import TailscaleAuth from "./components/TailscaleAuth";
 import ProtectedRoute from "./components/ProtectedRoute";
+import DomainAwareRoute from "./components/DomainAwareRoute";
 import { ThemeProvider } from "./providers/ThemeProvider";
 import { AuthProvider } from "./providers/AuthProvider";
 import { ArloProvider } from "./providers/ArloProvider";
@@ -63,9 +64,9 @@ const App = () => (
 
                   {/* Protected routes */}
                   <Route path="/" element={
-                    <ProtectedRoute>
+                    <DomainAwareRoute>
                       <Dashboard />
-                    </ProtectedRoute>
+                    </DomainAwareRoute>
                   } />
                   <Route path="/dashboard" element={
                     <ProtectedRoute>
