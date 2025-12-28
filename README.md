@@ -1,7 +1,3 @@
-Here’s a **clean, genuine, and well-structured README** for your Arlo project — written in a natural voice, not overly polished or “AI-sounding,” but still professional and clear:
-
----
-
 # 🧠 Arlo
 
 **Arlo** is a personal AI assistant built to run locally and privately — powered by Ollama and accessible securely through Tailscale. It connects natural language intelligence with real system-level tools like weather, maps, and voice input/output.
