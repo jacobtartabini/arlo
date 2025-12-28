@@ -11,6 +11,9 @@ const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+// Fixed UUID for Tailscale auth (must match frontend)
+const TAILSCALE_USER_UUID = '00000000-0000-0000-0000-000000000001';
+
 // Determine the redirect URI based on environment
 function getRedirectUri(): string {
   // In production, use the main domain
