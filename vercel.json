@@ -1,4 +1,16 @@
 {
+  "redirects": [
+    {
+      "source": "/book",
+      "destination": "https://meet.jacobtartabini.com/",
+      "permanent": true
+    },
+    {
+      "source": "/book/:path*",
+      "destination": "https://meet.jacobtartabini.com/:path*",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/(.*)",
