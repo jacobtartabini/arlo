@@ -7,6 +7,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Host email for notifications
+const HOST_EMAIL = "jacobtart8@gmail.com";
+
 interface BookingRequest {
   date: string; // ISO date string or YYYY-MM-DD
   time: string; // e.g., "10:00 AM"
@@ -18,7 +21,6 @@ interface BookingRequest {
 }
 
 function parseTimeToHours(timeStr: string): { hours: number; minutes: number } {
-  // Parse time like "10:00 AM" or "2:30 PM"
   const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
   if (!match) {
     throw new Error(`Invalid time format: ${timeStr}`);
@@ -47,7 +49,6 @@ function formatDateForDisplay(date: Date): string {
 }
 
 function formatDateForGoogleCalendar(date: Date): string {
-  // Format for Google Calendar: YYYYMMDDTHHMMSS (local time, no Z suffix for local events)
   const year = date.getUTCFullYear();
   const month = String(date.getUTCMonth() + 1).padStart(2, '0');
   const day = String(date.getUTCDate()).padStart(2, '0');
@@ -67,36 +68,337 @@ function generateGoogleCalendarUrl(title: string, startDate: Date, endDate: Date
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
-// Create a date in a specific timezone
-function createDateInTimezone(dateStr: string, hours: number, minutes: number, timezone: string): Date {
-  // Extract just the date part (YYYY-MM-DD)
-  const datePart = dateStr.split('T')[0];
+function generateOutlookCalendarUrl(title: string, startDate: Date, endDate: Date, description: string): string {
+  const params = new URLSearchParams({
+    path: '/calendar/action/compose',
+    rru: 'addevent',
+    subject: title,
+    startdt: startDate.toISOString(),
+    enddt: endDate.toISOString(),
+    body: description,
+  });
+  return `https://outlook.live.com/calendar/0/deeplink/compose?${params.toString()}`;
+}
+
+function generateICSContent(title: string, startDate: Date, endDate: Date, description: string, eventId: string): string {
+  const formatICSDate = (date: Date) => {
+    return date.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  };
   
-  // Create an ISO string with the exact time we want
+  return `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Arlo Calendar//EN
+BEGIN:VEVENT
+UID:${eventId}@arlo.jacobtartabini.com
+DTSTAMP:${formatICSDate(new Date())}
+DTSTART:${formatICSDate(startDate)}
+DTEND:${formatICSDate(endDate)}
+SUMMARY:${title}
+DESCRIPTION:${description.replace(/\n/g, '\\n')}
+END:VEVENT
+END:VCALENDAR`;
+}
+
+function createDateInTimezone(dateStr: string, hours: number, minutes: number, timezone: string): Date {
+  const datePart = dateStr.split('T')[0];
   const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
   
-  // For US Eastern timezone, calculate offset
-  // This is a simplified approach - for production, use a proper timezone library
   const offsetMap: Record<string, number> = {
-    'America/New_York': -5, // EST (note: doesn't account for DST)
+    'America/New_York': -5,
     'America/Chicago': -6,
     'America/Denver': -7,
     'America/Los_Angeles': -8,
     'UTC': 0,
   };
   
-  const offset = offsetMap[timezone] ?? -5; // Default to EST
-  
-  // Create date assuming the input is in the specified timezone
-  // We need to convert to UTC by subtracting the offset
+  const offset = offsetMap[timezone] ?? -5;
   const localDate = new Date(`${datePart}T${timeStr}`);
   const utcDate = new Date(localDate.getTime() - (offset * 60 * 60 * 1000));
   
   return utcDate;
 }
 
+function generateGuestEmailHtml(
+  name: string,
+  time: string,
+  startDate: Date,
+  manageBookingUrl: string,
+  googleCalendarUrl: string,
+  outlookCalendarUrl: string,
+  icsDataUri: string
+): string {
+  return `
+    <!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <meta name="x-apple-disable-message-reformatting" />
+        <title>Meeting Confirmed</title>
+      </head>
+      <body style="margin:0; padding:0; background-color:#f6f7fb;">
+        <div style="display:none; font-size:1px; line-height:1px; max-height:0px; max-width:0px; opacity:0; overflow:hidden;">
+          Your meeting is confirmed — ${formatDateForDisplay(startDate)} at ${time}.
+        </div>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f6f7fb;">
+          <tr>
+            <td align="center" style="padding:48px 16px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="width:560px; max-width:560px;">
+                <tr>
+                  <td style="background: linear-gradient(135deg, rgba(255,255,255,0.92), rgba(255,255,255,0.80)); border: 1px solid rgba(17,24,39,0.08); border-radius: 18px; box-shadow: 0 18px 40px rgba(17,24,39,0.10); padding: 28px;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                      <!-- Header -->
+                      <tr>
+                        <td align="left" style="padding-bottom:18px;">
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                            <tr>
+                              <td width="44" height="44" align="center" valign="middle" style="width:44px; height:44px; border-radius: 14px; background: linear-gradient(135deg, rgba(16,185,129,1), rgba(5,150,105,1)); box-shadow: 0 10px 22px rgba(16,185,129,0.22); color:#ffffff; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:22px; font-weight:700;">
+                                ✓
+                              </td>
+                              <td style="padding-left:14px;">
+                                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#111827; font-size:18px; font-weight:700; letter-spacing:-0.2px;">
+                                  Meeting confirmed
+                                </div>
+                                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#6b7280; font-size:13px; margin-top:2px;">
+                                  Your schedule is set. Details below.
+                                </div>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <!-- Greeting -->
+                      <tr>
+                        <td style="padding: 6px 0 18px 0;">
+                          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#374151; font-size:14px; line-height:1.6;">
+                            Hi <span style="color:#111827; font-weight:700;">${name}</span>,
+                            <br />
+                            Your meeting has been successfully scheduled.
+                          </div>
+                        </td>
+                      </tr>
+                      <!-- Details panel -->
+                      <tr>
+                        <td style="padding: 18px; background: rgba(255,255,255,0.75); border: 1px solid rgba(17,24,39,0.08); border-radius: 14px; box-shadow: 0 10px 26px rgba(17,24,39,0.06);">
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                            <tr>
+                              <td style="padding: 0 0 10px 0;">
+                                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#6b7280; font-size:11px; letter-spacing:0.12em; text-transform:uppercase;">Date</div>
+                                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#111827; font-size:15px; font-weight:700; margin-top:4px;">${formatDateForDisplay(startDate)}</div>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 10px 0;">
+                                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#6b7280; font-size:11px; letter-spacing:0.12em; text-transform:uppercase;">Time</div>
+                                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#111827; font-size:15px; font-weight:700; margin-top:4px;">${time}</div>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 10px 0 0 0;">
+                                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#6b7280; font-size:11px; letter-spacing:0.12em; text-transform:uppercase;">Duration</div>
+                                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#111827; font-size:15px; font-weight:700; margin-top:4px;">30 minutes</div>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <!-- Add to Calendar Section -->
+                      <tr>
+                        <td style="padding: 18px 0 6px 0;">
+                          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#6b7280; font-size:11px; letter-spacing:0.12em; text-transform:uppercase; margin-bottom:12px;">Add to Calendar</div>
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                            <!-- Google Calendar -->
+                            <tr>
+                              <td style="padding-bottom:8px;">
+                                <a href="${googleCalendarUrl}" target="_blank" rel="noopener noreferrer" style="display:flex; align-items:center; padding: 12px 16px; background: #ffffff; border: 1px solid rgba(17,24,39,0.10); border-radius: 12px; text-decoration:none; box-shadow: 0 2px 8px rgba(17,24,39,0.04);">
+                                  <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" alt="Google Calendar" width="24" height="24" style="width:24px; height:24px; margin-right:12px;" />
+                                  <span style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:14px; font-weight:600; color:#111827;">Google Calendar</span>
+                                </a>
+                              </td>
+                            </tr>
+                            <!-- Outlook Calendar -->
+                            <tr>
+                              <td style="padding-bottom:8px;">
+                                <a href="${outlookCalendarUrl}" target="_blank" rel="noopener noreferrer" style="display:flex; align-items:center; padding: 12px 16px; background: #ffffff; border: 1px solid rgba(17,24,39,0.10); border-radius: 12px; text-decoration:none; box-shadow: 0 2px 8px rgba(17,24,39,0.04);">
+                                  <img src="https://upload.wikimedia.org/wikipedia/commons/d/df/Microsoft_Office_Outlook_%282018%E2%80%93present%29.svg" alt="Outlook" width="24" height="24" style="width:24px; height:24px; margin-right:12px;" />
+                                  <span style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:14px; font-weight:600; color:#111827;">Outlook Calendar</span>
+                                </a>
+                              </td>
+                            </tr>
+                            <!-- Apple Calendar -->
+                            <tr>
+                              <td>
+                                <a href="${icsDataUri}" download="meeting.ics" style="display:flex; align-items:center; padding: 12px 16px; background: #ffffff; border: 1px solid rgba(17,24,39,0.10); border-radius: 12px; text-decoration:none; box-shadow: 0 2px 8px rgba(17,24,39,0.04);">
+                                  <img src="https://upload.wikimedia.org/wikipedia/commons/5/5e/ICloud_logo.svg" alt="Apple Calendar" width="24" height="24" style="width:24px; height:24px; margin-right:12px;" />
+                                  <span style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:14px; font-weight:600; color:#111827;">Apple Calendar (.ics)</span>
+                                </a>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <!-- Manage Meeting Button -->
+                      <tr>
+                        <td style="padding: 18px 0 6px 0;">
+                          <a href="${manageBookingUrl}" style="display:inline-block; padding: 14px 24px; background: linear-gradient(135deg, #111827, #1f2937); border-radius: 12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:14px; font-weight:700; color:#ffffff; text-decoration:none; box-shadow: 0 10px 20px rgba(17,24,39,0.15);">
+                            View / Manage Meeting →
+                          </a>
+                        </td>
+                      </tr>
+                      <!-- Footer -->
+                      <tr>
+                        <td style="padding: 18px 0 0 0;">
+                          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#6b7280; font-size:13px; line-height:1.6;">
+                            Need to reschedule or cancel? Use the manage meeting link above.
+                          </div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding: 18px 0 0 0; border-top: 1px solid rgba(17,24,39,0.08);">
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                            <tr>
+                              <td>
+                                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#9ca3af; font-size:11px;">Powered by Arlo</div>
+                              </td>
+                              <td align="right">
+                                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#9ca3af; font-size:11px;">calendar@jacobtartabini.com</div>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+    </html>
+  `;
+}
+
+function generateHostEmailHtml(
+  guestName: string,
+  guestEmail: string,
+  time: string,
+  startDate: Date,
+  message: string | undefined,
+  googleCalendarUrl: string
+): string {
+  return `
+    <!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>New Meeting Booked</title>
+      </head>
+      <body style="margin:0; padding:0; background-color:#f6f7fb;">
+        <div style="display:none; font-size:1px; line-height:1px; max-height:0px; max-width:0px; opacity:0; overflow:hidden;">
+          ${guestName} has booked a meeting with you on ${formatDateForDisplay(startDate)}.
+        </div>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f6f7fb;">
+          <tr>
+            <td align="center" style="padding:48px 16px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="width:560px; max-width:560px;">
+                <tr>
+                  <td style="background: linear-gradient(135deg, rgba(255,255,255,0.92), rgba(255,255,255,0.80)); border: 1px solid rgba(17,24,39,0.08); border-radius: 18px; box-shadow: 0 18px 40px rgba(17,24,39,0.10); padding: 28px;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                      <!-- Header -->
+                      <tr>
+                        <td align="left" style="padding-bottom:18px;">
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                            <tr>
+                              <td width="44" height="44" align="center" valign="middle" style="width:44px; height:44px; border-radius: 14px; background: linear-gradient(135deg, #3b82f6, #2563eb); box-shadow: 0 10px 22px rgba(59,130,246,0.22); color:#ffffff; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:22px; font-weight:700;">
+                                📅
+                              </td>
+                              <td style="padding-left:14px;">
+                                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#111827; font-size:18px; font-weight:700; letter-spacing:-0.2px;">
+                                  New Meeting Booked
+                                </div>
+                                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#6b7280; font-size:13px; margin-top:2px;">
+                                  Someone has scheduled time with you.
+                                </div>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      <!-- Guest Info -->
+                      <tr>
+                        <td style="padding: 18px; background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.15); border-radius: 14px; margin-bottom:16px;">
+                          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#6b7280; font-size:11px; letter-spacing:0.12em; text-transform:uppercase;">Guest</div>
+                          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#111827; font-size:16px; font-weight:700; margin-top:4px;">${guestName}</div>
+                          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#3b82f6; font-size:14px; margin-top:2px;">
+                            <a href="mailto:${guestEmail}" style="color:#3b82f6; text-decoration:none;">${guestEmail}</a>
+                          </div>
+                        </td>
+                      </tr>
+                      <!-- Details panel -->
+                      <tr>
+                        <td style="padding: 18px; background: rgba(255,255,255,0.75); border: 1px solid rgba(17,24,39,0.08); border-radius: 14px; box-shadow: 0 10px 26px rgba(17,24,39,0.06); margin-top:16px;">
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                            <tr>
+                              <td style="padding: 0 0 10px 0;">
+                                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#6b7280; font-size:11px; letter-spacing:0.12em; text-transform:uppercase;">Date</div>
+                                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#111827; font-size:15px; font-weight:700; margin-top:4px;">${formatDateForDisplay(startDate)}</div>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 10px 0;">
+                                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#6b7280; font-size:11px; letter-spacing:0.12em; text-transform:uppercase;">Time</div>
+                                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#111827; font-size:15px; font-weight:700; margin-top:4px;">${time}</div>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td style="padding: 10px 0 0 0;">
+                                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#6b7280; font-size:11px; letter-spacing:0.12em; text-transform:uppercase;">Duration</div>
+                                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#111827; font-size:15px; font-weight:700; margin-top:4px;">30 minutes</div>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      ${message ? `
+                      <!-- Message -->
+                      <tr>
+                        <td style="padding: 18px 0 0 0;">
+                          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#6b7280; font-size:11px; letter-spacing:0.12em; text-transform:uppercase; margin-bottom:8px;">Message from Guest</div>
+                          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#374151; font-size:14px; line-height:1.6; padding:14px; background:#f9fafb; border-radius:10px; border:1px solid rgba(17,24,39,0.06);">
+                            ${message}
+                          </div>
+                        </td>
+                      </tr>
+                      ` : ''}
+                      <!-- Add to Calendar -->
+                      <tr>
+                        <td style="padding: 18px 0 6px 0;">
+                          <a href="${googleCalendarUrl}" target="_blank" rel="noopener noreferrer" style="display:inline-block; padding: 14px 24px; background: linear-gradient(135deg, #3b82f6, #2563eb); border-radius: 12px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:14px; font-weight:700; color:#ffffff; text-decoration:none; box-shadow: 0 10px 20px rgba(59,130,246,0.25);">
+                            Add to Calendar →
+                          </a>
+                        </td>
+                      </tr>
+                      <!-- Footer -->
+                      <tr>
+                        <td style="padding: 18px 0 0 0; border-top: 1px solid rgba(17,24,39,0.08);">
+                          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#9ca3af; font-size:11px;">Powered by Arlo</div>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+    </html>
+  `;
+}
+
 const handler = async (req: Request): Promise<Response> => {
-  // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -106,7 +408,6 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("[create-booking] Received booking request:", { date, time, name, email, handle, timezone });
 
-    // Validate required fields
     if (!date || !time || !name || !email) {
       console.error("[create-booking] Missing required fields");
       return new Response(
@@ -115,7 +416,6 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Validate email format
     if (!email.includes("@")) {
       console.error("[create-booking] Invalid email format");
       return new Response(
@@ -124,15 +424,10 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Parse the time
     const { hours, minutes } = parseTimeToHours(time);
-    
-    // Create start and end times using the client's timezone (default 30 min meeting)
-    // Use America/New_York as default timezone
     const clientTimezone = timezone || 'America/New_York';
     const startDate = createDateInTimezone(date, hours, minutes, clientTimezone);
-    
-    const endDate = new Date(startDate.getTime() + 30 * 60 * 1000); // Add 30 minutes
+    const endDate = new Date(startDate.getTime() + 30 * 60 * 1000);
 
     console.log("[create-booking] Parsed times:", { 
       inputDate: date, 
@@ -142,7 +437,6 @@ const handler = async (req: Request): Promise<Response> => {
       endDateUTC: endDate.toISOString() 
     });
 
-    // Create Supabase client with service role for inserting
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     
@@ -156,8 +450,6 @@ const handler = async (req: Request): Promise<Response> => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // For public bookings, we'll use a system user ID or the first user
-    // In production, you'd want to look up the user by their handle
     const { data: users, error: userError } = await supabase
       .from("user_settings")
       .select("user_id")
@@ -181,7 +473,6 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Create calendar event
     const eventTitle = `Meeting with ${name}`;
     const eventDescription = message 
       ? `Booked by: ${name} (${email})\n\nMessage: ${message}`
@@ -212,7 +503,6 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("[create-booking] Calendar event created:", calendarEvent.id);
 
-    // Create notification for the user
     await supabase.from("notifications").insert({
       user_id: userId,
       title: "New Meeting Booked",
@@ -224,274 +514,64 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log("[create-booking] Notification created for user");
 
-    // Send confirmation email
+    // Send emails
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     
     if (resendApiKey) {
       try {
         const resend = new Resend(resendApiKey);
         
-        // Generate URLs
-        const googleCalendarUrl = generateGoogleCalendarUrl(
-          `Meeting with ${handle || 'Host'}`,
-          startDate,
-          endDate,
-          `Meeting booked via Arlo Calendar`
-        );
+        // Generate calendar URLs
+        const meetingTitle = `Meeting with ${handle || 'Host'}`;
+        const meetingDescription = `Meeting booked via Arlo Calendar`;
         
-        // For manage booking, link to the public booking management page
+        const googleCalendarUrl = generateGoogleCalendarUrl(meetingTitle, startDate, endDate, meetingDescription);
+        const outlookCalendarUrl = generateOutlookCalendarUrl(meetingTitle, startDate, endDate, meetingDescription);
+        
+        // Generate ICS content and create data URI
+        const icsContent = generateICSContent(meetingTitle, startDate, endDate, meetingDescription, calendarEvent.id);
+        const icsDataUri = `data:text/calendar;charset=utf-8,${encodeURIComponent(icsContent)}`;
+        
         const manageBookingUrl = `https://meet.jacobtartabini.com/booking/${calendarEvent.id}`;
         
-        const emailHtml = `
-          <!doctype html>
-          <html lang="en">
-            <head>
-              <meta charset="utf-8" />
-              <meta name="viewport" content="width=device-width,initial-scale=1" />
-              <meta name="x-apple-disable-message-reformatting" />
-              <title>Meeting Confirmed</title>
-            </head>
-            <body style="margin:0; padding:0; background-color:#f6f7fb;">
-              <!-- Preheader (hidden preview text) -->
-              <div style="display:none; font-size:1px; line-height:1px; max-height:0px; max-width:0px; opacity:0; overflow:hidden;">
-                Your meeting is confirmed — ${formatDateForDisplay(startDate)} at ${time}.
-              </div>
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f6f7fb;">
-                <tr>
-                  <td align="center" style="padding:48px 16px;">
-                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="560" style="width:560px; max-width:560px;">
-                      <tr>
-                        <td
-                          style="
-                            background: linear-gradient(135deg, rgba(255,255,255,0.92), rgba(255,255,255,0.80));
-                            border: 1px solid rgba(17,24,39,0.08);
-                            border-radius: 18px;
-                            box-shadow: 0 18px 40px rgba(17,24,39,0.10);
-                            padding: 28px;
-                          "
-                        >
-                          <!-- Header -->
-                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
-                            <tr>
-                              <td align="left" style="padding-bottom:18px;">
-                                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-                                  <tr>
-                                    <td
-                                      width="44"
-                                      height="44"
-                                      align="center"
-                                      valign="middle"
-                                      style="
-                                        width:44px; height:44px;
-                                        border-radius: 14px;
-                                        background: linear-gradient(135deg, rgba(16,185,129,1), rgba(5,150,105,1));
-                                        box-shadow: 0 10px 22px rgba(16,185,129,0.22);
-                                        color:#ffffff;
-                                        font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
-                                        font-size:22px;
-                                        font-weight:700;
-                                      "
-                                    >
-                                      ✓
-                                    </td>
-                                    <td style="padding-left:14px;">
-                                      <div
-                                        style="
-                                          font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
-                                          color:#111827;
-                                          font-size:18px;
-                                          font-weight:700;
-                                          letter-spacing:-0.2px;
-                                        "
-                                      >
-                                        Meeting confirmed
-                                      </div>
-                                      <div
-                                        style="
-                                          font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
-                                          color:#6b7280;
-                                          font-size:13px;
-                                          margin-top:2px;
-                                        "
-                                      >
-                                        Your schedule is set. Details below.
-                                      </div>
-                                    </td>
-                                  </tr>
-                                </table>
-                              </td>
-                            </tr>
-                            <!-- Greeting -->
-                            <tr>
-                              <td style="padding: 6px 0 18px 0;">
-                                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#374151; font-size:14px; line-height:1.6;">
-                                  Hi <span style="color:#111827; font-weight:700;">${name}</span>,
-                                  <br />
-                                  Your meeting has been successfully scheduled.
-                                </div>
-                              </td>
-                            </tr>
-                            <!-- Details panel -->
-                            <tr>
-                              <td
-                                style="
-                                  padding: 18px;
-                                  background: rgba(255,255,255,0.75);
-                                  border: 1px solid rgba(17,24,39,0.08);
-                                  border-radius: 14px;
-                                  box-shadow: 0 10px 26px rgba(17,24,39,0.06);
-                                "
-                              >
-                                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
-                                  <tr>
-                                    <td style="padding: 0 0 10px 0;">
-                                      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#6b7280; font-size:11px; letter-spacing:0.12em; text-transform:uppercase;">
-                                        Date
-                                      </div>
-                                      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#111827; font-size:15px; font-weight:700; margin-top:4px;">
-                                        ${formatDateForDisplay(startDate)}
-                                      </div>
-                                    </td>
-                                  </tr>
-                                  <tr>
-                                    <td style="padding: 10px 0;">
-                                      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#6b7280; font-size:11px; letter-spacing:0.12em; text-transform:uppercase;">
-                                        Time
-                                      </div>
-                                      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#111827; font-size:15px; font-weight:700; margin-top:4px;">
-                                        ${time}
-                                      </div>
-                                    </td>
-                                  </tr>
-                                  <tr>
-                                    <td style="padding: 10px 0 0 0;">
-                                      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#6b7280; font-size:11px; letter-spacing:0.12em; text-transform:uppercase;">
-                                        Duration
-                                      </div>
-                                      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#111827; font-size:15px; font-weight:700; margin-top:4px;">
-                                        30 minutes
-                                      </div>
-                                    </td>
-                                  </tr>
-                                </table>
-                              </td>
-                            </tr>
-                            <!-- Buttons row -->
-                            <tr>
-                              <td style="padding: 18px 0 6px 0;">
-                                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-                                  <tr>
-                                    <!-- Manage meeting -->
-                                    <td
-                                      style="
-                                        background: rgba(255,255,255,0.90);
-                                        border: 1px solid rgba(17,24,39,0.10);
-                                        border-radius: 12px;
-                                        box-shadow: 0 10px 20px rgba(17,24,39,0.06);
-                                      "
-                                    >
-                                      <a
-                                        href="${manageBookingUrl}"
-                                        style="
-                                          display:inline-block;
-                                          padding: 12px 14px;
-                                          font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
-                                          font-size:13px;
-                                          font-weight:700;
-                                          color:#111827;
-                                          text-decoration:none;
-                                        "
-                                      >
-                                        View / manage meeting →
-                                      </a>
-                                    </td>
-                                    <td style="width:10px; font-size:0; line-height:0;">&nbsp;</td>
-                                    <!-- Add to Google Calendar -->
-                                    <td
-                                      style="
-                                        background: rgba(16,185,129,0.10);
-                                        border: 1px solid rgba(16,185,129,0.22);
-                                        border-radius: 12px;
-                                      "
-                                    >
-                                      <a
-                                        href="${googleCalendarUrl}"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        style="
-                                          display:inline-block;
-                                          padding: 12px 14px;
-                                          font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
-                                          font-size:13px;
-                                          font-weight:800;
-                                          color:#065f46;
-                                          text-decoration:none;
-                                        "
-                                      >
-                                        Add to Google Calendar
-                                      </a>
-                                    </td>
-                                  </tr>
-                                </table>
-                              </td>
-                            </tr>
-                            <!-- Fallback link -->
-                            <tr>
-                              <td style="padding: 12px 0;">
-                                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#9ca3af; font-size:11px; line-height:1.5;">
-                                  If the button doesn't work, copy and paste this link into your browser:<br />
-                                  <a href="${googleCalendarUrl}" style="color:#6b7280; word-break:break-all;">${googleCalendarUrl}</a>
-                                </div>
-                              </td>
-                            </tr>
-                            <!-- Footer -->
-                            <tr>
-                              <td style="padding: 18px 0 0 0;">
-                                <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#6b7280; font-size:13px; line-height:1.6;">
-                                  Need to reschedule or cancel? Just reply to this email.
-                                </div>
-                              </td>
-                            </tr>
-                            <tr>
-                              <td style="padding: 18px 0 0 0; border-top: 1px solid rgba(17,24,39,0.08);">
-                                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
-                                  <tr>
-                                    <td>
-                                      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#9ca3af; font-size:11px;">
-                                        Powered by Arlo
-                                      </div>
-                                    </td>
-                                    <td align="right">
-                                      <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#9ca3af; font-size:11px;">
-                                        calendar@jacobtartabini.com
-                                      </div>
-                                    </td>
-                                  </tr>
-                                </table>
-                              </td>
-                            </tr>
-                          </table>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-              </table>
-            </body>
-          </html>
-        `;
-
-        const emailResponse = await resend.emails.send({
+        // Send guest confirmation email
+        const guestEmailHtml = generateGuestEmailHtml(
+          name, time, startDate, manageBookingUrl,
+          googleCalendarUrl, outlookCalendarUrl, icsDataUri
+        );
+        
+        const guestEmailResponse = await resend.emails.send({
           from: "Arlo Calendar <calendar@jacobtartabini.com>",
           to: [email],
           subject: `Meeting Confirmed - ${formatDateForDisplay(startDate)} at ${time}`,
-          html: emailHtml,
+          html: guestEmailHtml,
         });
 
-        console.log("[create-booking] Confirmation email sent:", emailResponse);
+        console.log("[create-booking] Guest confirmation email sent:", guestEmailResponse);
+        
+        // Send host notification email
+        const hostGoogleCalendarUrl = generateGoogleCalendarUrl(
+          `Meeting with ${name}`,
+          startDate,
+          endDate,
+          `Guest: ${name} (${email})${message ? `\n\nMessage: ${message}` : ''}`
+        );
+        
+        const hostEmailHtml = generateHostEmailHtml(
+          name, email, time, startDate, message, hostGoogleCalendarUrl
+        );
+        
+        const hostEmailResponse = await resend.emails.send({
+          from: "Arlo Calendar <calendar@jacobtartabini.com>",
+          to: [HOST_EMAIL],
+          subject: `New Meeting: ${name} - ${formatDateForDisplay(startDate)} at ${time}`,
+          html: hostEmailHtml,
+        });
+
+        console.log("[create-booking] Host notification email sent:", hostEmailResponse);
+        
       } catch (emailError) {
-        // Log but don't fail the request if email fails
-        console.error("[create-booking] Failed to send confirmation email:", emailError);
+        console.error("[create-booking] Failed to send emails:", emailError);
       }
     } else {
       console.warn("[create-booking] RESEND_API_KEY not configured, skipping email");
