@@ -144,16 +144,7 @@ export const APP_MODULES: Module[] = [
     summary: "12% uplift • New actions",
     keywords: ["ai", "analytics", "recommendations", "intel"]
   },
-  {
-    id: "notifications",
-    title: "Notifications",
-    icon: BellRing,
-    route: "/notifications",
-    color: "accent",
-    size: "small",
-    summary: "3 alerts • Snooze active",
-    keywords: ["alerts", "inbox", "updates", "reminders"]
-  },
+  // Notifications removed from canvas - now integrated into status chip
   {
     id: "notes",
     title: "Smart Notes",
