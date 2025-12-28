@@ -60,10 +60,14 @@ export type Database = {
           created_at: string
           description: string | null
           end_time: string
+          external_id: string | null
           id: string
           is_all_day: boolean
+          last_synced_at: string | null
           location: string | null
+          read_only: boolean
           recurrence: Json | null
+          source: string
           start_time: string
           title: string
           updated_at: string
@@ -75,10 +79,14 @@ export type Database = {
           created_at?: string
           description?: string | null
           end_time: string
+          external_id?: string | null
           id?: string
           is_all_day?: boolean
+          last_synced_at?: string | null
           location?: string | null
+          read_only?: boolean
           recurrence?: Json | null
+          source?: string
           start_time: string
           title: string
           updated_at?: string
@@ -90,12 +98,67 @@ export type Database = {
           created_at?: string
           description?: string | null
           end_time?: string
+          external_id?: string | null
           id?: string
           is_all_day?: boolean
+          last_synced_at?: string | null
           location?: string | null
+          read_only?: boolean
           recurrence?: Json | null
+          source?: string
           start_time?: string
           title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      calendar_integrations: {
+        Row: {
+          access_token: string | null
+          created_at: string
+          enabled: boolean
+          ical_url: string | null
+          id: string
+          last_sync_at: string | null
+          last_sync_error: string | null
+          last_sync_status: string | null
+          provider: string
+          refresh_token: string | null
+          sync_cursor: string | null
+          token_expires_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token?: string | null
+          created_at?: string
+          enabled?: boolean
+          ical_url?: string | null
+          id?: string
+          last_sync_at?: string | null
+          last_sync_error?: string | null
+          last_sync_status?: string | null
+          provider: string
+          refresh_token?: string | null
+          sync_cursor?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string | null
+          created_at?: string
+          enabled?: boolean
+          ical_url?: string | null
+          id?: string
+          last_sync_at?: string | null
+          last_sync_error?: string | null
+          last_sync_status?: string | null
+          provider?: string
+          refresh_token?: string | null
+          sync_cursor?: string | null
+          token_expires_at?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -648,6 +711,27 @@ export type Database = {
           title?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      us_holidays: {
+        Row: {
+          date: string
+          id: string
+          name: string
+          year: number
+        }
+        Insert: {
+          date: string
+          id?: string
+          name: string
+          year: number
+        }
+        Update: {
+          date?: string
+          id?: string
+          name?: string
+          year?: number
         }
         Relationships: []
       }
