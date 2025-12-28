@@ -290,16 +290,18 @@ export default function CalendarIntegrations() {
               {googleIntegration ? (
                 <>
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
                     onClick={() => syncCalendar('google')}
                     disabled={isSyncing.google}
+                    className="gap-1.5"
                   >
                     {isSyncing.google ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       <RefreshCw className="w-4 h-4" />
                     )}
+                    Sync
                   </Button>
                   <Button
                     variant="ghost"
@@ -369,16 +371,18 @@ export default function CalendarIntegrations() {
               {outlookIntegration && (
                 <>
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
                     onClick={() => syncCalendar('outlook_ics')}
                     disabled={isSyncing.outlook_ics}
+                    className="gap-1.5"
                   >
                     {isSyncing.outlook_ics ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       <RefreshCw className="w-4 h-4" />
                     )}
+                    Sync
                   </Button>
                   <Button
                     variant="ghost"
