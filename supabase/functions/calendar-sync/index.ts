@@ -90,18 +90,21 @@ async function syncGoogleCalendar(integration: CalendarIntegration, supabase: an
   }
 
   try {
-    // Fetch events from the last 30 days to next 90 days
-    const timeMin = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const timeMax = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
-
     const calendarUrl = new URL("https://www.googleapis.com/calendar/v3/calendars/primary/events");
-    calendarUrl.searchParams.set("timeMin", timeMin);
-    calendarUrl.searchParams.set("timeMax", timeMax);
-    calendarUrl.searchParams.set("singleEvents", "true");
-    calendarUrl.searchParams.set("maxResults", "500");
+    
+    // If we have a sync token, use it for incremental sync (can't use with timeMin/timeMax)
     if (integration.sync_cursor) {
       calendarUrl.searchParams.set("syncToken", integration.sync_cursor);
+    } else {
+      // Full sync: fetch events from the last 30 days to next 90 days
+      const timeMin = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const timeMax = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+      calendarUrl.searchParams.set("timeMin", timeMin);
+      calendarUrl.searchParams.set("timeMax", timeMax);
     }
+    
+    calendarUrl.searchParams.set("singleEvents", "true");
+    calendarUrl.searchParams.set("maxResults", "500");
 
     const response = await fetch(calendarUrl.toString(), {
       headers: { Authorization: `Bearer ${accessToken}` },
