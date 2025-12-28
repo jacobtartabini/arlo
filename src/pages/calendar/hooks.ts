@@ -1,7 +1,9 @@
 import * as React from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { BookingSlot, CalendarEvent } from "@/lib/calendar-data";
-import { DEFAULT_EVENTS, DEFAULT_BOOKINGS } from "@/lib/calendar-data";
+
+// Fixed UUID for Tailscale-authenticated single-user app
+const TAILSCALE_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 interface DbCalendarEvent {
   id: string;
@@ -73,6 +75,12 @@ const eventToDb = (event: Partial<CalendarEvent>, userId: string) => {
   };
 };
 
+// Check if user is authenticated via Tailscale
+const isTailscaleVerified = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return sessionStorage.getItem('tailscale-verified') === 'true';
+};
+
 export function useCalendarDatabase(): [
   CalendarEvent[],
   React.Dispatch<React.SetStateAction<CalendarEvent[]>>,
@@ -81,61 +89,73 @@ export function useCalendarDatabase(): [
   boolean,
   boolean
 ] {
-  const [events, setEventsState] = React.useState<CalendarEvent[]>(DEFAULT_EVENTS);
-  const [bookings, setBookingsState] = React.useState<BookingSlot[]>(DEFAULT_BOOKINGS);
+  const [events, setEventsState] = React.useState<CalendarEvent[]>([]);
+  const [bookings, setBookingsState] = React.useState<BookingSlot[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
-  const [userId, setUserId] = React.useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   const pendingUpdatesRef = React.useRef<Set<string>>(new Set());
 
-  // Check for authenticated user
+  // For this Tailscale-authenticated app, we always use the fixed user ID
+  const userId = TAILSCALE_USER_ID;
+
+  // Check Tailscale authentication status
   React.useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const uid = session?.user?.id ?? null;
-      setUserId(uid);
-      setIsAuthenticated(!!uid);
-    };
-    
-    checkAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      const uid = session?.user?.id ?? null;
-      setUserId(uid);
-      setIsAuthenticated(!!uid);
-    });
-
-    return () => subscription.unsubscribe();
+    setIsAuthenticated(isTailscaleVerified());
   }, []);
 
   // Fetch events from database
   const fetchEvents = React.useCallback(async () => {
-    if (!userId) {
-      // Use defaults for unauthenticated users
-      setEventsState(DEFAULT_EVENTS);
-      setBookingsState(DEFAULT_BOOKINGS);
-      setIsLoading(false);
-      return;
-    }
-
     try {
       setIsLoading(true);
 
-      const { data, error } = await supabase
+      // Fetch calendar events
+      const { data: eventsData, error: eventsError } = await supabase
         .from('calendar_events')
         .select('*')
         .eq('user_id', userId)
         .order('start_time', { ascending: true });
 
-      if (error) {
-        console.error('Error fetching events:', error);
+      if (eventsError) {
+        console.error('Error fetching events:', eventsError);
         setEventsState([]);
       } else {
-        setEventsState((data ?? []).map(dbToEvent));
+        setEventsState((eventsData ?? []).map(dbToEvent));
       }
 
-      // Note: booking_slots table has different structure, keeping local for now
-      // as it's primarily for public booking which has different requirements
+      // Fetch booking slots and convert to BookingSlot format
+      const { data: bookingsData, error: bookingsError } = await supabase
+        .from('booking_slots')
+        .select('*')
+        .eq('user_id', userId);
+
+      if (bookingsError) {
+        console.error('Error fetching bookings:', bookingsError);
+        setBookingsState([]);
+      } else {
+        // Convert booking slots to calendar-compatible format
+        const today = new Date();
+        const convertedBookings: BookingSlot[] = (bookingsData ?? []).flatMap(slot => {
+          // Generate booking slots for the next 30 days based on day_of_week
+          const slots: BookingSlot[] = [];
+          for (let i = 0; i < 30; i++) {
+            const date = new Date(today);
+            date.setDate(date.getDate() + i);
+            if (date.getDay() === slot.day_of_week && slot.enabled) {
+              slots.push({
+                id: `${slot.id}-${date.toISOString().split('T')[0]}`,
+                title: slot.title,
+                description: slot.description ?? undefined,
+                startTime: slot.start_time,
+                endTime: slot.end_time,
+                date: date.toISOString().split('T')[0],
+                available: true,
+              });
+            }
+          }
+          return slots;
+        });
+        setBookingsState(convertedBookings);
+      }
     } catch (error) {
       console.error('Error in fetchEvents:', error);
     } finally {
@@ -152,8 +172,6 @@ export function useCalendarDatabase(): [
     (updater) => {
       setEventsState((prev) => {
         const next = typeof updater === 'function' ? updater(prev) : updater;
-        
-        if (!userId) return next;
 
         // Find changes and sync to database
         next.forEach((event) => {
@@ -225,7 +243,7 @@ export function useCalendarDatabase(): [
     [userId]
   );
 
-  // Bookings wrapper - keeps existing localStorage behavior for public bookings
+  // Bookings wrapper
   const setBookings: React.Dispatch<React.SetStateAction<BookingSlot[]>> = React.useCallback(
     (updater) => {
       setBookingsState((prev) => {
