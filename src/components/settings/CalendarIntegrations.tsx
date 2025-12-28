@@ -17,8 +17,9 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-// Fixed user ID for Tailscale-authenticated single-user app
-const TAILSCALE_USER_ID = 'tailscale-user';
+// Fixed UUID for Tailscale-authenticated single-user app
+// Using a valid UUID since the database column requires UUID type
+const TAILSCALE_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 interface CalendarIntegration {
   id: string;
