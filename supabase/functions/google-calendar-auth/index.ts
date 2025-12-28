@@ -141,7 +141,142 @@ serve(async (req: Request) => {
       });
     }
 
-    // Step 3: Disconnect Google Calendar
+    // Step 3: Fetch calendar list
+    if (action === "list_calendars") {
+      if (!userId) {
+        return new Response(JSON.stringify({ error: "User ID is required" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Get integration to access token
+      const { data: integration, error: fetchError } = await supabase
+        .from("calendar_integrations")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("provider", "google")
+        .single();
+
+      if (fetchError || !integration) {
+        return new Response(JSON.stringify({ error: "Google Calendar not connected" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Refresh token if needed
+      let accessToken = integration.access_token;
+      const expiresAt = new Date(integration.token_expires_at);
+      if (expiresAt.getTime() - Date.now() < 5 * 60 * 1000) {
+        const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({
+            client_id: GOOGLE_CLIENT_ID,
+            client_secret: GOOGLE_CLIENT_SECRET,
+            refresh_token: integration.refresh_token,
+            grant_type: "refresh_token",
+          }),
+        });
+        const tokenData = await tokenResponse.json();
+        if (tokenData.access_token) {
+          accessToken = tokenData.access_token;
+          await supabase
+            .from("calendar_integrations")
+            .update({
+              access_token: accessToken,
+              token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
+            })
+            .eq("id", integration.id);
+        }
+      }
+
+      // Fetch calendar list from Google
+      const calendarListResponse = await fetch(
+        "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+
+      if (!calendarListResponse.ok) {
+        const errorText = await calendarListResponse.text();
+        console.error("[google-calendar-auth] Failed to fetch calendars:", errorText);
+        return new Response(JSON.stringify({ error: "Failed to fetch calendars" }), {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const calendarListData = await calendarListResponse.json();
+      const calendars = (calendarListData.items || []).map((cal: any) => ({
+        id: cal.id,
+        name: cal.summary || cal.id,
+        color: cal.backgroundColor || "#4285f4",
+        primary: cal.primary || false,
+        accessRole: cal.accessRole,
+      }));
+
+      console.log("[google-calendar-auth] Fetched", calendars.length, "calendars for user:", userId);
+
+      return new Response(JSON.stringify({ calendars }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Step 4: Save selected calendars
+    if (action === "save_calendars") {
+      const { calendars: selectedCalendars, integrationId } = body;
+      
+      if (!integrationId || !selectedCalendars) {
+        return new Response(JSON.stringify({ error: "Missing required fields" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Delete existing selections for this integration
+      await supabase
+        .from("google_calendar_selections")
+        .delete()
+        .eq("integration_id", integrationId);
+
+      // Insert new selections
+      const selections = selectedCalendars.map((cal: any) => ({
+        integration_id: integrationId,
+        calendar_id: cal.id,
+        calendar_name: cal.name,
+        calendar_color: cal.color,
+        enabled: cal.enabled,
+      }));
+
+      if (selections.length > 0) {
+        const { error: insertError } = await supabase
+          .from("google_calendar_selections")
+          .insert(selections);
+
+        if (insertError) {
+          console.error("[google-calendar-auth] Failed to save calendars:", insertError);
+          return new Response(JSON.stringify({ error: "Failed to save calendars" }), {
+            status: 500,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+      }
+
+      // Clear sync cursors to force fresh sync
+      await supabase
+        .from("calendar_integrations")
+        .update({ sync_cursor: null })
+        .eq("id", integrationId);
+
+      console.log("[google-calendar-auth] Saved", selections.length, "calendar selections");
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Step 5: Disconnect Google Calendar
     if (action === "disconnect") {
       if (!userId) {
         return new Response(JSON.stringify({ error: "User ID is required" }), {
@@ -150,7 +285,7 @@ serve(async (req: Request) => {
         });
       }
 
-      // Delete integration record
+      // Delete integration record (cascade will delete calendar selections)
       await supabase
         .from("calendar_integrations")
         .delete()

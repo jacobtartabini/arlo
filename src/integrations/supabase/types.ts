@@ -346,6 +346,47 @@ export type Database = {
           },
         ]
       }
+      google_calendar_selections: {
+        Row: {
+          calendar_color: string | null
+          calendar_id: string
+          calendar_name: string
+          created_at: string
+          enabled: boolean
+          id: string
+          integration_id: string
+          sync_cursor: string | null
+        }
+        Insert: {
+          calendar_color?: string | null
+          calendar_id: string
+          calendar_name: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          integration_id: string
+          sync_cursor?: string | null
+        }
+        Update: {
+          calendar_color?: string | null
+          calendar_id?: string
+          calendar_name?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          integration_id?: string
+          sync_cursor?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "google_calendar_selections_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "calendar_integrations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       habit_logs: {
         Row: {
           completed_at: string
