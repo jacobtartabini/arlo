@@ -16,39 +16,45 @@ type GestureEventType = Event & { scale: number };
 
 // Grid configuration - 48px grid to match dot-grid background
 const GRID_SIZE = 48;
+const GAP_UNITS = 1; // 1 grid unit gap between modules
 
-// Module layout configuration - grid-aligned positioning
+// Module layout configuration - strict grid positioning (top-left corner based)
 interface ModulePosition {
   id: string;
-  gridX: number; // grid units from center
-  gridY: number; // grid units from center
+  col: number; // column position in grid units
+  row: number; // row position in grid units
   widthUnits: number; // width in grid units
   heightUnits: number; // height in grid units
-  zIndex: number;
 }
 
-// Define hierarchical layout - tighter spacing, aligned to grid
+// Define strict grid layout - no overlapping, consistent spacing
+// Layout: 3 columns with varied heights
+// Total grid: ~24 units wide x ~18 units tall
 const moduleLayout: ModulePosition[] = [
-  // Primary hub - center of gravity (largest)
-  { id: "productivity", gridX: 0, gridY: 0, widthUnits: 6, heightUnits: 5, zIndex: 10 },
+  // Row 1: Top row
+  { id: "finance", col: 0, row: 0, widthUnits: 5, heightUnits: 4 },
+  { id: "productivity", col: 6, row: 0, widthUnits: 6, heightUnits: 5 },
+  { id: "creation", col: 13, row: 0, widthUnits: 5, heightUnits: 4 },
   
-  // Inner ring - high priority (large) - moved closer
-  { id: "finance", gridX: -5, gridY: -4, widthUnits: 5, heightUnits: 4, zIndex: 9 },
-  { id: "creation", gridX: 5, gridY: -4, widthUnits: 5, heightUnits: 4, zIndex: 8 },
-  { id: "notes", gridX: -5, gridY: 4, widthUnits: 5, heightUnits: 4, zIndex: 7 },
-  { id: "health", gridX: 5, gridY: 4, widthUnits: 5, heightUnits: 4, zIndex: 6 },
+  // Row 2: Upper middle  
+  { id: "travel", col: 0, row: 5, widthUnits: 4, heightUnits: 4 },
+  { id: "automations", col: 5, row: 6, widthUnits: 4, heightUnits: 3 },
+  { id: "files", col: 10, row: 6, widthUnits: 4, heightUnits: 3 },
+  { id: "security", col: 15, row: 5, widthUnits: 4, heightUnits: 4 },
   
-  // Outer ring - secondary modules (medium) - tighter
-  { id: "travel", gridX: -9, gridY: 0, widthUnits: 4, heightUnits: 4, zIndex: 5 },
-  { id: "security", gridX: 9, gridY: 0, widthUnits: 4, heightUnits: 4, zIndex: 4 },
-  { id: "knowledge", gridX: -7, gridY: 7, widthUnits: 4, heightUnits: 3, zIndex: 3 },
-  { id: "files", gridX: 7, gridY: -7, widthUnits: 4, heightUnits: 3, zIndex: 3 },
+  // Row 3: Lower middle
+  { id: "notes", col: 0, row: 10, widthUnits: 5, heightUnits: 4 },
+  { id: "insights", col: 6, row: 10, widthUnits: 4, heightUnits: 3 },
+  { id: "knowledge", col: 11, row: 10, widthUnits: 4, heightUnits: 3 },
+  { id: "health", col: 16, row: 10, widthUnits: 5, heightUnits: 4 },
   
-  // Peripheral - utility modules (smaller) - closer
-  { id: "automations", gridX: 0, gridY: -6, widthUnits: 4, heightUnits: 3, zIndex: 2 },
-  { id: "insights", gridX: 0, gridY: 7, widthUnits: 4, heightUnits: 3, zIndex: 2 },
-  { id: "habits", gridX: 7, gridY: 7, widthUnits: 4, heightUnits: 3, zIndex: 1 },
+  // Row 4: Bottom row
+  { id: "habits", col: 5, row: 14, widthUnits: 4, heightUnits: 3 },
 ];
+
+// Calculate grid bounds for centering
+const GRID_COLS = 21;
+const GRID_ROWS = 17;
 
 interface SpatialCanvasProps {
   onScaleChange?: (value: number) => void;
@@ -428,12 +434,14 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
 
               const Icon = module.icon;
               const isHovered = hoveredModule === module.id;
-              const isPrimary = index === 0;
-              const isInnerRing = index >= 1 && index <= 4;
+              const isPrimary = layoutPos.id === "productivity";
+              const isLarge = ["finance", "creation", "notes", "health"].includes(layoutPos.id);
               
-              // Calculate pixel position from grid units
-              const pixelX = layoutPos.gridX * GRID_SIZE;
-              const pixelY = layoutPos.gridY * GRID_SIZE;
+              // Calculate pixel position from grid units (top-left based, offset to center the grid)
+              const offsetX = -(GRID_COLS * GRID_SIZE) / 2;
+              const offsetY = -(GRID_ROWS * GRID_SIZE) / 2;
+              const pixelX = layoutPos.col * GRID_SIZE + offsetX;
+              const pixelY = layoutPos.row * GRID_SIZE + offsetY;
               
               // Calculate size from grid units
               const width = layoutPos.widthUnits * GRID_SIZE;
@@ -446,8 +454,8 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
                   animate={{
                     opacity: 1,
                     scale: isHovered ? 1.02 : 1,
-                    x: pixelX - width / 2,
-                    y: pixelY - height / 2,
+                    x: pixelX,
+                    y: pixelY,
                   }}
                   exit={{ opacity: 0, scale: 0.95 }}
                   transition={{
@@ -459,12 +467,12 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
                   className={cn(
                     "absolute cursor-pointer group",
                     isPrimary && "z-20",
-                    isInnerRing && "z-10"
+                    isLarge && "z-10"
                   )}
                   style={{
                     width,
                     height,
-                    zIndex: layoutPos.zIndex + (isHovered ? 50 : 0),
+                    zIndex: isPrimary ? 20 : isLarge ? 10 : 5 + (isHovered ? 50 : 0),
                   }}
                   onMouseEnter={() => setHoveredModule(module.id)}
                   onMouseLeave={() => setHoveredModule(null)}
@@ -479,7 +487,7 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
                       "transition-all duration-200 ease-out",
                       isPrimary
                         ? "bg-card/95 border-primary/25 shadow-lg shadow-primary/5"
-                        : isInnerRing
+                        : isLarge
                         ? "bg-card/90 border-border/50 shadow-md"
                         : "bg-card/80 border-border/40 shadow-sm",
                       isHovered && "border-primary/50 shadow-lg shadow-primary/10"
@@ -502,12 +510,12 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
                       "rounded-xl flex items-center justify-center mb-3",
                       "bg-primary/10 transition-colors duration-200",
                       isHovered && "bg-primary/15",
-                      isPrimary ? "w-12 h-12" : isInnerRing ? "w-10 h-10" : "w-9 h-9"
+                      isPrimary ? "w-12 h-12" : isLarge ? "w-10 h-10" : "w-9 h-9"
                     )}>
                       <Icon 
                         className={cn(
                           "text-primary",
-                          isPrimary ? "w-6 h-6" : isInnerRing ? "w-5 h-5" : "w-4 h-4"
+                          isPrimary ? "w-6 h-6" : isLarge ? "w-5 h-5" : "w-4 h-4"
                         )} 
                         strokeWidth={2} 
                       />
@@ -516,7 +524,7 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
                     {/* Title */}
                     <h3 className={cn(
                       "font-semibold text-foreground tracking-tight mb-1.5",
-                      isPrimary ? "text-lg" : isInnerRing ? "text-base" : "text-sm"
+                      isPrimary ? "text-lg" : isLarge ? "text-base" : "text-sm"
                     )}>
                       {module.title}
                     </h3>
@@ -524,7 +532,7 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
                     {/* Summary - show on all modules for larger sizes */}
                     <p className={cn(
                       "text-muted-foreground leading-relaxed flex-1",
-                      isPrimary ? "text-sm line-clamp-3" : isInnerRing ? "text-xs line-clamp-2" : "text-[11px] line-clamp-2"
+                      isPrimary ? "text-sm line-clamp-3" : isLarge ? "text-xs line-clamp-2" : "text-[11px] line-clamp-2"
                     )}>
                       {module.summary}
                     </p>
