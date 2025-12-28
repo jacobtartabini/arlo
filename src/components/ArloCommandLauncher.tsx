@@ -37,6 +37,7 @@ import { APP_MODULES, APP_PAGES, APP_RESOURCES } from "@/lib/app-navigation";
 import { useNotesPersistence } from "@/hooks/useNotesPersistence";
 import { useArlo } from "@/providers/ArloProvider";
 import { cn } from "@/lib/utils";
+import { isPublicBookingDomain } from "@/lib/domain-utils";
 
 type CommandCategory = "Actions" | "Navigation" | "Content" | "Recent";
 
@@ -89,12 +90,18 @@ const ArloCommandLauncher = () => {
   const itemsRef = useRef<(HTMLDivElement | null)[]>([]);
   const hasTyped = searchQuery.length > 0;
 
-  // Determine visibility based on route
+  // Determine visibility based on route and domain
   const isDashboard = DASHBOARD_ROUTES.includes(location.pathname);
   const isHiddenRoute = HIDDEN_ROUTES.some((route) =>
     location.pathname.startsWith(route)
   );
-  const showPersistent = isDashboard && !isHiddenRoute;
+  const isPublicDomain = isPublicBookingDomain();
+  const showPersistent = isDashboard && !isHiddenRoute && !isPublicDomain;
+  
+  // Never render on public booking domains
+  if (isPublicDomain) {
+    return null;
+  }
 
   // Build commands from Arlo's real data
   const allCommands = useMemo((): CommandItem[] => {
