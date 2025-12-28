@@ -526,7 +526,26 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                           }}
                         >
                           <div className="flex flex-col gap-1 overflow-hidden">
-                            <p className="truncate text-sm font-semibold leading-snug">{block.title}</p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="truncate text-sm font-semibold leading-snug">{block.title}</p>
+                              {/* Source badge */}
+                              {block.eventSource && block.eventSource !== "arlo" && (
+                                <span 
+                                  className={cn(
+                                    "flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide",
+                                    block.eventSource === "google" && "bg-blue-500/20 text-blue-700 dark:text-blue-300",
+                                    block.eventSource === "outlook_ics" && "bg-cyan-500/20 text-cyan-700 dark:text-cyan-300"
+                                  )}
+                                >
+                                  {block.eventSource === "google" ? "G" : "O"}
+                                  {block.readOnly && (
+                                    <svg className="w-2 h-2" viewBox="0 0 24 24" fill="currentColor">
+                                      <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+                                    </svg>
+                                  )}
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs font-medium" style={{ color: subtleTextColor }}>
                               {timeLabel}
                             </p>

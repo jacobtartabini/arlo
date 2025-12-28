@@ -495,6 +495,7 @@ export function buildBlocks(
     eventBlocks.push({
       id: event.id,
       source: "event",
+      eventSource: event.source || "arlo",
       title: event.title,
       subtitle: event.location || event.category,
       date: dayStr,
@@ -502,6 +503,7 @@ export function buildBlocks(
       endMinutes,
       color: event.color || "#2563eb",
       allDay: Boolean(event.allDay),
+      readOnly: event.readOnly || false,
       meta: {
         description: event.description,
         attendees: event.attendees,
@@ -514,7 +516,10 @@ export function buildBlocks(
         isOccurrenceEnd: occurrenceEnd >= startOfDay(day) && occurrenceEnd <= endOfDay(day),
         occurrenceIndex,
         recurrence: event.recurrence,
-        allDay: Boolean(event.allDay)
+        allDay: Boolean(event.allDay),
+        source: event.source,
+        externalId: event.externalId,
+        lastSyncedAt: event.lastSyncedAt,
       }
     });
   });

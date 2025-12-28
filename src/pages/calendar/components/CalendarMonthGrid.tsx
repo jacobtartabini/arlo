@@ -58,6 +58,18 @@ export const CalendarMonthGrid: React.FC<CalendarMonthGridProps> = ({
                   style={{ borderLeft: `3px solid ${block.color}` }}
                 >
                   <span className="truncate font-medium">{block.title}</span>
+                  {/* Source indicator */}
+                  {block.eventSource && block.eventSource !== "arlo" && (
+                    <span 
+                      className={cn(
+                        "flex-shrink-0 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold",
+                        block.eventSource === "google" && "bg-blue-500/30 text-blue-700 dark:text-blue-300",
+                        block.eventSource === "outlook_ics" && "bg-cyan-500/30 text-cyan-700 dark:text-cyan-300"
+                      )}
+                    >
+                      {block.eventSource === "google" ? "G" : "O"}
+                    </span>
+                  )}
                   <span className="truncate text-[10px] text-muted-foreground">
                     {block.allDay ? "All day" : formatDisplayTime(block.startMinutes)}
                   </span>

@@ -10,9 +10,12 @@ export type CalendarView = (typeof VIEW_OPTIONS)[number]["id"];
 
 export type BlockType = "event" | "task" | "booking";
 
+export type EventSource = "arlo" | "google" | "outlook_ics";
+
 export type CalendarBlock = {
   id: string;
   source: BlockType;
+  eventSource?: EventSource; // External calendar source
   title: string;
   subtitle?: string;
   date: string;
@@ -21,6 +24,7 @@ export type CalendarBlock = {
   color: string;
   allDay?: boolean;
   isAvailable?: boolean;
+  readOnly?: boolean; // Whether the event can be edited
   meta?: Record<string, unknown>;
 };
 
