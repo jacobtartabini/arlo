@@ -200,15 +200,29 @@ async function syncOutlookIcal(integration: CalendarIntegration, supabase: any):
   }
 
   try {
+    console.log(`[calendar-sync] Fetching Outlook iCal from: ${integration.ical_url.substring(0, 50)}...`);
+    
     const response = await fetch(integration.ical_url);
     if (!response.ok) {
+      console.error(`[calendar-sync] Failed to fetch iCal: ${response.status} ${response.statusText}`);
       return { success: false, error: `Failed to fetch iCal: ${response.status}` };
     }
 
     const icalText = await response.text();
+    console.log(`[calendar-sync] Received iCal data, length: ${icalText.length} chars`);
+    
+    // Log a sample of the iCal content for debugging
+    if (icalText.length < 1000) {
+      console.log(`[calendar-sync] Full iCal content: ${icalText}`);
+    } else {
+      console.log(`[calendar-sync] iCal preview (first 500 chars): ${icalText.substring(0, 500)}`);
+    }
+    
     const events = parseICalEvents(icalText);
+    console.log(`[calendar-sync] Parsed ${events.length} events from iCal feed`);
 
     let syncedCount = 0;
+    let errorCount = 0;
 
     // Get existing external IDs to detect deletions
     const { data: existingEvents } = await supabase
@@ -245,7 +259,10 @@ async function syncOutlookIcal(integration: CalendarIntegration, supabase: any):
           onConflict: "user_id,source,external_id",
         });
 
-      if (!error) {
+      if (error) {
+        console.error(`[calendar-sync] Error upserting event "${event.summary}":`, error);
+        errorCount++;
+      } else {
         syncedCount++;
       }
     }
@@ -271,7 +288,7 @@ async function syncOutlookIcal(integration: CalendarIntegration, supabase: any):
       })
       .eq("id", integration.id);
 
-    console.log(`[calendar-sync] Synced ${syncedCount} Outlook iCal events for user ${integration.user_id}`);
+    console.log(`[calendar-sync] Synced ${syncedCount} Outlook iCal events (${errorCount} errors) for user ${integration.user_id}`);
     return { success: true, synced: syncedCount };
   } catch (error) {
     console.error("[calendar-sync] iCal sync error:", error);
