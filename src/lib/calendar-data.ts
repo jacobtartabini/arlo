@@ -85,118 +85,11 @@ export interface BookingSlot {
 export const EVENT_STORAGE_KEY = "arlo-calendar-events";
 export const BOOKING_STORAGE_KEY = "arlo-calendar-bookings";
 
-export const DEFAULT_EVENTS: CalendarEvent[] = [
-  {
-    id: "1",
-    title: "Team Sync",
-    description: "Weekly planning with product and design",
-    startTime: "09:30",
-    endTime: "10:30",
-    date: "2024-01-15",
-    endDate: "2024-01-15",
-    category: "work",
-    color: "#3b82f6",
-    attendees: ["alex@arlo.ai", "casey@arlo.ai"],
-    location: "Huddle Room A",
-    recurrence: {
-      frequency: "weekly",
-      interval: 1,
-      end: { type: "onDate", date: "2024-05-31" }
-    }
-  },
-  {
-    id: "2",
-    title: "Investor Update",
-    description: "Q1 numbers and roadmap discussion",
-    startTime: "13:00",
-    endTime: "14:00",
-    date: "2024-01-16",
-    endDate: "2024-01-16",
-    category: "work",
-    color: "#8b5cf6",
-    location: "Boardroom"
-  },
-  {
-    id: "3",
-    title: "Gym",
-    startTime: "18:00",
-    endTime: "19:00",
-    date: "2024-01-16",
-    endDate: "2024-01-16",
-    category: "personal",
-    color: "#22c55e",
-    allDay: false
-  },
-  {
-    id: "4",
-    title: "Strategy Offsite",
-    description: "Quarterly leadership alignment",
-    startTime: "00:00",
-    endTime: "23:59",
-    date: "2024-02-05",
-    endDate: "2024-02-07",
-    category: "work",
-    color: "#f97316",
-    allDay: true,
-    location: "Napa Valley Retreat"
-  },
-  {
-    id: "5",
-    title: "Monthly Product Review",
-    description: "Cross-functional roadmap review",
-    startTime: "10:00",
-    endTime: "11:30",
-    date: "2024-01-10",
-    endDate: "2024-01-10",
-    category: "work",
-    color: "#0ea5e9",
-    recurrence: {
-      frequency: "monthly",
-      interval: 1,
-      end: { type: "never" }
-    }
-  },
-];
+// No default events - real data comes from database
+export const DEFAULT_EVENTS: CalendarEvent[] = [];
 
-export const DEFAULT_TASKS: Task[] = [
-  {
-    id: "1",
-    title: "Revise onboarding flow",
-    description: "Audit drop-off points and capture new requirements",
-    priority: "high",
-    category: "work",
-    dueDate: "2024-01-17",
-    completed: false,
-    estimatedTime: 120,
-  },
-  {
-    id: "2",
-    title: "Follow up with beta customers",
-    priority: "medium",
-    category: "work",
-    dueDate: "2024-01-19",
-    completed: false,
-    estimatedTime: 45,
-  },
-  {
-    id: "3",
-    title: "Deep work: strategy memo",
-    description: "Outline positioning for upcoming launch",
-    priority: "high",
-    category: "work",
-    completed: false,
-    estimatedTime: 180,
-  },
-  {
-    id: "4",
-    title: "Personal training",
-    priority: "low",
-    category: "personal",
-    dueDate: "2024-01-20",
-    completed: false,
-    estimatedTime: 60,
-  },
-];
+// No default tasks - real data comes from database  
+export const DEFAULT_TASKS: Task[] = [];
 
 export const DEFAULT_PROJECTS: Project[] = [
   {
@@ -215,33 +108,8 @@ export const DEFAULT_PROJECTS: Project[] = [
   },
 ];
 
-export const DEFAULT_BOOKINGS: BookingSlot[] = [
-  {
-    id: "b1",
-    title: "Product demo",
-    bookedBy: "jordan@startup.io",
-    startTime: "11:00",
-    endTime: "11:45",
-    date: "2024-01-15",
-    available: false,
-  },
-  {
-    id: "b2",
-    startTime: "15:00",
-    endTime: "15:45",
-    date: "2024-01-15",
-    available: true,
-  },
-  {
-    id: "b3",
-    title: "Investor intro",
-    bookedBy: "maria@vc.com",
-    startTime: "10:00",
-    endTime: "10:45",
-    date: "2024-01-17",
-    available: false,
-  },
-];
+// No default bookings - real data comes from database
+export const DEFAULT_BOOKINGS: BookingSlot[] = [];
 
 function parseStoredJson<T>(value: string | null, fallback: T): T {
   if (!value) return fallback;

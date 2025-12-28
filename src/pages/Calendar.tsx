@@ -49,11 +49,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
-import {
-  DEFAULT_BOOKINGS,
-  DEFAULT_TASKS,
-  formatSlotLabel,
-} from "@/lib/calendar-data";
+import { formatSlotLabel } from "@/lib/calendar-data";
 import type { BookingSlot, CalendarEvent, EventRecurrence, Task } from "@/lib/calendar-data";
 
 import { CalendarTimeline } from "./calendar/components/CalendarTimeline";
@@ -281,60 +277,10 @@ const CalendarPage: React.FC = () => {
     [visibleRange]
   );
 
+  // Tasks are not used in this calendar view - we only show calendar events and bookings
   const tasksByDay = React.useMemo(() => {
-    if (view === "month") {
-      return new Map<string, Task[]>();
-    }
-
-    const rangeStart = view === "week"
-      ? startOfWeek(selectedDate, { weekStartsOn: 0 })
-      : startOfDay(selectedDate);
-    const rangeEnd = view === "week"
-      ? endOfWeek(selectedDate, { weekStartsOn: 0 })
-      : startOfDay(selectedDate);
-
-    const bucket = new Map<string, Task[]>();
-    const fallbackKey = format(rangeStart, "yyyy-MM-dd");
-    const unscheduled: Task[] = [];
-
-    DEFAULT_TASKS.forEach(task => {
-      if (task.completed) return;
-
-      if (task.dueDate) {
-        const due = parseISO(task.dueDate);
-        const dueKey = format(due, "yyyy-MM-dd");
-
-        if (due < rangeStart) {
-          const existing = bucket.get(fallbackKey) ?? [];
-          bucket.set(fallbackKey, [...existing, task]);
-          return;
-        }
-
-        if (due > rangeEnd) {
-          if (view === "week") {
-            return;
-          }
-
-          if (view === "day") {
-            return;
-          }
-        }
-
-        const existing = bucket.get(dueKey) ?? [];
-        bucket.set(dueKey, [...existing, task]);
-        return;
-      }
-
-      unscheduled.push(task);
-    });
-
-    if (unscheduled.length) {
-      const existing = bucket.get(fallbackKey) ?? [];
-      bucket.set(fallbackKey, [...existing, ...unscheduled]);
-    }
-
-    return bucket;
-  }, [selectedDate, view]);
+    return new Map<string, Task[]>();
+  }, []);
 
   const focusBlocks = React.useMemo<CalendarDayBlocks[]>(() => {
     if (view === "month") return [];
