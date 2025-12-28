@@ -351,14 +351,18 @@ const PublicBookingPage = () => {
 
     try {
       // Call the edge function to create the booking
+      // Send the date as YYYY-MM-DD format to avoid timezone issues
+      const dateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
+      
       const { data, error } = await supabase.functions.invoke("create-booking", {
         body: {
-          date: selectedDate.toISOString(),
+          date: dateStr,
           time: selectedTime,
           name: name.trim(),
           email: email.trim(),
           message: message.trim() || undefined,
           handle,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, // Send client's timezone
         },
       });
 

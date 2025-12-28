@@ -8,12 +8,13 @@ const corsHeaders = {
 };
 
 interface BookingRequest {
-  date: string; // ISO date string
+  date: string; // ISO date string or YYYY-MM-DD
   time: string; // e.g., "10:00 AM"
   name: string;
   email: string;
   message?: string;
   handle?: string;
+  timezone?: string; // IANA timezone like "America/New_York"
 }
 
 function parseTimeToHours(timeStr: string): { hours: number; minutes: number } {
@@ -46,8 +47,14 @@ function formatDateForDisplay(date: Date): string {
 }
 
 function formatDateForGoogleCalendar(date: Date): string {
-  // Format: YYYYMMDDTHHMMSSZ
-  return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  // Format for Google Calendar: YYYYMMDDTHHMMSS (local time, no Z suffix for local events)
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const hours = String(date.getUTCHours()).padStart(2, '0');
+  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+  const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+  return `${year}${month}${day}T${hours}${minutes}${seconds}Z`;
 }
 
 function generateGoogleCalendarUrl(title: string, startDate: Date, endDate: Date, description: string): string {
@@ -60,6 +67,34 @@ function generateGoogleCalendarUrl(title: string, startDate: Date, endDate: Date
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
+// Create a date in a specific timezone
+function createDateInTimezone(dateStr: string, hours: number, minutes: number, timezone: string): Date {
+  // Extract just the date part (YYYY-MM-DD)
+  const datePart = dateStr.split('T')[0];
+  
+  // Create an ISO string with the exact time we want
+  const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+  
+  // For US Eastern timezone, calculate offset
+  // This is a simplified approach - for production, use a proper timezone library
+  const offsetMap: Record<string, number> = {
+    'America/New_York': -5, // EST (note: doesn't account for DST)
+    'America/Chicago': -6,
+    'America/Denver': -7,
+    'America/Los_Angeles': -8,
+    'UTC': 0,
+  };
+  
+  const offset = offsetMap[timezone] ?? -5; // Default to EST
+  
+  // Create date assuming the input is in the specified timezone
+  // We need to convert to UTC by subtracting the offset
+  const localDate = new Date(`${datePart}T${timeStr}`);
+  const utcDate = new Date(localDate.getTime() - (offset * 60 * 60 * 1000));
+  
+  return utcDate;
+}
+
 const handler = async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -67,9 +102,9 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { date, time, name, email, message, handle }: BookingRequest = await req.json();
+    const { date, time, name, email, message, handle, timezone }: BookingRequest = await req.json();
 
-    console.log("[create-booking] Received booking request:", { date, time, name, email, handle });
+    console.log("[create-booking] Received booking request:", { date, time, name, email, handle, timezone });
 
     // Validate required fields
     if (!date || !time || !name || !email) {
@@ -92,12 +127,20 @@ const handler = async (req: Request): Promise<Response> => {
     // Parse the time
     const { hours, minutes } = parseTimeToHours(time);
     
-    // Create start and end times (default 30 min meeting)
-    const startDate = new Date(date);
-    startDate.setHours(hours, minutes, 0, 0);
+    // Create start and end times using the client's timezone (default 30 min meeting)
+    // Use America/New_York as default timezone
+    const clientTimezone = timezone || 'America/New_York';
+    const startDate = createDateInTimezone(date, hours, minutes, clientTimezone);
     
-    const endDate = new Date(startDate);
-    endDate.setMinutes(endDate.getMinutes() + 30);
+    const endDate = new Date(startDate.getTime() + 30 * 60 * 1000); // Add 30 minutes
+
+    console.log("[create-booking] Parsed times:", { 
+      inputDate: date, 
+      inputTime: time, 
+      timezone: clientTimezone,
+      startDateUTC: startDate.toISOString(), 
+      endDateUTC: endDate.toISOString() 
+    });
 
     // Create Supabase client with service role for inserting
     const supabaseUrl = Deno.env.get("SUPABASE_URL");

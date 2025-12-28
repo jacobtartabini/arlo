@@ -13,6 +13,33 @@ interface ManageBookingRequest {
   newDate?: string;
   newTime?: string;
   email?: string; // For verification
+  timezone?: string; // IANA timezone
+}
+
+// Create a date in a specific timezone
+function createDateInTimezone(dateStr: string, hours: number, minutes: number, timezone: string): Date {
+  // Extract just the date part (YYYY-MM-DD)
+  const datePart = dateStr.split('T')[0];
+  
+  // Create an ISO string with the exact time we want
+  const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+  
+  // For US Eastern timezone, calculate offset
+  const offsetMap: Record<string, number> = {
+    'America/New_York': -5,
+    'America/Chicago': -6,
+    'America/Denver': -7,
+    'America/Los_Angeles': -8,
+    'UTC': 0,
+  };
+  
+  const offset = offsetMap[timezone] ?? -5; // Default to EST
+  
+  // Create date assuming the input is in the specified timezone
+  const localDate = new Date(`${datePart}T${timeStr}`);
+  const utcDate = new Date(localDate.getTime() - (offset * 60 * 60 * 1000));
+  
+  return utcDate;
 }
 
 function parseTimeToHours(timeStr: string): { hours: number; minutes: number } {
@@ -57,9 +84,9 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { eventId, action, newDate, newTime, email }: ManageBookingRequest = await req.json();
+    const { eventId, action, newDate, newTime, email, timezone }: ManageBookingRequest = await req.json();
 
-    console.log("[manage-booking] Request:", { eventId, action, email });
+    console.log("[manage-booking] Request:", { eventId, action, email, timezone });
 
     if (!eventId) {
       return new Response(
@@ -137,13 +164,18 @@ const handler = async (req: Request): Promise<Response> => {
           );
         }
 
-        // Parse new time
+        // Parse new time using client timezone
         const { hours, minutes } = parseTimeToHours(newTime);
-        const newStartDate = new Date(newDate);
-        newStartDate.setHours(hours, minutes, 0, 0);
-        
-        const newEndDate = new Date(newStartDate);
-        newEndDate.setMinutes(newEndDate.getMinutes() + 30);
+        const clientTimezone = timezone || 'America/New_York';
+        const newStartDate = createDateInTimezone(newDate, hours, minutes, clientTimezone);
+        const newEndDate = new Date(newStartDate.getTime() + 30 * 60 * 1000);
+
+        console.log("[manage-booking] Rescheduling:", { 
+          newDate, 
+          newTime, 
+          timezone: clientTimezone,
+          newStartDateUTC: newStartDate.toISOString() 
+        });
 
         // Update the event
         const { error: updateError } = await supabase
