@@ -23,26 +23,16 @@ serve(async (req: Request) => {
   }
 
   try {
-    const url = new URL(req.url);
-    const action = url.searchParams.get("action");
+    const body = await req.json();
+    const { action, userId, code, state } = body;
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Step 1: Generate OAuth URL
     if (action === "get_auth_url") {
-      const authHeader = req.headers.get("Authorization");
-      if (!authHeader) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-      const token = authHeader.replace("Bearer ", "");
-      const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-
-      if (userError || !user) {
-        return new Response(JSON.stringify({ error: "Invalid token" }), {
-          status: 401,
+      if (!userId) {
+        return new Response(JSON.stringify({ error: "User ID is required" }), {
+          status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -53,7 +43,7 @@ serve(async (req: Request) => {
         "https://www.googleapis.com/auth/calendar.events",
       ].join(" ");
 
-      const state = btoa(JSON.stringify({ userId: user.id }));
+      const encodedState = btoa(JSON.stringify({ userId }));
 
       const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
       authUrl.searchParams.set("client_id", GOOGLE_CLIENT_ID);
@@ -62,9 +52,9 @@ serve(async (req: Request) => {
       authUrl.searchParams.set("scope", scopes);
       authUrl.searchParams.set("access_type", "offline");
       authUrl.searchParams.set("prompt", "consent");
-      authUrl.searchParams.set("state", state);
+      authUrl.searchParams.set("state", encodedState);
 
-      console.log("[google-calendar-auth] Generated auth URL for user:", user.id);
+      console.log("[google-calendar-auth] Generated auth URL for user:", userId);
 
       return new Response(JSON.stringify({ url: authUrl.toString() }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -73,8 +63,6 @@ serve(async (req: Request) => {
 
     // Step 2: Exchange code for tokens
     if (action === "exchange_code") {
-      const { code, state } = await req.json();
-
       if (!code || !state) {
         return new Response(JSON.stringify({ error: "Missing code or state" }), {
           status: 400,
@@ -82,10 +70,10 @@ serve(async (req: Request) => {
         });
       }
 
-      let userId: string;
+      let decodedUserId: string;
       try {
         const decoded = JSON.parse(atob(state));
-        userId = decoded.userId;
+        decodedUserId = decoded.userId;
       } catch {
         return new Response(JSON.stringify({ error: "Invalid state" }), {
           status: 400,
@@ -122,12 +110,10 @@ serve(async (req: Request) => {
       const expiresAt = new Date(Date.now() + expires_in * 1000).toISOString();
 
       // Store tokens in database
-      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
       const { error: upsertError } = await supabase
         .from("calendar_integrations")
         .upsert({
-          user_id: userId,
+          user_id: decodedUserId,
           provider: "google",
           enabled: true,
           access_token,
@@ -146,7 +132,7 @@ serve(async (req: Request) => {
         });
       }
 
-      console.log("[google-calendar-auth] Successfully connected Google Calendar for user:", userId);
+      console.log("[google-calendar-auth] Successfully connected Google Calendar for user:", decodedUserId);
 
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -155,21 +141,9 @@ serve(async (req: Request) => {
 
     // Step 3: Disconnect Google Calendar
     if (action === "disconnect") {
-      const authHeader = req.headers.get("Authorization");
-      if (!authHeader) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-      const token = authHeader.replace("Bearer ", "");
-      const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-
-      if (userError || !user) {
-        return new Response(JSON.stringify({ error: "Invalid token" }), {
-          status: 401,
+      if (!userId) {
+        return new Response(JSON.stringify({ error: "User ID is required" }), {
+          status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
@@ -178,17 +152,17 @@ serve(async (req: Request) => {
       await supabase
         .from("calendar_integrations")
         .delete()
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .eq("provider", "google");
 
       // Delete synced Google events
       await supabase
         .from("calendar_events")
         .delete()
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .eq("source", "google");
 
-      console.log("[google-calendar-auth] Disconnected Google Calendar for user:", user.id);
+      console.log("[google-calendar-auth] Disconnected Google Calendar for user:", userId);
 
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
