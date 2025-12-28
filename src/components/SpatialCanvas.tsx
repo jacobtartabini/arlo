@@ -14,37 +14,40 @@ import { cn } from "@/lib/utils";
 
 type GestureEventType = Event & { scale: number };
 
-// Module layout configuration - organic positioning with center of gravity
+// Grid configuration - 48px grid to match dot-grid background
+const GRID_SIZE = 48;
+
+// Module layout configuration - grid-aligned positioning
 interface ModulePosition {
   id: string;
-  x: number; // percentage from center
-  y: number; // percentage from center
-  scale: number; // relative size multiplier
-  rotation: number; // subtle rotation for organic feel
+  gridX: number; // grid units from center
+  gridY: number; // grid units from center
+  widthUnits: number; // width in grid units
+  heightUnits: number; // height in grid units
   zIndex: number;
 }
 
-// Define hierarchical layout - primary modules at center, secondary radiating outward
+// Define hierarchical layout - aligned to grid, no rotation
 const moduleLayout: ModulePosition[] = [
-  // Primary hub - center of gravity
-  { id: "productivity", x: 0, y: 0, scale: 1.15, rotation: 0, zIndex: 10 },
+  // Primary hub - center of gravity (largest)
+  { id: "productivity", gridX: 0, gridY: 0, widthUnits: 6, heightUnits: 5, zIndex: 10 },
   
-  // Inner ring - high priority
-  { id: "finance", x: -18, y: -12, scale: 1.1, rotation: -1, zIndex: 9 },
-  { id: "creation", x: 18, y: -10, scale: 1.05, rotation: 1.5, zIndex: 8 },
-  { id: "notes", x: -16, y: 14, scale: 1.0, rotation: 0.5, zIndex: 7 },
-  { id: "health", x: 16, y: 12, scale: 0.95, rotation: -0.5, zIndex: 6 },
+  // Inner ring - high priority (large)
+  { id: "finance", gridX: -7, gridY: -3, widthUnits: 5, heightUnits: 4, zIndex: 9 },
+  { id: "creation", gridX: 7, gridY: -3, widthUnits: 5, heightUnits: 4, zIndex: 8 },
+  { id: "notes", gridX: -7, gridY: 3, widthUnits: 5, heightUnits: 4, zIndex: 7 },
+  { id: "health", gridX: 7, gridY: 3, widthUnits: 5, heightUnits: 4, zIndex: 6 },
   
-  // Outer ring - secondary modules
-  { id: "travel", x: -32, y: -2, scale: 0.88, rotation: 2, zIndex: 5 },
-  { id: "security", x: 32, y: 0, scale: 0.88, rotation: -1.5, zIndex: 4 },
-  { id: "knowledge", x: -28, y: 22, scale: 0.85, rotation: 1, zIndex: 3 },
-  { id: "files", x: 28, y: -20, scale: 0.85, rotation: -2, zIndex: 3 },
+  // Outer ring - secondary modules (medium)
+  { id: "travel", gridX: -13, gridY: 0, widthUnits: 4, heightUnits: 4, zIndex: 5 },
+  { id: "security", gridX: 13, gridY: 0, widthUnits: 4, heightUnits: 4, zIndex: 4 },
+  { id: "knowledge", gridX: -10, gridY: 7, widthUnits: 4, heightUnits: 3, zIndex: 3 },
+  { id: "files", gridX: 10, gridY: -7, widthUnits: 4, heightUnits: 3, zIndex: 3 },
   
-  // Peripheral - utility modules
-  { id: "automations", x: 0, y: -26, scale: 0.8, rotation: 0, zIndex: 2 },
-  { id: "insights", x: -8, y: 26, scale: 0.82, rotation: 0.5, zIndex: 2 },
-  { id: "habits", x: 30, y: 20, scale: 0.8, rotation: -1, zIndex: 1 },
+  // Peripheral - utility modules (smaller)
+  { id: "automations", gridX: 0, gridY: -7, widthUnits: 4, heightUnits: 3, zIndex: 2 },
+  { id: "insights", gridX: -3, gridY: 7, widthUnits: 4, heightUnits: 3, zIndex: 2 },
+  { id: "habits", gridX: 10, gridY: 7, widthUnits: 4, heightUnits: 3, zIndex: 1 },
 ];
 
 interface SpatialCanvasProps {
@@ -104,6 +107,21 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
   useEffect(() => {
     isDraggingRef.current = isDragging;
   }, [isDragging]);
+
+  // Snap position to grid with soft easing
+  const snapToGrid = useCallback((pos: { x: number; y: number }) => {
+    const snapThreshold = GRID_SIZE * 0.4;
+    const nearestX = Math.round(pos.x / GRID_SIZE) * GRID_SIZE;
+    const nearestY = Math.round(pos.y / GRID_SIZE) * GRID_SIZE;
+    
+    const distX = Math.abs(pos.x - nearestX);
+    const distY = Math.abs(pos.y - nearestY);
+    
+    return {
+      x: distX < snapThreshold ? nearestX : pos.x,
+      y: distY < snapThreshold ? nearestY : pos.y
+    };
+  }, []);
 
   // Recenter handling
   useEffect(() => {
@@ -166,12 +184,12 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
   }, [navigate]);
 
   const applyMomentum = useCallback(() => {
-    const friction = 0.94;
+    const friction = 0.92;
     const currentVelocity = { ...velocityRef.current };
     const currentPosition = { ...positionRef.current };
 
     const animate = () => {
-      if (Math.abs(currentVelocity.x) > 0.3 || Math.abs(currentVelocity.y) > 0.3) {
+      if (Math.abs(currentVelocity.x) > 0.5 || Math.abs(currentVelocity.y) > 0.5) {
         currentVelocity.x *= friction;
         currentVelocity.y *= friction;
         currentPosition.x += currentVelocity.x;
@@ -179,21 +197,31 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
         setPosition({ ...currentPosition });
         positionRef.current = { ...currentPosition };
         requestAnimationFrame(animate);
+      } else {
+        // Soft snap when momentum ends
+        const snapped = snapToGrid(currentPosition);
+        setPosition(snapped);
+        positionRef.current = snapped;
       }
     };
 
     requestAnimationFrame(animate);
-  }, []);
+  }, [snapToGrid]);
 
   const endDrag = useCallback(
     (withMomentum: boolean) => {
       if (withMomentum) {
         applyMomentum();
+      } else {
+        // Soft snap when drag ends without momentum
+        const snapped = snapToGrid(positionRef.current);
+        setPosition(snapped);
+        positionRef.current = snapped;
       }
       setIsDragging(false);
       document.body.style.userSelect = "";
     },
-    [applyMomentum]
+    [applyMomentum, snapToGrid]
   );
 
   const handleWheel = useCallback((e: ReactWheelEvent) => {
@@ -331,13 +359,13 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
     };
   }, [releasePointer]);
 
-  // Calculate base unit for responsive sizing
-  const baseUnit = useMemo(() => {
-    if (typeof window === "undefined") return 280;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    return Math.min(vw, vh) * 0.22;
-  }, []);
+  // Snapped position for grid background alignment
+  const snappedBgPosition = useMemo(() => {
+    return {
+      x: position.x % GRID_SIZE,
+      y: position.y % GRID_SIZE
+    };
+  }, [position]);
 
   return (
     <div
@@ -357,7 +385,7 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
         style={{
           background: `
             radial-gradient(ellipse 80% 60% at 50% 50%, 
-              hsl(var(--primary) / 0.03) 0%, 
+              hsl(var(--primary) / 0.04) 0%, 
               transparent 50%
             ),
             radial-gradient(circle at 50% 50%, 
@@ -368,14 +396,13 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
         }}
       />
 
-      {/* Soft dot grid */}
-      <motion.div
-        animate={{ x: position.x * 0.1, y: position.y * 0.1 }}
-        transition={{ type: "spring", stiffness: 100, damping: 30 }}
-        className="absolute inset-0 pointer-events-none opacity-30"
+      {/* Prominent dot grid - moves with canvas */}
+      <div
+        className="absolute inset-0 pointer-events-none"
         style={{
-          backgroundImage: `radial-gradient(circle, hsl(var(--muted-foreground) / 0.3) 1px, transparent 1px)`,
-          backgroundSize: '48px 48px'
+          backgroundImage: `radial-gradient(circle, hsl(var(--muted-foreground) / 0.25) 1.5px, transparent 1.5px)`,
+          backgroundSize: `${GRID_SIZE}px ${GRID_SIZE}px`,
+          backgroundPosition: `${snappedBgPosition.x}px ${snappedBgPosition.y}px`
         }}
       />
 
@@ -385,7 +412,7 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
           animate={{ x: position.x, y: position.y, scale: userScale }}
           transition={{ type: "spring", stiffness: 200, damping: 25 }}
           className="relative"
-          style={{ width: baseUnit * 8, height: baseUnit * 6 }}
+          style={{ width: GRID_SIZE * 32, height: GRID_SIZE * 20 }}
         >
           <AnimatePresence>
             {moduleLayout.map((layoutPos, index) => {
@@ -397,31 +424,30 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
               const isPrimary = index === 0;
               const isInnerRing = index >= 1 && index <= 4;
               
-              // Calculate pixel position from percentage
-              const pixelX = (layoutPos.x / 100) * baseUnit * 8;
-              const pixelY = (layoutPos.y / 100) * baseUnit * 6;
+              // Calculate pixel position from grid units
+              const pixelX = layoutPos.gridX * GRID_SIZE;
+              const pixelY = layoutPos.gridY * GRID_SIZE;
               
-              // Dynamic sizing based on hierarchy
-              const width = baseUnit * layoutPos.scale * (isPrimary ? 1.3 : isInnerRing ? 1.15 : 1);
-              const height = baseUnit * layoutPos.scale * (isPrimary ? 1.1 : isInnerRing ? 0.95 : 0.85);
+              // Calculate size from grid units
+              const width = layoutPos.widthUnits * GRID_SIZE;
+              const height = layoutPos.heightUnits * GRID_SIZE;
 
               return (
                 <motion.div
                   key={module.id}
-                  initial={{ opacity: 0, scale: 0.8 }}
+                  initial={{ opacity: 0, scale: 0.95 }}
                   animate={{
                     opacity: 1,
-                    scale: isHovered ? 1.05 : 1,
+                    scale: isHovered ? 1.02 : 1,
                     x: pixelX - width / 2,
                     y: pixelY - height / 2,
-                    rotate: layoutPos.rotation,
                   }}
-                  exit={{ opacity: 0, scale: 0.8 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
                   transition={{
-                    delay: index * 0.04,
+                    delay: index * 0.03,
                     type: "spring",
-                    stiffness: 300,
-                    damping: 25,
+                    stiffness: 400,
+                    damping: 30,
                   }}
                   className={cn(
                     "absolute cursor-pointer group",
@@ -436,21 +462,20 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
                   onMouseEnter={() => setHoveredModule(module.id)}
                   onMouseLeave={() => setHoveredModule(null)}
                   onClick={() => !isDragging && handleModuleClick(module)}
-                  whileHover={{ y: -4 }}
                   whileTap={{ scale: 0.98 }}
                 >
                   {/* Module card */}
                   <div
                     className={cn(
-                      "w-full h-full rounded-2xl border backdrop-blur-md",
-                      "flex flex-col p-4 overflow-hidden",
-                      "transition-all duration-300 ease-out",
+                      "w-full h-full rounded-2xl border backdrop-blur-sm",
+                      "flex flex-col p-5 overflow-hidden",
+                      "transition-all duration-200 ease-out",
                       isPrimary
-                        ? "bg-card/90 border-primary/20 shadow-lg shadow-primary/5"
+                        ? "bg-card/95 border-primary/25 shadow-lg shadow-primary/5"
                         : isInnerRing
-                        ? "bg-card/80 border-border/40 shadow-md"
-                        : "bg-card/60 border-border/30 shadow-sm",
-                      isHovered && "border-primary/40 shadow-xl shadow-primary/10"
+                        ? "bg-card/90 border-border/50 shadow-md"
+                        : "bg-card/80 border-border/40 shadow-sm",
+                      isHovered && "border-primary/50 shadow-lg shadow-primary/10"
                     )}
                   >
                     {/* Top accent line */}
@@ -458,6 +483,7 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
                       className="absolute top-0 left-0 right-0 h-[2px]"
                       initial={{ scaleX: 0 }}
                       animate={{ scaleX: isHovered ? 1 : 0 }}
+                      transition={{ duration: 0.2 }}
                       style={{
                         background: `linear-gradient(90deg, transparent, hsl(var(--primary)), transparent)`,
                         transformOrigin: "center"
@@ -466,36 +492,54 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
 
                     {/* Icon */}
                     <div className={cn(
-                      "w-9 h-9 rounded-xl flex items-center justify-center mb-2",
-                      "bg-primary/10 group-hover:bg-primary/15 transition-colors"
+                      "rounded-xl flex items-center justify-center mb-3",
+                      "bg-primary/10 transition-colors duration-200",
+                      isHovered && "bg-primary/15",
+                      isPrimary ? "w-12 h-12" : isInnerRing ? "w-10 h-10" : "w-9 h-9"
                     )}>
-                      <Icon className="w-4 h-4 text-primary" strokeWidth={2} />
+                      <Icon 
+                        className={cn(
+                          "text-primary",
+                          isPrimary ? "w-6 h-6" : isInnerRing ? "w-5 h-5" : "w-4 h-4"
+                        )} 
+                        strokeWidth={2} 
+                      />
                     </div>
 
                     {/* Title */}
                     <h3 className={cn(
-                      "font-semibold text-foreground tracking-tight mb-1",
-                      isPrimary ? "text-base" : isInnerRing ? "text-sm" : "text-xs"
+                      "font-semibold text-foreground tracking-tight mb-1.5",
+                      isPrimary ? "text-lg" : isInnerRing ? "text-base" : "text-sm"
                     )}>
                       {module.title}
                     </h3>
 
-                    {/* Summary - only show on larger modules */}
-                    {(isPrimary || isInnerRing) && (
-                      <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2 flex-1">
-                        {module.summary}
-                      </p>
-                    )}
+                    {/* Summary - show on all modules for larger sizes */}
+                    <p className={cn(
+                      "text-muted-foreground leading-relaxed flex-1",
+                      isPrimary ? "text-sm line-clamp-3" : isInnerRing ? "text-xs line-clamp-2" : "text-[11px] line-clamp-2"
+                    )}>
+                      {module.summary}
+                    </p>
 
-                    {/* Hover arrow indicator */}
+                    {/* Hover indicator */}
                     <motion.div
-                      className="mt-auto pt-2 flex items-center gap-1 text-[10px] text-muted-foreground/60"
-                      initial={{ opacity: 0, x: -4 }}
-                      animate={{ opacity: isHovered ? 1 : 0, x: isHovered ? 0 : -4 }}
+                      className="mt-auto pt-3 flex items-center gap-1.5"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: isHovered ? 1 : 0 }}
+                      transition={{ duration: 0.15 }}
                     >
-                      <span className="font-medium text-primary/80">Open</span>
+                      <span className={cn(
+                        "font-medium text-primary/80",
+                        isPrimary ? "text-sm" : "text-xs"
+                      )}>
+                        Open
+                      </span>
                       <svg 
-                        className="w-3 h-3 text-primary/80"
+                        className={cn(
+                          "text-primary/80",
+                          isPrimary ? "w-4 h-4" : "w-3 h-3"
+                        )}
                         fill="none" 
                         viewBox="0 0 24 24" 
                         stroke="currentColor"
@@ -504,13 +548,14 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
                       </svg>
                     </motion.div>
 
-                    {/* Corner glow on hover */}
+                    {/* Subtle corner glow on hover */}
                     <motion.div
-                      className="absolute bottom-0 right-0 w-20 h-20 pointer-events-none"
+                      className="absolute bottom-0 right-0 w-24 h-24 pointer-events-none rounded-br-2xl"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: isHovered ? 1 : 0 }}
+                      transition={{ duration: 0.2 }}
                       style={{
-                        background: `radial-gradient(circle at bottom right, hsl(var(--primary) / 0.1), transparent 70%)`
+                        background: `radial-gradient(circle at bottom right, hsl(var(--primary) / 0.08), transparent 70%)`
                       }}
                     />
                   </div>
