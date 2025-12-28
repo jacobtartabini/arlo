@@ -16,8 +16,7 @@ const TAILSCALE_USER_UUID = '00000000-0000-0000-0000-000000000001';
 
 // Determine the redirect URI based on environment
 function getRedirectUri(): string {
-  // In production, use the main domain
-  return "https://meet.jacobtartabini.com/settings?google_callback=true";
+  return "https://arlo.jacobtartabini.com/login";
 }
 
 serve(async (req: Request) => {
