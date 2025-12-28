@@ -159,15 +159,31 @@ async function syncGoogleCalendar(integration: CalendarIntegration, supabase: an
         last_synced_at: new Date().toISOString(),
       };
 
-      // Upsert event
-      const { error } = await supabase
+      // Check if event already exists (partial unique index doesn't work with onConflict)
+      const { data: existing } = await supabase
         .from("calendar_events")
-        .upsert(eventData, {
-          onConflict: "user_id,source,external_id",
-        });
+        .select("id")
+        .eq("user_id", integration.user_id)
+        .eq("source", "google")
+        .eq("external_id", event.id)
+        .maybeSingle();
 
-      if (error) {
-        console.error("[calendar-sync] Error upserting event:", error);
+      let upsertError;
+      if (existing) {
+        const { error: updateError } = await supabase
+          .from("calendar_events")
+          .update(eventData)
+          .eq("id", existing.id);
+        upsertError = updateError;
+      } else {
+        const { error: insertError } = await supabase
+          .from("calendar_events")
+          .insert(eventData);
+        upsertError = insertError;
+      }
+
+      if (upsertError) {
+        console.error("[calendar-sync] Error syncing event:", upsertError);
       } else {
         syncedCount++;
       }
@@ -253,14 +269,33 @@ async function syncOutlookIcal(integration: CalendarIntegration, supabase: any):
         last_synced_at: new Date().toISOString(),
       };
 
-      const { error } = await supabase
+      // Check if event already exists (partial unique index doesn't work with onConflict)
+      const { data: existing } = await supabase
         .from("calendar_events")
-        .upsert(eventData, {
-          onConflict: "user_id,source,external_id",
-        });
+        .select("id")
+        .eq("user_id", integration.user_id)
+        .eq("source", "outlook_ics")
+        .eq("external_id", event.uid)
+        .maybeSingle();
+
+      let error;
+      if (existing) {
+        // Update existing event
+        const { error: updateError } = await supabase
+          .from("calendar_events")
+          .update(eventData)
+          .eq("id", existing.id);
+        error = updateError;
+      } else {
+        // Insert new event
+        const { error: insertError } = await supabase
+          .from("calendar_events")
+          .insert(eventData);
+        error = insertError;
+      }
 
       if (error) {
-        console.error(`[calendar-sync] Error upserting event "${event.summary}":`, error);
+        console.error(`[calendar-sync] Error syncing event "${event.summary}":`, error);
         errorCount++;
       } else {
         syncedCount++;

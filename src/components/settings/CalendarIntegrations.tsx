@@ -247,7 +247,7 @@ export default function CalendarIntegrations() {
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Google Calendar */}
-        <div className="p-4 rounded-lg bg-muted/20 border border-border/20">
+        <div className={`p-4 rounded-lg border ${googleIntegration ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/50 dark:border-emerald-800/30' : 'bg-muted/20 border-border/20'}`}>
           <div className="flex items-start justify-between">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center shadow-sm">
@@ -259,25 +259,24 @@ export default function CalendarIntegrations() {
                 </svg>
               </div>
               <div>
-                <h3 className="font-medium text-foreground">Google Calendar</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-medium text-foreground">Google Calendar</h3>
+                  {googleIntegration && (
+                    <Badge variant="outline" className="text-emerald-600 border-emerald-600/30 bg-emerald-100 dark:bg-emerald-950/50">
+                      <Check className="w-3 h-3 mr-1" />
+                      Connected
+                    </Badge>
+                  )}
+                </div>
                 <p className="text-sm text-muted-foreground">
                   2-way sync: Events sync both ways
                 </p>
                 {googleIntegration && (
                   <div className="flex items-center gap-2 mt-2">
-                    {googleIntegration.last_sync_status === 'success' ? (
-                      <Badge variant="outline" className="text-emerald-600 border-emerald-600/30 bg-emerald-50 dark:bg-emerald-950/30">
-                        <Check className="w-3 h-3 mr-1" />
-                        Connected
-                      </Badge>
-                    ) : googleIntegration.last_sync_status === 'error' ? (
+                    {googleIntegration.last_sync_status === 'error' && (
                       <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/10">
                         <AlertCircle className="w-3 h-3 mr-1" />
-                        Error
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-muted-foreground">
-                        Pending sync
+                        Sync Error
                       </Badge>
                     )}
                     <span className="text-xs text-muted-foreground">
@@ -330,7 +329,7 @@ export default function CalendarIntegrations() {
         </div>
 
         {/* Outlook iCal */}
-        <div className="p-4 rounded-lg bg-muted/20 border border-border/20">
+        <div className={`p-4 rounded-lg border ${outlookIntegration ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/50 dark:border-emerald-800/30' : 'bg-muted/20 border-border/20'}`}>
           <div className="flex items-start justify-between">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-lg bg-[#0078d4] flex items-center justify-center shadow-sm">
@@ -339,25 +338,24 @@ export default function CalendarIntegrations() {
                 </svg>
               </div>
               <div>
-                <h3 className="font-medium text-foreground">Outlook Calendar</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-medium text-foreground">Outlook Calendar</h3>
+                  {outlookIntegration && (
+                    <Badge variant="outline" className="text-emerald-600 border-emerald-600/30 bg-emerald-100 dark:bg-emerald-950/50">
+                      <Check className="w-3 h-3 mr-1" />
+                      Connected
+                    </Badge>
+                  )}
+                </div>
                 <p className="text-sm text-muted-foreground">
                   Read-only: Import via iCal feed URL
                 </p>
                 {outlookIntegration && (
                   <div className="flex items-center gap-2 mt-2">
-                    {outlookIntegration.last_sync_status === 'success' ? (
-                      <Badge variant="outline" className="text-emerald-600 border-emerald-600/30 bg-emerald-50 dark:bg-emerald-950/30">
-                        <Check className="w-3 h-3 mr-1" />
-                        Connected
-                      </Badge>
-                    ) : outlookIntegration.last_sync_status === 'error' ? (
+                    {outlookIntegration.last_sync_status === 'error' && (
                       <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/10">
                         <AlertCircle className="w-3 h-3 mr-1" />
-                        Error
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-muted-foreground">
-                        Pending sync
+                        Sync Error
                       </Badge>
                     )}
                     <span className="text-xs text-muted-foreground">
@@ -368,7 +366,7 @@ export default function CalendarIntegrations() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {outlookIntegration ? (
+              {outlookIntegration && (
                 <>
                   <Button
                     variant="ghost"
@@ -391,7 +389,7 @@ export default function CalendarIntegrations() {
                     <X className="w-4 h-4" />
                   </Button>
                 </>
-              ) : null}
+              )}
             </div>
           </div>
 
