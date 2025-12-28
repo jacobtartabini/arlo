@@ -17,6 +17,10 @@ interface DbCalendarEvent {
   location: string | null;
   created_at: string;
   updated_at: string;
+  source?: string;
+  external_id?: string;
+  read_only?: boolean;
+  last_synced_at?: string;
 }
 
 // Transform DB event to app CalendarEvent type
@@ -37,6 +41,10 @@ const dbToEvent = (dbEvent: DbCalendarEvent): CalendarEvent => {
     location: dbEvent.location ?? undefined,
     allDay: dbEvent.is_all_day,
     recurrence: dbEvent.recurrence as CalendarEvent['recurrence'] ?? undefined,
+    source: (dbEvent.source as CalendarEvent['source']) ?? 'arlo',
+    externalId: dbEvent.external_id ?? undefined,
+    readOnly: dbEvent.read_only ?? false,
+    lastSyncedAt: dbEvent.last_synced_at ?? undefined,
   };
 };
 

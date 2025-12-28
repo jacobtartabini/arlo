@@ -489,6 +489,7 @@ const handler = async (req: Request): Promise<Response> => {
         category: "meeting",
         color: "#3b82f6",
         is_all_day: false,
+        source: "arlo", // Mark as Arlo-created
       })
       .select()
       .single();
@@ -502,6 +503,57 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     console.log("[create-booking] Calendar event created:", calendarEvent.id);
+
+    // Push to Google Calendar if user has integration
+    try {
+      const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+      const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+      
+      if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+        // Check if user has Google Calendar integration
+        const { data: googleIntegration } = await supabase
+          .from("calendar_integrations")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("provider", "google")
+          .eq("enabled", true)
+          .single();
+
+        if (googleIntegration) {
+          // Call calendar-sync to push the event to Google
+          const syncResponse = await fetch(`${SUPABASE_URL}/functions/v1/calendar-sync`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            },
+            body: JSON.stringify({
+              action: "push_event",
+              event: {
+                id: calendarEvent.id,
+                user_id: userId,
+                title: eventTitle,
+                description: eventDescription,
+                start_time: startDate.toISOString(),
+                end_time: endDate.toISOString(),
+                is_all_day: false,
+              },
+              eventAction: "create",
+            }),
+          });
+
+          const syncResult = await syncResponse.json();
+          if (syncResult.success) {
+            console.log("[create-booking] Event pushed to Google Calendar");
+          } else {
+            console.warn("[create-booking] Failed to push to Google:", syncResult.error);
+          }
+        }
+      }
+    } catch (syncError) {
+      console.error("[create-booking] Error pushing to Google Calendar:", syncError);
+      // Don't fail the booking if Google sync fails
+    }
 
     await supabase.from("notifications").insert({
       user_id: userId,

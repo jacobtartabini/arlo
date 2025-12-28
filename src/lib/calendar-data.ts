@@ -15,6 +15,8 @@ export type EventRecurrence = {
   end?: RecurrenceEndRule;
 };
 
+export type EventSource = "arlo" | "google" | "outlook_ics";
+
 export interface CalendarEvent {
   id: string;
   title: string;
@@ -29,6 +31,11 @@ export interface CalendarEvent {
   location?: string;
   allDay?: boolean;
   recurrence?: EventRecurrence;
+  // External calendar sync fields
+  source?: EventSource;
+  externalId?: string;
+  readOnly?: boolean;
+  lastSyncedAt?: string;
 }
 
 export type TaskCategory = "personal" | "work" | "school";

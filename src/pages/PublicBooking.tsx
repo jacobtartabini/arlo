@@ -282,16 +282,46 @@ const PublicBookingPage = () => {
       setIsLoadingSlots(true);
       setSelectedTime(null);
 
-      // Simulate API call delay
-      setTimeout(() => {
-        const slots = generateTimeSlots(selectedDate, bookingSlots);
-        // Randomly remove some slots to simulate booked times
-        const availableTimeSlots = slots.filter(() => Math.random() > 0.25);
-        setAvailableSlots(availableTimeSlots);
-        setIsLoadingSlots(false);
-      }, 400);
+      // Fetch real availability from backend
+      const fetchAvailability = async () => {
+        try {
+          const dateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
+          
+          const { data, error } = await supabase.functions.invoke('get-availability', {
+            body: {
+              date: dateStr,
+              handle,
+              timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              durationMinutes: bookingSlots[0]?.duration_minutes || 30,
+            },
+          });
+
+          if (error) {
+            console.error('Error fetching availability:', error);
+            // Fallback to generated slots if API fails
+            const slots = generateTimeSlots(selectedDate, bookingSlots);
+            setAvailableSlots(slots);
+          } else if (data?.slots) {
+            setAvailableSlots(data.slots.map((s: { time: string }) => s.time));
+          } else if (data?.reason) {
+            // Date is unavailable (weekend, holiday, etc.)
+            setAvailableSlots([]);
+          } else {
+            setAvailableSlots([]);
+          }
+        } catch (err) {
+          console.error('Failed to fetch availability:', err);
+          // Fallback to generated slots
+          const slots = generateTimeSlots(selectedDate, bookingSlots);
+          setAvailableSlots(slots);
+        } finally {
+          setIsLoadingSlots(false);
+        }
+      };
+
+      fetchAvailability();
     }
-  }, [selectedDate, bookingSlots]);
+  }, [selectedDate, bookingSlots, handle]);
 
   const handlePrevMonth = () => {
     if (currentMonth === 0) {
