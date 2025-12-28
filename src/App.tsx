@@ -19,6 +19,7 @@ import ConditionalNavBar from "./components/ConditionalNavBar";
 import Chat from "./pages/Chat";
 import CalendarPage from "./pages/Calendar";
 import PublicBookingPage from "./pages/PublicBooking";
+import ManageBookingPage from "./pages/ManageBooking";
 import ArloCommandLauncher from "./components/ArloCommandLauncher";
 import Finance from "./pages/modules/Finance";
 import Productivity from "./pages/modules/Productivity";
@@ -58,6 +59,7 @@ const App = () => (
                   <Route path="/login" element={<TailscaleAuth />} />
                   <Route path="/book/:handle" element={<PublicBookingPage />} />
                   <Route path="/book" element={<PublicBookingPage />} />
+                  <Route path="/booking/:eventId" element={<ManageBookingPage />} />
 
                   {/* Protected routes */}
                   <Route path="/" element={
