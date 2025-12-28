@@ -27,27 +27,27 @@ interface ModulePosition {
   zIndex: number;
 }
 
-// Define hierarchical layout - aligned to grid, no rotation
+// Define hierarchical layout - tighter spacing, aligned to grid
 const moduleLayout: ModulePosition[] = [
   // Primary hub - center of gravity (largest)
   { id: "productivity", gridX: 0, gridY: 0, widthUnits: 6, heightUnits: 5, zIndex: 10 },
   
-  // Inner ring - high priority (large)
-  { id: "finance", gridX: -7, gridY: -3, widthUnits: 5, heightUnits: 4, zIndex: 9 },
-  { id: "creation", gridX: 7, gridY: -3, widthUnits: 5, heightUnits: 4, zIndex: 8 },
-  { id: "notes", gridX: -7, gridY: 3, widthUnits: 5, heightUnits: 4, zIndex: 7 },
-  { id: "health", gridX: 7, gridY: 3, widthUnits: 5, heightUnits: 4, zIndex: 6 },
+  // Inner ring - high priority (large) - moved closer
+  { id: "finance", gridX: -5, gridY: -4, widthUnits: 5, heightUnits: 4, zIndex: 9 },
+  { id: "creation", gridX: 5, gridY: -4, widthUnits: 5, heightUnits: 4, zIndex: 8 },
+  { id: "notes", gridX: -5, gridY: 4, widthUnits: 5, heightUnits: 4, zIndex: 7 },
+  { id: "health", gridX: 5, gridY: 4, widthUnits: 5, heightUnits: 4, zIndex: 6 },
   
-  // Outer ring - secondary modules (medium)
-  { id: "travel", gridX: -13, gridY: 0, widthUnits: 4, heightUnits: 4, zIndex: 5 },
-  { id: "security", gridX: 13, gridY: 0, widthUnits: 4, heightUnits: 4, zIndex: 4 },
-  { id: "knowledge", gridX: -10, gridY: 7, widthUnits: 4, heightUnits: 3, zIndex: 3 },
-  { id: "files", gridX: 10, gridY: -7, widthUnits: 4, heightUnits: 3, zIndex: 3 },
+  // Outer ring - secondary modules (medium) - tighter
+  { id: "travel", gridX: -9, gridY: 0, widthUnits: 4, heightUnits: 4, zIndex: 5 },
+  { id: "security", gridX: 9, gridY: 0, widthUnits: 4, heightUnits: 4, zIndex: 4 },
+  { id: "knowledge", gridX: -7, gridY: 7, widthUnits: 4, heightUnits: 3, zIndex: 3 },
+  { id: "files", gridX: 7, gridY: -7, widthUnits: 4, heightUnits: 3, zIndex: 3 },
   
-  // Peripheral - utility modules (smaller)
-  { id: "automations", gridX: 0, gridY: -7, widthUnits: 4, heightUnits: 3, zIndex: 2 },
-  { id: "insights", gridX: -3, gridY: 7, widthUnits: 4, heightUnits: 3, zIndex: 2 },
-  { id: "habits", gridX: 10, gridY: 7, widthUnits: 4, heightUnits: 3, zIndex: 1 },
+  // Peripheral - utility modules (smaller) - closer
+  { id: "automations", gridX: 0, gridY: -6, widthUnits: 4, heightUnits: 3, zIndex: 2 },
+  { id: "insights", gridX: 0, gridY: 7, widthUnits: 4, heightUnits: 3, zIndex: 2 },
+  { id: "habits", gridX: 7, gridY: 7, widthUnits: 4, heightUnits: 3, zIndex: 1 },
 ];
 
 interface SpatialCanvasProps {
@@ -396,13 +396,20 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
         }}
       />
 
-      {/* Prominent dot grid - moves with canvas */}
-      <div
-        className="absolute inset-0 pointer-events-none"
+      {/* Prominent dot grid - moves in sync with modules */}
+      <motion.div
+        className="absolute pointer-events-none"
+        animate={{ x: position.x, y: position.y, scale: userScale }}
+        transition={{ type: "spring", stiffness: 200, damping: 25 }}
         style={{
+          width: GRID_SIZE * 80,
+          height: GRID_SIZE * 80,
+          left: '50%',
+          top: '50%',
+          marginLeft: -GRID_SIZE * 40,
+          marginTop: -GRID_SIZE * 40,
           backgroundImage: `radial-gradient(circle, hsl(var(--muted-foreground) / 0.25) 1.5px, transparent 1.5px)`,
           backgroundSize: `${GRID_SIZE}px ${GRID_SIZE}px`,
-          backgroundPosition: `${snappedBgPosition.x}px ${snappedBgPosition.y}px`
         }}
       />
 
