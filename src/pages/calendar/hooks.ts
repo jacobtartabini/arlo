@@ -5,6 +5,9 @@ import type { BookingSlot, CalendarEvent } from "@/lib/calendar-data";
 // Fixed UUID for Tailscale-authenticated single-user app
 const TAILSCALE_USER_ID = '00000000-0000-0000-0000-000000000001';
 
+// Auto-sync interval in milliseconds (60 seconds)
+const AUTO_SYNC_INTERVAL = 60 * 1000;
+
 interface DbCalendarEvent {
   id: string;
   user_id: string;
@@ -103,10 +106,38 @@ export function useCalendarDatabase(): [
     setIsAuthenticated(isTailscaleVerified());
   }, []);
 
-  // Fetch events from database
-  const fetchEvents = React.useCallback(async () => {
+  // Sync external calendars (Google, Outlook)
+  const syncExternalCalendars = React.useCallback(async () => {
     try {
-      setIsLoading(true);
+      console.log('[calendar-hooks] Triggering calendar sync...');
+      const { data, error } = await supabase.functions.invoke('calendar-sync', {
+        body: { action: 'sync', userId: TAILSCALE_USER_ID },
+      });
+      
+      if (error) {
+        console.error('[calendar-hooks] Sync error:', error);
+        return false;
+      }
+      
+      if (data?.error) {
+        console.error('[calendar-hooks] Sync returned error:', data.error);
+        return false;
+      }
+      
+      console.log('[calendar-hooks] Sync completed:', data);
+      return true;
+    } catch (error) {
+      console.error('[calendar-hooks] Sync failed:', error);
+      return false;
+    }
+  }, []);
+
+  // Fetch events from database
+  const fetchEvents = React.useCallback(async (silent = false) => {
+    try {
+      if (!silent) {
+        setIsLoading(true);
+      }
 
       // Fetch calendar events
       const { data: eventsData, error: eventsError } = await supabase
@@ -159,13 +190,39 @@ export function useCalendarDatabase(): [
     } catch (error) {
       console.error('Error in fetchEvents:', error);
     } finally {
-      setIsLoading(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
     }
   }, [userId]);
 
+  // Initial fetch
   React.useEffect(() => {
     fetchEvents();
   }, [fetchEvents]);
+
+  // Auto-sync external calendars every 60 seconds
+  React.useEffect(() => {
+    // Initial sync when component mounts
+    const initialSync = async () => {
+      await syncExternalCalendars();
+      // Refetch events after sync
+      await fetchEvents(true);
+    };
+    
+    initialSync();
+
+    // Set up interval for periodic sync
+    const intervalId = setInterval(async () => {
+      const synced = await syncExternalCalendars();
+      if (synced) {
+        // Silently refetch events after successful sync
+        await fetchEvents(true);
+      }
+    }, AUTO_SYNC_INTERVAL);
+
+    return () => clearInterval(intervalId);
+  }, [syncExternalCalendars, fetchEvents]);
 
   // Create wrapped setEvents that syncs to database
   const setEvents: React.Dispatch<React.SetStateAction<CalendarEvent[]>> = React.useCallback(
