@@ -2,6 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, Wifi, Lock } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
+
+// Fixed UUID for Tailscale-authenticated single-user app
+const TAILSCALE_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 interface Message {
   text: string;
@@ -48,8 +53,51 @@ const TailscaleAuth: React.FC = () => {
     return () => clearTimeout(timer);
   }, [currentMessageIndex, showMessages]);
 
+  // Handle Google OAuth callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    const state = params.get('state');
+    
+    if (code && state) {
+      handleGoogleCallback(code, state);
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
+  const handleGoogleCallback = async (code: string, state: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
+        body: { action: 'exchange_code', code, state, userId: TAILSCALE_USER_ID },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast.success('Google Calendar connected successfully');
+      
+      // Trigger initial sync
+      await supabase.functions.invoke('calendar-sync', {
+        body: { action: 'sync_provider', provider: 'google', userId: TAILSCALE_USER_ID },
+      });
+      
+      // Redirect to settings after successful connection
+      navigate('/settings');
+    } catch (error: any) {
+      toast.error('Failed to connect Google Calendar: ' + error.message);
+      navigate('/settings');
+    }
+  };
+
   // Verify Tailscale network connection
   useEffect(() => {
+    // Skip if this is a Google OAuth callback
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('code') && params.get('state')) {
+      return;
+    }
+
     const verifyTailscaleConnection = async () => {
       try {
         // Wait a moment for better UX
