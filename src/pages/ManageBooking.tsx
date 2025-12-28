@@ -283,13 +283,17 @@ const ManageBookingPage = () => {
 
     setIsSubmitting(true);
     try {
+      // Send date as YYYY-MM-DD to avoid timezone issues
+      const dateStr = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(selectedDate.getDate()).padStart(2, '0')}`;
+      
       const { data, error: rescheduleError } = await supabase.functions.invoke("manage-booking", {
         body: {
           eventId,
           action: "reschedule",
           email,
-          newDate: selectedDate.toISOString(),
+          newDate: dateStr,
           newTime: selectedTime,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         },
       });
 
