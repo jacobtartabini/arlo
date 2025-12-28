@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { useArlo } from '@/providers/ArloProvider';
 import { useUserSettings } from '@/providers/UserSettingsProvider';
 import EnhancedThemeToggle from '@/components/EnhancedThemeToggle';
+import CalendarIntegrations from '@/components/settings/CalendarIntegrations';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -123,6 +124,11 @@ export default function Settings() {
               <EnhancedThemeToggle />
             </CardContent>
           </Card>
+        </section>
+
+        {/* Calendar Integrations */}
+        <section>
+          <CalendarIntegrations />
         </section>
 
         {/* AI Assistant Settings */}

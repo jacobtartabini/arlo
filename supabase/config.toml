@@ -14,3 +14,15 @@ verify_jwt = false
 
 [functions.send-reminder]
 verify_jwt = false
+
+[functions.google-calendar-auth]
+verify_jwt = false
+
+[functions.calendar-sync]
+verify_jwt = false
+
+[functions.get-availability]
+verify_jwt = false
+
+[functions.outlook-ical]
+verify_jwt = false
