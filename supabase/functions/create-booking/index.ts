@@ -239,9 +239,8 @@ const handler = async (req: Request): Promise<Response> => {
           `Meeting booked via Arlo Calendar`
         );
         
-        // For manage booking, link to the public booking page with the event ID
-        const siteUrl = Deno.env.get("SITE_URL") || "https://arlo.jacobtartabini.com";
-        const manageBookingUrl = `${siteUrl}/booking/${calendarEvent.id}`;
+        // For manage booking, link to the public booking management page
+        const manageBookingUrl = `https://meet.jacobtartabini.com/booking/${calendarEvent.id}`;
         
         const emailHtml = `
           <!doctype html>
