@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Calendar, 
   RefreshCw, 
@@ -13,12 +14,14 @@ import {
   X, 
   ExternalLink,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  Settings2
 } from 'lucide-react';
 import { toast } from 'sonner';
 
 // Fixed UUID for Tailscale-authenticated single-user app
-// Using a valid UUID since the database column requires UUID type
 const TAILSCALE_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 interface CalendarIntegration {
@@ -31,12 +34,24 @@ interface CalendarIntegration {
   ical_url?: string;
 }
 
+interface GoogleCalendar {
+  id: string;
+  name: string;
+  color: string;
+  primary: boolean;
+  enabled: boolean;
+}
+
 export default function CalendarIntegrations() {
   const [integrations, setIntegrations] = useState<CalendarIntegration[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [outlookUrl, setOutlookUrl] = useState('');
   const [isSyncing, setIsSyncing] = useState<Record<string, boolean>>({});
   const [isConnecting, setIsConnecting] = useState<Record<string, boolean>>({});
+  const [googleCalendars, setGoogleCalendars] = useState<GoogleCalendar[]>([]);
+  const [isLoadingCalendars, setIsLoadingCalendars] = useState(false);
+  const [showCalendarSelector, setShowCalendarSelector] = useState(false);
+  const [isSavingCalendars, setIsSavingCalendars] = useState(false);
 
   useEffect(() => {
     loadIntegrations();
@@ -70,6 +85,88 @@ export default function CalendarIntegrations() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Load Google calendars list
+  const loadGoogleCalendars = async (integrationId: string) => {
+    setIsLoadingCalendars(true);
+    try {
+      // First fetch available calendars from Google
+      const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
+        body: { action: 'list_calendars', userId: TAILSCALE_USER_ID },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      // Get saved selections from database
+      const { data: savedSelections } = await supabase
+        .from('google_calendar_selections')
+        .select('*')
+        .eq('integration_id', integrationId);
+
+      const savedMap = new Map((savedSelections || []).map((s: any) => [s.calendar_id, s.enabled]));
+
+      // Merge available calendars with saved selections
+      const calendars: GoogleCalendar[] = (data?.calendars || []).map((cal: any) => ({
+        id: cal.id,
+        name: cal.name,
+        color: cal.color,
+        primary: cal.primary,
+        // If we have a saved selection, use it; otherwise enable primary by default
+        enabled: savedMap.has(cal.id) ? savedMap.get(cal.id) : cal.primary,
+      }));
+
+      setGoogleCalendars(calendars);
+      setShowCalendarSelector(true);
+    } catch (error: any) {
+      toast.error('Failed to load calendars: ' + error.message);
+    } finally {
+      setIsLoadingCalendars(false);
+    }
+  };
+
+  // Save selected calendars
+  const saveGoogleCalendars = async () => {
+    const googleIntegration = integrations.find(i => i.provider === 'google');
+    if (!googleIntegration) return;
+
+    setIsSavingCalendars(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
+        body: { 
+          action: 'save_calendars', 
+          integrationId: googleIntegration.id,
+          calendars: googleCalendars.filter(c => c.enabled).map(c => ({
+            id: c.id,
+            name: c.name,
+            color: c.color,
+            enabled: true,
+          })),
+        },
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast.success('Calendar selections saved');
+      setShowCalendarSelector(false);
+      
+      // Trigger sync to fetch events from selected calendars
+      await syncCalendar('google');
+    } catch (error: any) {
+      toast.error('Failed to save calendars: ' + error.message);
+    } finally {
+      setIsSavingCalendars(false);
+    }
+  };
+
+  const toggleCalendar = (calendarId: string) => {
+    setGoogleCalendars(prev => 
+      prev.map(cal => 
+        cal.id === calendarId ? { ...cal, enabled: !cal.enabled } : cal
+      )
+    );
   };
 
   const handleGoogleCallback = async (code: string, state: string) => {
@@ -292,6 +389,20 @@ export default function CalendarIntegrations() {
                   <Button
                     variant="outline"
                     size="sm"
+                    onClick={() => loadGoogleCalendars(googleIntegration.id)}
+                    disabled={isLoadingCalendars}
+                    className="gap-1.5"
+                  >
+                    {isLoadingCalendars ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Settings2 className="w-4 h-4" />
+                    )}
+                    Calendars
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => syncCalendar('google')}
                     disabled={isSyncing.google}
                     className="gap-1.5"
@@ -328,6 +439,70 @@ export default function CalendarIntegrations() {
               )}
             </div>
           </div>
+          
+          {/* Calendar Selector */}
+          {showCalendarSelector && googleIntegration && (
+            <div className="mt-4 border-t border-border/20 pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-medium">Select calendars to sync</h4>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowCalendarSelector(false)}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {googleCalendars.map((cal) => (
+                  <div
+                    key={cal.id}
+                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/30 transition-colors"
+                  >
+                    <Checkbox
+                      id={`cal-${cal.id}`}
+                      checked={cal.enabled}
+                      onCheckedChange={() => toggleCalendar(cal.id)}
+                    />
+                    <div
+                      className="w-3 h-3 rounded-full shrink-0"
+                      style={{ backgroundColor: cal.color }}
+                    />
+                    <Label
+                      htmlFor={`cal-${cal.id}`}
+                      className="flex-1 text-sm cursor-pointer"
+                    >
+                      {cal.name}
+                      {cal.primary && (
+                        <span className="text-xs text-muted-foreground ml-2">(Primary)</span>
+                      )}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowCalendarSelector(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={saveGoogleCalendars}
+                  disabled={isSavingCalendars || googleCalendars.filter(c => c.enabled).length === 0}
+                >
+                  {isSavingCalendars ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <Check className="w-4 h-4 mr-2" />
+                  )}
+                  Save & Sync
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Outlook iCal */}

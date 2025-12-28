@@ -83,6 +83,16 @@ async function getValidAccessToken(integration: CalendarIntegration): Promise<st
   return integration.access_token;
 }
 
+interface CalendarSelection {
+  id: string;
+  integration_id: string;
+  calendar_id: string;
+  calendar_name: string;
+  calendar_color: string;
+  enabled: boolean;
+  sync_cursor?: string;
+}
+
 async function syncGoogleCalendar(integration: CalendarIntegration, supabase: any): Promise<{ success: boolean; error?: string; synced?: number }> {
   const accessToken = await getValidAccessToken(integration);
   if (!accessToken) {
@@ -90,123 +100,169 @@ async function syncGoogleCalendar(integration: CalendarIntegration, supabase: an
   }
 
   try {
-    const calendarUrl = new URL("https://www.googleapis.com/calendar/v3/calendars/primary/events");
-    
-    // If we have a sync token, use it for incremental sync (can't use with timeMin/timeMax)
-    if (integration.sync_cursor) {
-      calendarUrl.searchParams.set("syncToken", integration.sync_cursor);
-    } else {
-      // Full sync: fetch events from the last 30 days to next 90 days
-      const timeMin = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      const timeMax = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
-      calendarUrl.searchParams.set("timeMin", timeMin);
-      calendarUrl.searchParams.set("timeMax", timeMax);
-    }
-    
-    calendarUrl.searchParams.set("singleEvents", "true");
-    calendarUrl.searchParams.set("maxResults", "500");
+    // Get selected calendars for this integration
+    const { data: selections } = await supabase
+      .from("google_calendar_selections")
+      .select("*")
+      .eq("integration_id", integration.id)
+      .eq("enabled", true);
 
-    const response = await fetch(calendarUrl.toString(), {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    // If no selections, sync primary calendar only (backward compatible)
+    const calendarsToSync: Array<{ id: string; name: string; color: string; syncCursor?: string; selectionId?: string }> = 
+      selections && selections.length > 0
+        ? selections.map((s: CalendarSelection) => ({
+            id: s.calendar_id,
+            name: s.calendar_name,
+            color: s.calendar_color,
+            syncCursor: s.sync_cursor,
+            selectionId: s.id,
+          }))
+        : [{ id: "primary", name: "Primary", color: "#4285f4", syncCursor: integration.sync_cursor }];
 
-    if (!response.ok) {
-      // If sync token is invalid, do a full sync
-      if (response.status === 410 && integration.sync_cursor) {
-        console.log("[calendar-sync] Sync token expired, doing full sync");
-        await supabase
-          .from("calendar_integrations")
-          .update({ sync_cursor: null })
-          .eq("id", integration.id);
-        return syncGoogleCalendar({ ...integration, sync_cursor: undefined }, supabase);
+    let totalSynced = 0;
+
+    for (const cal of calendarsToSync) {
+      const calendarUrl = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events`);
+      
+      // If we have a sync token, use it for incremental sync (can't use with timeMin/timeMax)
+      if (cal.syncCursor) {
+        calendarUrl.searchParams.set("syncToken", cal.syncCursor);
+      } else {
+        // Full sync: fetch events from the last 30 days to next 90 days
+        const timeMin = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+        const timeMax = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+        calendarUrl.searchParams.set("timeMin", timeMin);
+        calendarUrl.searchParams.set("timeMax", timeMax);
       }
-      const errorText = await response.text();
-      console.error("[calendar-sync] Google API error:", errorText);
-      return { success: false, error: `Google API error: ${response.status}` };
-    }
+      
+      calendarUrl.searchParams.set("singleEvents", "true");
+      calendarUrl.searchParams.set("maxResults", "500");
 
-    const data = await response.json();
-    const events: GoogleEvent[] = data.items || [];
+      const response = await fetch(calendarUrl.toString(), {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
 
-    let syncedCount = 0;
-
-    for (const event of events) {
-      if (event.status === "cancelled") {
-        // Delete cancelled events
-        await supabase
-          .from("calendar_events")
-          .delete()
-          .eq("user_id", integration.user_id)
-          .eq("source", "google")
-          .eq("external_id", event.id);
+      if (!response.ok) {
+        // If sync token is invalid, clear it and retry
+        if (response.status === 410 && cal.syncCursor) {
+          console.log(`[calendar-sync] Sync token expired for calendar ${cal.name}, doing full sync`);
+          if (cal.selectionId) {
+            await supabase
+              .from("google_calendar_selections")
+              .update({ sync_cursor: null })
+              .eq("id", cal.selectionId);
+          } else {
+            await supabase
+              .from("calendar_integrations")
+              .update({ sync_cursor: null })
+              .eq("id", integration.id);
+          }
+          // Retry without sync token
+          continue;
+        }
+        const errorText = await response.text();
+        console.error(`[calendar-sync] Google API error for calendar ${cal.name}:`, errorText);
         continue;
       }
 
-      const isAllDay = !event.start.dateTime;
-      const startTime = event.start.dateTime || `${event.start.date}T00:00:00`;
-      const endTime = event.end.dateTime || `${event.end.date}T23:59:59`;
+      const data = await response.json();
+      const events: GoogleEvent[] = data.items || [];
 
-      const eventData = {
-        user_id: integration.user_id,
-        title: event.summary || "Untitled Event",
-        description: event.description || null,
-        location: event.location || null,
-        start_time: startTime,
-        end_time: endTime,
-        is_all_day: isAllDay,
-        category: "meeting",
-        color: "#4285f4", // Google blue
-        source: "google",
-        external_id: event.id,
-        read_only: false,
-        last_synced_at: new Date().toISOString(),
-      };
+      for (const event of events) {
+        // Use calendar ID + event ID as external_id to avoid conflicts across calendars
+        const externalId = `${cal.id}::${event.id}`;
+        
+        if (event.status === "cancelled") {
+          // Delete cancelled events
+          await supabase
+            .from("calendar_events")
+            .delete()
+            .eq("user_id", integration.user_id)
+            .eq("source", "google")
+            .eq("external_id", externalId);
+          continue;
+        }
 
-      // Check if event already exists (partial unique index doesn't work with onConflict)
-      const { data: existing } = await supabase
-        .from("calendar_events")
-        .select("id")
-        .eq("user_id", integration.user_id)
-        .eq("source", "google")
-        .eq("external_id", event.id)
-        .maybeSingle();
+        const isAllDay = !event.start.dateTime;
+        const startTime = event.start.dateTime || `${event.start.date}T00:00:00`;
+        const endTime = event.end.dateTime || `${event.end.date}T23:59:59`;
 
-      let upsertError;
-      if (existing) {
-        const { error: updateError } = await supabase
+        const eventData = {
+          user_id: integration.user_id,
+          title: event.summary || "Untitled Event",
+          description: event.description || null,
+          location: event.location || null,
+          start_time: startTime,
+          end_time: endTime,
+          is_all_day: isAllDay,
+          category: "meeting",
+          color: cal.color, // Use the calendar's color
+          source: "google",
+          external_id: externalId,
+          read_only: false,
+          last_synced_at: new Date().toISOString(),
+        };
+
+        // Check if event already exists
+        const { data: existing } = await supabase
           .from("calendar_events")
-          .update(eventData)
-          .eq("id", existing.id);
-        upsertError = updateError;
-      } else {
-        const { error: insertError } = await supabase
-          .from("calendar_events")
-          .insert(eventData);
-        upsertError = insertError;
+          .select("id")
+          .eq("user_id", integration.user_id)
+          .eq("source", "google")
+          .eq("external_id", externalId)
+          .maybeSingle();
+
+        let upsertError;
+        if (existing) {
+          const { error: updateError } = await supabase
+            .from("calendar_events")
+            .update(eventData)
+            .eq("id", existing.id);
+          upsertError = updateError;
+        } else {
+          const { error: insertError } = await supabase
+            .from("calendar_events")
+            .insert(eventData);
+          upsertError = insertError;
+        }
+
+        if (upsertError) {
+          console.error("[calendar-sync] Error syncing event:", upsertError);
+        } else {
+          totalSynced++;
+        }
       }
 
-      if (upsertError) {
-        console.error("[calendar-sync] Error syncing event:", upsertError);
-      } else {
-        syncedCount++;
+      // Save sync token for this calendar
+      if (data.nextSyncToken) {
+        if (cal.selectionId) {
+          await supabase
+            .from("google_calendar_selections")
+            .update({ sync_cursor: data.nextSyncToken })
+            .eq("id", cal.selectionId);
+        } else {
+          await supabase
+            .from("calendar_integrations")
+            .update({ sync_cursor: data.nextSyncToken })
+            .eq("id", integration.id);
+        }
       }
+
+      console.log(`[calendar-sync] Synced ${events.length} events from Google calendar "${cal.name}"`);
     }
 
-    // Save sync token for incremental sync
-    if (data.nextSyncToken) {
-      await supabase
-        .from("calendar_integrations")
-        .update({
-          sync_cursor: data.nextSyncToken,
-          last_sync_at: new Date().toISOString(),
-          last_sync_status: "success",
-          last_sync_error: null,
-        })
-        .eq("id", integration.id);
-    }
+    // Update integration sync status
+    await supabase
+      .from("calendar_integrations")
+      .update({
+        last_sync_at: new Date().toISOString(),
+        last_sync_status: "success",
+        last_sync_error: null,
+      })
+      .eq("id", integration.id);
 
-    console.log(`[calendar-sync] Synced ${syncedCount} Google events for user ${integration.user_id}`);
-    return { success: true, synced: syncedCount };
+    console.log(`[calendar-sync] Synced ${totalSynced} total Google events for user ${integration.user_id}`);
+    return { success: true, synced: totalSynced };
   } catch (error) {
     console.error("[calendar-sync] Sync error:", error);
     return { success: false, error: error.message };
