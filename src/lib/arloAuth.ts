@@ -157,9 +157,25 @@ export async function verifyArloAuth(): Promise<boolean> {
 }
 
 /**
- * Create headers for authenticated API calls
+ * Create headers for authenticated API calls.
+ * NOTE: Do NOT include Content-Type when using supabase.functions.invoke()
+ * as it handles JSON serialization automatically. Including Content-Type
+ * bypasses automatic stringification and causes "[object Object]" errors.
  */
 export async function getAuthHeaders(): Promise<HeadersInit | null> {
+  const token = await getArloToken();
+  
+  if (!token) return null;
+  
+  return {
+    'Authorization': `Bearer ${token}`,
+  };
+}
+
+/**
+ * Create headers for raw fetch() calls (includes Content-Type)
+ */
+export async function getAuthHeadersWithContentType(): Promise<HeadersInit | null> {
   const token = await getArloToken();
   
   if (!token) return null;

@@ -1,5 +1,7 @@
 /**
  * Data API client for server-side database operations.
+/**
+ * Data API client for server-side database operations.
  * All database operations go through the edge function which validates JWT tokens.
  */
 
