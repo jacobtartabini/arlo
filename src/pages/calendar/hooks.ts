@@ -1,5 +1,6 @@
 import * as React from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { isAuthenticated as checkIsAuthenticated, getAuthHeaders } from "@/lib/arloAuth";
 import type { BookingSlot, CalendarEvent } from "@/lib/calendar-data";
 
 // Fixed UUID for Tailscale-authenticated single-user app
@@ -78,12 +79,6 @@ const eventToDb = (event: Partial<CalendarEvent>, userId: string) => {
   };
 };
 
-// Check if user is authenticated
-const isUserAuthenticated = (): boolean => {
-  // This hook uses direct Supabase queries, auth is handled by RLS
-  return true;
-};
-
 export function useCalendarDatabase(): [
   CalendarEvent[],
   React.Dispatch<React.SetStateAction<CalendarEvent[]>>,
@@ -101,17 +96,26 @@ export function useCalendarDatabase(): [
   // For this Tailscale-authenticated app, we always use the fixed user ID
   const userId = TAILSCALE_USER_ID;
 
-  // Check Tailscale authentication status
+  // Check authentication status
   React.useEffect(() => {
-    setIsAuthenticated(isTailscaleVerified());
+    setIsAuthenticated(checkIsAuthenticated());
   }, []);
 
   // Sync external calendars (Google, Outlook)
   const syncExternalCalendars = React.useCallback(async () => {
     try {
       console.log('[calendar-hooks] Triggering calendar sync...');
+      
+      // Get auth headers for the request
+      const headers = await getAuthHeaders();
+      if (!headers) {
+        console.log('[calendar-hooks] Not authenticated, skipping sync');
+        return false;
+      }
+
       const { data, error } = await supabase.functions.invoke('calendar-sync', {
         body: { action: 'sync', userId: TAILSCALE_USER_ID },
+        headers: headers as Record<string, string>,
       });
       
       if (error) {

@@ -96,10 +96,10 @@ export function useCalendarPersistence() {
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Check Tailscale auth status
+  // Check auth status
   useEffect(() => {
     const checkAuth = () => {
-      setIsAuthenticated(isTailscaleVerified());
+      setIsAuthenticated(checkIsAuthenticated());
     };
     
     checkAuth();
@@ -109,7 +109,7 @@ export function useCalendarPersistence() {
 
   // Fetch events and bookings
   const fetchData = useCallback(async () => {
-    if (!isTailscaleVerified()) {
+    if (!checkIsAuthenticated()) {
       setEvents([]);
       setBookingSlots([]);
       setIsLoading(false);
@@ -152,7 +152,7 @@ export function useCalendarPersistence() {
 
   // Create event
   const createEvent = useCallback(async (event: Omit<CalendarEvent, 'id'>): Promise<CalendarEvent | null> => {
-    if (!isTailscaleVerified()) {
+    if (!checkIsAuthenticated()) {
       toast.error('Please log in to create events');
       return null;
     }
@@ -179,7 +179,7 @@ export function useCalendarPersistence() {
 
   // Update event
   const updateEvent = useCallback(async (eventId: string, updates: Partial<CalendarEvent>): Promise<boolean> => {
-    if (!isTailscaleVerified()) return false;
+    if (!checkIsAuthenticated()) return false;
 
     const currentEvent = events.find(e => e.id === eventId);
     if (!currentEvent) return false;
@@ -208,7 +208,7 @@ export function useCalendarPersistence() {
 
   // Delete event
   const deleteEvent = useCallback(async (eventId: string): Promise<boolean> => {
-    if (!isTailscaleVerified()) return false;
+    if (!checkIsAuthenticated()) return false;
 
     // Optimistic update
     const previousEvents = events;
@@ -239,7 +239,7 @@ export function useCalendarPersistence() {
     dayOfWeek: number,
     description?: string
   ): Promise<BookingSlot | null> => {
-    if (!isTailscaleVerified()) {
+    if (!checkIsAuthenticated()) {
       toast.error('Please log in to create booking slots');
       return null;
     }
@@ -277,7 +277,7 @@ export function useCalendarPersistence() {
 
   // Update booking slot
   const updateBookingSlot = useCallback(async (slotId: string, updates: Partial<BookingSlot>): Promise<boolean> => {
-    if (!isTailscaleVerified()) return false;
+    if (!checkIsAuthenticated()) return false;
 
     try {
       const { error } = await dataApiHelpers.update('booking_slots', slotId, {
@@ -303,7 +303,7 @@ export function useCalendarPersistence() {
 
   // Delete booking slot
   const deleteBookingSlot = useCallback(async (slotId: string): Promise<boolean> => {
-    if (!isTailscaleVerified()) return false;
+    if (!checkIsAuthenticated()) return false;
 
     const previousSlots = bookingSlots;
     setBookingSlots(prev => prev.filter(s => s.id !== slotId));
