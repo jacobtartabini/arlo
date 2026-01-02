@@ -37,7 +37,7 @@ export default function Notes() {
 
   // Set page title
   useEffect(() => {
-    document.title = "Smart Notes — Arlo";
+    document.title = "Arlo";
   }, []);
 
   // Handle opening a specific note from navigation state
