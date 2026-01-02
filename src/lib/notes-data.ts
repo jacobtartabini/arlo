@@ -22,6 +22,8 @@ export function createNote(overrides: Partial<Note> = {}): Note {
     zoom: 1,
     panX: 0,
     panY: 0,
+    pageMode: "type",
+    backgroundStyle: "lined",
     ...overrides,
   };
 }
