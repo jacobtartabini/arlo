@@ -45,6 +45,10 @@ const ENCRYPTED_FIELDS: Record<string, string[]> = {
 // This is the column name used for filtering by authenticated user
 const USER_KEY_COLUMN = 'user_key'
 
+// Fixed placeholder UUID for legacy user_id column (required for NOT NULL constraint)
+// Since we use service role and filter by user_key, this is just a placeholder
+const PLACEHOLDER_USER_ID = '00000000-0000-0000-0000-000000000001'
+
 // Helper to encrypt sensitive fields before insert/update
 async function encryptSensitiveFields(
   table: string, 
@@ -177,8 +181,13 @@ Deno.serve(async (req) => {
           return errorResponse(req, 'Data is required for insert', 400)
         }
         
-        // Inject user_key automatically (TEXT) and encrypt sensitive fields
-        const insertData = await encryptSensitiveFields(table, { ...data, [USER_KEY_COLUMN]: userKey })
+        // Inject user_key automatically (TEXT) and user_id placeholder (UUID for NOT NULL constraint)
+        // Also encrypt sensitive fields
+        const insertData = await encryptSensitiveFields(table, { 
+          ...data, 
+          [USER_KEY_COLUMN]: userKey,
+          user_id: PLACEHOLDER_USER_ID 
+        })
         
         const insertResult = await supabase
           .from(table)
@@ -236,8 +245,13 @@ Deno.serve(async (req) => {
           return errorResponse(req, 'Data is required for upsert', 400)
         }
         
-        // Inject user_key automatically (TEXT) and encrypt sensitive fields
-        const upsertData = await encryptSensitiveFields(table, { ...data, [USER_KEY_COLUMN]: userKey })
+        // Inject user_key automatically (TEXT) and user_id placeholder (UUID for NOT NULL constraint)
+        // Also encrypt sensitive fields
+        const upsertData = await encryptSensitiveFields(table, { 
+          ...data, 
+          [USER_KEY_COLUMN]: userKey,
+          user_id: PLACEHOLDER_USER_ID 
+        })
         
         const upsertResult = await supabase
           .from(table)
