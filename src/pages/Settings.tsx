@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useArlo } from '@/providers/ArloProvider';
 import { useUserSettings } from '@/providers/UserSettingsProvider';
 import EnhancedThemeToggle from '@/components/EnhancedThemeToggle';
@@ -8,6 +8,19 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { z } from 'zod';
+
+// Validation schema for connection settings
+const connectionSettingsSchema = z.object({
+  apiEndpoint: z.string()
+    .max(255, 'API endpoint must be less than 255 characters')
+    .refine(
+      (val) => !val || val.startsWith('http://') || val.startsWith('https://'),
+      'API endpoint must be a valid HTTP/HTTPS URL'
+    ),
+  apiToken: z.string()
+    .max(500, 'API token must be less than 500 characters'),
+});
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { 
@@ -27,6 +40,7 @@ export default function Settings() {
   const { config, setConfig, status, isConnected } = useArlo();
   const { settings, isLoading, isAuthenticated, updateSettings } = useUserSettings();
   const navigate = useNavigate();
+  const [validationErrors, setValidationErrors] = useState<{ apiEndpoint?: string; apiToken?: string }>({});
 
   // SEO
   useEffect(() => {
@@ -49,6 +63,25 @@ export default function Settings() {
   }, []);
 
   const handleSaveConnectionConfig = async () => {
+    // Validate inputs before saving
+    const result = connectionSettingsSchema.safeParse({
+      apiEndpoint: config.apiEndpoint,
+      apiToken: config.apiToken,
+    });
+
+    if (!result.success) {
+      const errors: { apiEndpoint?: string; apiToken?: string } = {};
+      result.error.errors.forEach((err) => {
+        if (err.path[0] === 'apiEndpoint') errors.apiEndpoint = err.message;
+        if (err.path[0] === 'apiToken') errors.apiToken = err.message;
+      });
+      setValidationErrors(errors);
+      toast.error('Please fix validation errors');
+      return;
+    }
+
+    setValidationErrors({});
+    
     if (isAuthenticated && settings) {
       await updateSettings({
         api_endpoint: config.apiEndpoint,
@@ -202,9 +235,18 @@ export default function Settings() {
                     id="endpoint"
                     placeholder="http://100.64.0.1:8080"
                     value={config.apiEndpoint}
-                    onChange={(e) => setConfig({ ...config, apiEndpoint: e.target.value })}
-                    className="bg-background/60 backdrop-blur-md border-border/30"
+                    onChange={(e) => {
+                      setConfig({ ...config, apiEndpoint: e.target.value });
+                      if (validationErrors.apiEndpoint) {
+                        setValidationErrors(prev => ({ ...prev, apiEndpoint: undefined }));
+                      }
+                    }}
+                    maxLength={255}
+                    className={`bg-background/60 backdrop-blur-md border-border/30 ${validationErrors.apiEndpoint ? 'border-destructive' : ''}`}
                   />
+                  {validationErrors.apiEndpoint && (
+                    <p className="text-xs text-destructive">{validationErrors.apiEndpoint}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="token">API Token</Label>
@@ -213,9 +255,18 @@ export default function Settings() {
                     type="password"
                     placeholder="Enter your API token"
                     value={config.apiToken}
-                    onChange={(e) => setConfig({ ...config, apiToken: e.target.value })}
-                    className="bg-background/60 backdrop-blur-md border-border/30"
+                    onChange={(e) => {
+                      setConfig({ ...config, apiToken: e.target.value });
+                      if (validationErrors.apiToken) {
+                        setValidationErrors(prev => ({ ...prev, apiToken: undefined }));
+                      }
+                    }}
+                    maxLength={500}
+                    className={`bg-background/60 backdrop-blur-md border-border/30 ${validationErrors.apiToken ? 'border-destructive' : ''}`}
                   />
+                  {validationErrors.apiToken && (
+                    <p className="text-xs text-destructive">{validationErrors.apiToken}</p>
+                  )}
                 </div>
               </div>
               
