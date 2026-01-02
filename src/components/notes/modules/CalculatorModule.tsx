@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { X, GripVertical, FlipVertical2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { safeMathEval } from "@/lib/safe-math";
 
 interface CalculatorModuleProps {
   id: string;
@@ -37,25 +38,8 @@ export function CalculatorModule({ id, onClose, onDragResult }: CalculatorModule
 
   const handleEquals = useCallback(() => {
     try {
-      // Replace special operators for eval
-      let evalExpr = expression
-        .replace(/×/g, "*")
-        .replace(/÷/g, "/")
-        .replace(/π/g, Math.PI.toString())
-        .replace(/e(?![0-9])/g, Math.E.toString());
-      
-      // Handle scientific functions
-      evalExpr = evalExpr
-        .replace(/sin\(/g, "Math.sin(")
-        .replace(/cos\(/g, "Math.cos(")
-        .replace(/tan\(/g, "Math.tan(")
-        .replace(/log\(/g, "Math.log10(")
-        .replace(/ln\(/g, "Math.log(")
-        .replace(/sqrt\(/g, "Math.sqrt(")
-        .replace(/\^/g, "**");
-
-      // eslint-disable-next-line no-eval
-      const result = eval(evalExpr);
+      // Use safe math evaluator instead of eval()
+      const result = safeMathEval(expression);
       const resultStr = Number.isFinite(result) ? result.toString() : "Error";
       setDisplay(resultStr);
       setExpression(resultStr);
