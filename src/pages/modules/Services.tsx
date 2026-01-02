@@ -241,10 +241,7 @@ const Services = () => {
 
       const { data, error } = await supabase.functions.invoke('tailscale-api', {
         body: { action },
-        headers: { 
-          ...(authHeaders as Record<string, string>),
-          'x-tailscale-verified': 'true' 
-        },
+        headers: authHeaders as Record<string, string>,
       });
 
       if (error) {
