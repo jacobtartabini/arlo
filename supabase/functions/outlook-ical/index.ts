@@ -4,9 +4,11 @@ import {
   handleCorsOptions, 
   jsonResponse, 
   unauthorizedResponse, 
-  errorResponse 
+  errorResponse,
+  validateOrigin
 } from '../_shared/arloAuth.ts'
 import { encrypt } from '../_shared/encryption.ts'
+import { checkAuthRateLimit, AUTH_RATE_LIMITS, logAuthFailure } from '../_shared/authRateLimit.ts'
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -16,16 +18,31 @@ Deno.serve(async (req: Request) => {
     return handleCorsOptions(req);
   }
 
+  // Validate origin for non-OPTIONS requests
+  const originError = validateOrigin(req);
+  if (originError) {
+    console.log('[outlook-ical] Origin validation failed');
+    return originError;
+  }
+
+  // Apply rate limiting
+  const rateLimitResponse = checkAuthRateLimit(req, AUTH_RATE_LIMITS.calendarSync);
+  if (rateLimitResponse) {
+    console.log('[outlook-ical] Rate limited');
+    return rateLimitResponse;
+  }
+
   try {
     // Verify JWT authentication
     const authResult = await verifyArloJWT(req);
     
     if (!authResult.authenticated) {
       console.log('[outlook-ical] Authentication failed:', authResult.error);
+      logAuthFailure(req, authResult.error || 'JWT verification failed');
       return unauthorizedResponse(req, authResult.error || 'Authentication required');
     }
 
-    // userId is derived from JWT.sub - no ARLO_USER_ID used
+    // userId is derived from JWT.sub - no client-provided user IDs trusted
     const userId = authResult.userId;
     console.log('[outlook-ical] Authenticated user (from JWT.sub):', userId);
 
@@ -36,6 +53,17 @@ Deno.serve(async (req: Request) => {
     if (action === "connect") {
       if (!icalUrl) {
         return errorResponse(req, "iCal URL is required", 400);
+      }
+
+      // Validate the URL format
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(icalUrl);
+        if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+          return errorResponse(req, "Invalid iCal URL protocol", 400);
+        }
+      } catch {
+        return errorResponse(req, "Invalid iCal URL format", 400);
       }
 
       // Validate the URL is accessible
@@ -51,7 +79,7 @@ Deno.serve(async (req: Request) => {
       // Encrypt the iCal URL before storing
       const encryptedIcalUrl = await encrypt(icalUrl);
 
-      // Store the encrypted iCal URL
+      // Store the encrypted iCal URL - scoped to authenticated user
       const { error: upsertError } = await supabase
         .from("calendar_integrations")
         .upsert({
@@ -75,14 +103,14 @@ Deno.serve(async (req: Request) => {
 
     // Disconnect Outlook iCal
     if (action === "disconnect") {
-      // Delete integration record
+      // Delete integration record - scoped to authenticated user
       await supabase
         .from("calendar_integrations")
         .delete()
         .eq("user_id", userId)
         .eq("provider", "outlook_ics");
 
-      // Delete synced Outlook events
+      // Delete synced Outlook events - scoped to authenticated user
       await supabase
         .from("calendar_events")
         .delete()
