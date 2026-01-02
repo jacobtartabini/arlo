@@ -71,7 +71,8 @@ Deno.serve(async (req: Request) => {
         return unauthorizedResponse(req, authResult.error || 'Authentication required');
       }
 
-      const jwtUserId = authResult.userId;
+      // userKey is the TEXT identifier from JWT.sub (email/tailnet identifier)
+      const userKey = authResult.userId;
 
       // Decode and validate the nonce from state
       const { nonce, provider } = decodeOAuthState(state);
@@ -90,11 +91,11 @@ Deno.serve(async (req: Request) => {
       }
 
       // CRITICAL: Verify the JWT user matches the nonce user
-      if (nonceResult.userId !== jwtUserId) {
+      if (nonceResult.userId !== userKey) {
         logOAuthEvent('nonce_invalid', req, { 
           reason: 'user mismatch', 
           nonceUser: nonceResult.userId?.substring(0, 10),
-          jwtUser: jwtUserId?.substring(0, 10)
+          jwtUser: userKey?.substring(0, 10)
         });
         return errorResponse(req, "OAuth session mismatch", 400);
       }
@@ -129,11 +130,11 @@ Deno.serve(async (req: Request) => {
       const encryptedAccessToken = await encrypt(access_token);
       const encryptedRefreshToken = await encrypt(refresh_token);
 
-      // Store encrypted tokens - BOUND TO JWT USER ONLY
+      // Store encrypted tokens - using user_key (TEXT) for the identifier
       const { error: upsertError } = await supabase
         .from("calendar_integrations")
         .upsert({
-          user_id: jwtUserId, // CRITICAL: Use JWT.sub, never client-provided ID
+          user_key: userKey, // TEXT identifier from JWT.sub
           provider: "google",
           enabled: true,
           access_token: encryptedAccessToken,
@@ -141,7 +142,7 @@ Deno.serve(async (req: Request) => {
           token_expires_at: expiresAt,
           last_sync_status: "pending",
         }, {
-          onConflict: "user_id,provider",
+          onConflict: "user_key,provider",
         });
 
       if (upsertError) {
@@ -149,7 +150,7 @@ Deno.serve(async (req: Request) => {
         return errorResponse(req, "Failed to save tokens", 500);
       }
 
-      console.log("[google-calendar-auth] Successfully connected Google Calendar for user (from JWT):", jwtUserId);
+      console.log("[google-calendar-auth] Successfully connected Google Calendar for user_key:", userKey);
       return jsonResponse(req, { success: true });
     }
 
@@ -162,9 +163,9 @@ Deno.serve(async (req: Request) => {
       return unauthorizedResponse(req, authResult.error || 'Authentication required');
     }
 
-    // userId is derived from JWT.sub - no ARLO_USER_ID used
-    const userId = authResult.userId;
-    console.log('[google-calendar-auth] Authenticated user (from JWT.sub):', userId);
+    // userKey is derived from JWT.sub - TEXT identifier (email/tailnet)
+    const userKey = authResult.userId;
+    console.log('[google-calendar-auth] Authenticated user_key (from JWT.sub):', userKey);
 
     // Step 1: Generate OAuth URL with secure nonce
     if (action === "get_auth_url") {
@@ -179,7 +180,7 @@ Deno.serve(async (req: Request) => {
       ].join(" ");
 
       // Create a secure nonce bound to this user
-      const nonce = await createOAuthNonce(userId, 'google');
+      const nonce = await createOAuthNonce(userKey, 'google');
       
       // Encode state with nonce (not user ID)
       const encodedState = encodeOAuthState(nonce, 'google');
@@ -193,21 +194,22 @@ Deno.serve(async (req: Request) => {
       authUrl.searchParams.set("prompt", "consent");
       authUrl.searchParams.set("state", encodedState);
 
-      console.log("[google-calendar-auth] Generated auth URL with nonce for user:", userId);
+      console.log("[google-calendar-auth] Generated auth URL with nonce for user_key:", userKey);
       return jsonResponse(req, { url: authUrl.toString() });
     }
 
     // Step 3: Fetch calendar list
     if (action === "list_calendars") {
-      // Get integration to access token
+      // Get integration using user_key (TEXT column)
       const { data: integration, error: fetchError } = await supabase
         .from("calendar_integrations")
         .select("*")
-        .eq("user_id", userId)
+        .eq("user_key", userKey)
         .eq("provider", "google")
         .single();
 
       if (fetchError || !integration) {
+        console.log("[google-calendar-auth] No integration found for user_key:", userKey, "Error:", fetchError);
         return errorResponse(req, "Google Calendar not connected", 400);
       }
 
@@ -265,8 +267,8 @@ Deno.serve(async (req: Request) => {
         accessRole: cal.accessRole,
       }));
 
-      console.log("[google-calendar-auth] Fetched", calendarsList.length, "calendars for user:", userId);
-      return jsonResponse(req, { calendars: calendarsList });
+      console.log("[google-calendar-auth] Fetched", calendarsList.length, "calendars for user_key:", userKey);
+      return jsonResponse(req, { calendars: calendarsList, integrationId: integration.id });
     }
 
     // Step 4: Save selected calendars
@@ -275,12 +277,12 @@ Deno.serve(async (req: Request) => {
         return errorResponse(req, "Missing required fields", 400);
       }
 
-      // Verify the integration belongs to this user
+      // Verify the integration belongs to this user using user_key
       const { data: integration } = await supabase
         .from("calendar_integrations")
         .select("id")
         .eq("id", integrationId)
-        .eq("user_id", userId)
+        .eq("user_key", userKey)
         .single();
 
       if (!integration) {
@@ -325,21 +327,21 @@ Deno.serve(async (req: Request) => {
 
     // Step 5: Disconnect Google Calendar
     if (action === "disconnect") {
-      // Delete integration record (cascade will delete calendar selections)
+      // Delete integration record using user_key (cascade will delete calendar selections)
       await supabase
         .from("calendar_integrations")
         .delete()
-        .eq("user_id", userId)
+        .eq("user_key", userKey)
         .eq("provider", "google");
 
-      // Delete synced Google events
+      // Delete synced Google events using user_key
       await supabase
         .from("calendar_events")
         .delete()
-        .eq("user_id", userId)
+        .eq("user_key", userKey)
         .eq("source", "google");
 
-      console.log("[google-calendar-auth] Disconnected Google Calendar for user:", userId);
+      console.log("[google-calendar-auth] Disconnected Google Calendar for user_key:", userKey);
       return jsonResponse(req, { success: true });
     }
 

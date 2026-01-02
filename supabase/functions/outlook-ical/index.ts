@@ -42,9 +42,9 @@ Deno.serve(async (req: Request) => {
       return unauthorizedResponse(req, authResult.error || 'Authentication required');
     }
 
-    // userId is derived from JWT.sub - no client-provided user IDs trusted
-    const userId = authResult.userId;
-    console.log('[outlook-ical] Authenticated user (from JWT.sub):', userId);
+    // userKey is derived from JWT.sub - TEXT identifier (email/tailnet)
+    const userKey = authResult.userId;
+    console.log('[outlook-ical] Authenticated user_key (from JWT.sub):', userKey);
 
     const { action, icalUrl } = await req.json();
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -79,17 +79,17 @@ Deno.serve(async (req: Request) => {
       // Encrypt the iCal URL before storing
       const encryptedIcalUrl = await encrypt(icalUrl);
 
-      // Store the encrypted iCal URL - scoped to authenticated user
+      // Store the encrypted iCal URL using user_key (TEXT column)
       const { error: upsertError } = await supabase
         .from("calendar_integrations")
         .upsert({
-          user_id: userId,
+          user_key: userKey, // TEXT identifier from JWT.sub
           provider: "outlook_ics",
           enabled: true,
           ical_url: encryptedIcalUrl,
           last_sync_status: "pending",
         }, {
-          onConflict: "user_id,provider",
+          onConflict: "user_key,provider",
         });
 
       if (upsertError) {
@@ -97,27 +97,27 @@ Deno.serve(async (req: Request) => {
         return errorResponse(req, "Failed to save configuration", 500);
       }
 
-      console.log("[outlook-ical] iCal URL configured for user:", userId);
+      console.log("[outlook-ical] iCal URL configured for user_key:", userKey);
       return jsonResponse(req, { success: true });
     }
 
-    // Disconnect Outlook iCal
+    // Disconnect Outlook iCal using user_key
     if (action === "disconnect") {
-      // Delete integration record - scoped to authenticated user
+      // Delete integration record using user_key
       await supabase
         .from("calendar_integrations")
         .delete()
-        .eq("user_id", userId)
+        .eq("user_key", userKey)
         .eq("provider", "outlook_ics");
 
-      // Delete synced Outlook events - scoped to authenticated user
+      // Delete synced Outlook events using user_key
       await supabase
         .from("calendar_events")
         .delete()
-        .eq("user_id", userId)
+        .eq("user_key", userKey)
         .eq("source", "outlook_ics");
 
-      console.log("[outlook-ical] Disconnected Outlook iCal for user:", userId);
+      console.log("[outlook-ical] Disconnected Outlook iCal for user_key:", userKey);
       return jsonResponse(req, { success: true });
     }
 
