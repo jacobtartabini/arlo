@@ -1,54 +1,49 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { 
+  verifyArloJWT, 
+  handleCorsOptions, 
+  jsonResponse, 
+  unauthorizedResponse, 
+  errorResponse 
+} from '../_shared/arloAuth.ts'
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-serve(async (req: Request) => {
+Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return handleCorsOptions(req);
   }
 
   try {
-    const { action, icalUrl, userId } = await req.json();
-
-    if (!userId) {
-      return new Response(JSON.stringify({ error: "User ID is required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // Verify JWT authentication
+    const authResult = await verifyArloJWT(req);
+    
+    if (!authResult.authenticated) {
+      console.log('[outlook-ical] Authentication failed:', authResult.error);
+      return unauthorizedResponse(req, authResult.error || 'Authentication required');
     }
 
+    const userId = authResult.userId;
+    console.log('[outlook-ical] Authenticated user:', authResult.claims?.sub, 'userId:', userId);
+
+    const { action, icalUrl } = await req.json();
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Add or update iCal URL
     if (action === "connect") {
       if (!icalUrl) {
-        return new Response(JSON.stringify({ error: "iCal URL is required" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return errorResponse(req, "iCal URL is required", 400);
       }
 
       // Validate the URL is accessible
       try {
         const testResponse = await fetch(icalUrl, { method: "HEAD" });
         if (!testResponse.ok) {
-          return new Response(JSON.stringify({ error: "Unable to access iCal URL. Please check the URL is correct." }), {
-            status: 400,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return errorResponse(req, "Unable to access iCal URL. Please check the URL is correct.", 400);
         }
       } catch (fetchError) {
-        return new Response(JSON.stringify({ error: "Unable to access iCal URL. Please check the URL is correct." }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return errorResponse(req, "Unable to access iCal URL. Please check the URL is correct.", 400);
       }
 
       // Store the iCal URL
@@ -66,17 +61,11 @@ serve(async (req: Request) => {
 
       if (upsertError) {
         console.error("[outlook-ical] Database error:", upsertError);
-        return new Response(JSON.stringify({ error: "Failed to save configuration" }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return errorResponse(req, "Failed to save configuration", 500);
       }
 
       console.log("[outlook-ical] iCal URL configured for user:", userId);
-
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse(req, { success: true });
     }
 
     // Disconnect Outlook iCal
@@ -96,21 +85,12 @@ serve(async (req: Request) => {
         .eq("source", "outlook_ics");
 
       console.log("[outlook-ical] Disconnected Outlook iCal for user:", userId);
-
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse(req, { success: true });
     }
 
-    return new Response(JSON.stringify({ error: "Invalid action" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return errorResponse(req, "Invalid action", 400);
   } catch (error) {
     console.error("[outlook-ical] Error:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return errorResponse(req, error instanceof Error ? error.message : "Unknown error", 500);
   }
 });

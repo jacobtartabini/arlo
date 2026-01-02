@@ -1,75 +1,39 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { 
+  verifyArloJWT, 
+  handleCorsOptions, 
+  getCorsHeaders,
+  jsonResponse, 
+  unauthorizedResponse, 
+  errorResponse 
+} from '../_shared/arloAuth.ts'
 
 const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID")!;
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-// Fixed UUID for Tailscale auth (must match frontend)
-const TAILSCALE_USER_UUID = '00000000-0000-0000-0000-000000000001';
-
 // Determine the redirect URI based on environment
 function getRedirectUri(): string {
   return "https://arlo.jacobtartabini.com/login";
 }
 
-serve(async (req: Request) => {
+Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return handleCorsOptions(req);
   }
 
   try {
     const body = await req.json();
-    const { action, userId, code, state } = body;
+    const { action, code, state, calendars, integrationId } = body;
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Step 1: Generate OAuth URL
-    if (action === "get_auth_url") {
-      if (!userId) {
-        return new Response(JSON.stringify({ error: "User ID is required" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const redirectUri = getRedirectUri();
-      const scopes = [
-        "https://www.googleapis.com/auth/calendar.readonly",
-        "https://www.googleapis.com/auth/calendar.events",
-      ].join(" ");
-
-      const encodedState = btoa(JSON.stringify({ userId }));
-
-      const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
-      authUrl.searchParams.set("client_id", GOOGLE_CLIENT_ID);
-      authUrl.searchParams.set("redirect_uri", redirectUri);
-      authUrl.searchParams.set("response_type", "code");
-      authUrl.searchParams.set("scope", scopes);
-      authUrl.searchParams.set("access_type", "offline");
-      authUrl.searchParams.set("prompt", "consent");
-      authUrl.searchParams.set("state", encodedState);
-
-      console.log("[google-calendar-auth] Generated auth URL for user:", userId);
-
-      return new Response(JSON.stringify({ url: authUrl.toString() }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Step 2: Exchange code for tokens
+    // Step 2: Exchange code for tokens - This is called from the OAuth callback
+    // It needs special handling because the user might not have a JWT yet
     if (action === "exchange_code") {
       if (!code || !state) {
-        return new Response(JSON.stringify({ error: "Missing code or state" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return errorResponse(req, "Missing code or state", 400);
       }
 
       let decodedUserId: string;
@@ -77,10 +41,7 @@ serve(async (req: Request) => {
         const decoded = JSON.parse(atob(state));
         decodedUserId = decoded.userId;
       } catch {
-        return new Response(JSON.stringify({ error: "Invalid state" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return errorResponse(req, "Invalid state", 400);
       }
 
       const redirectUri = getRedirectUri();
@@ -102,10 +63,7 @@ serve(async (req: Request) => {
 
       if (tokenData.error) {
         console.error("[google-calendar-auth] Token exchange error:", tokenData);
-        return new Response(JSON.stringify({ error: tokenData.error_description || tokenData.error }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return errorResponse(req, tokenData.error_description || tokenData.error, 400);
       }
 
       const { access_token, refresh_token, expires_in } = tokenData;
@@ -128,28 +86,49 @@ serve(async (req: Request) => {
 
       if (upsertError) {
         console.error("[google-calendar-auth] Database error:", upsertError);
-        return new Response(JSON.stringify({ error: "Failed to save tokens" }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return errorResponse(req, "Failed to save tokens", 500);
       }
 
       console.log("[google-calendar-auth] Successfully connected Google Calendar for user:", decodedUserId);
+      return jsonResponse(req, { success: true });
+    }
 
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // All other actions require JWT authentication
+    const authResult = await verifyArloJWT(req);
+    
+    if (!authResult.authenticated) {
+      console.log('[google-calendar-auth] Authentication failed:', authResult.error);
+      return unauthorizedResponse(req, authResult.error || 'Authentication required');
+    }
+
+    const userId = authResult.userId;
+    console.log('[google-calendar-auth] Authenticated user:', authResult.claims?.sub, 'userId:', userId);
+
+    // Step 1: Generate OAuth URL
+    if (action === "get_auth_url") {
+      const redirectUri = getRedirectUri();
+      const scopes = [
+        "https://www.googleapis.com/auth/calendar.readonly",
+        "https://www.googleapis.com/auth/calendar.events",
+      ].join(" ");
+
+      const encodedState = btoa(JSON.stringify({ userId }));
+
+      const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+      authUrl.searchParams.set("client_id", GOOGLE_CLIENT_ID);
+      authUrl.searchParams.set("redirect_uri", redirectUri);
+      authUrl.searchParams.set("response_type", "code");
+      authUrl.searchParams.set("scope", scopes);
+      authUrl.searchParams.set("access_type", "offline");
+      authUrl.searchParams.set("prompt", "consent");
+      authUrl.searchParams.set("state", encodedState);
+
+      console.log("[google-calendar-auth] Generated auth URL for user:", userId);
+      return jsonResponse(req, { url: authUrl.toString() });
     }
 
     // Step 3: Fetch calendar list
     if (action === "list_calendars") {
-      if (!userId) {
-        return new Response(JSON.stringify({ error: "User ID is required" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
       // Get integration to access token
       const { data: integration, error: fetchError } = await supabase
         .from("calendar_integrations")
@@ -159,10 +138,7 @@ serve(async (req: Request) => {
         .single();
 
       if (fetchError || !integration) {
-        return new Response(JSON.stringify({ error: "Google Calendar not connected" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return errorResponse(req, "Google Calendar not connected", 400);
       }
 
       // Refresh token if needed
@@ -201,14 +177,11 @@ serve(async (req: Request) => {
       if (!calendarListResponse.ok) {
         const errorText = await calendarListResponse.text();
         console.error("[google-calendar-auth] Failed to fetch calendars:", errorText);
-        return new Response(JSON.stringify({ error: "Failed to fetch calendars" }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return errorResponse(req, "Failed to fetch calendars", 500);
       }
 
       const calendarListData = await calendarListResponse.json();
-      const calendars = (calendarListData.items || []).map((cal: any) => ({
+      const calendarsList = (calendarListData.items || []).map((cal: any) => ({
         id: cal.id,
         name: cal.summary || cal.id,
         color: cal.backgroundColor || "#4285f4",
@@ -216,22 +189,14 @@ serve(async (req: Request) => {
         accessRole: cal.accessRole,
       }));
 
-      console.log("[google-calendar-auth] Fetched", calendars.length, "calendars for user:", userId);
-
-      return new Response(JSON.stringify({ calendars }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      console.log("[google-calendar-auth] Fetched", calendarsList.length, "calendars for user:", userId);
+      return jsonResponse(req, { calendars: calendarsList });
     }
 
     // Step 4: Save selected calendars
     if (action === "save_calendars") {
-      const { calendars: selectedCalendars, integrationId } = body;
-      
-      if (!integrationId || !selectedCalendars) {
-        return new Response(JSON.stringify({ error: "Missing required fields" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      if (!integrationId || !calendars) {
+        return errorResponse(req, "Missing required fields", 400);
       }
 
       // Delete existing selections for this integration
@@ -241,7 +206,7 @@ serve(async (req: Request) => {
         .eq("integration_id", integrationId);
 
       // Insert new selections
-      const selections = selectedCalendars.map((cal: any) => ({
+      const selections = calendars.map((cal: any) => ({
         integration_id: integrationId,
         calendar_id: cal.id,
         calendar_name: cal.name,
@@ -256,10 +221,7 @@ serve(async (req: Request) => {
 
         if (insertError) {
           console.error("[google-calendar-auth] Failed to save calendars:", insertError);
-          return new Response(JSON.stringify({ error: "Failed to save calendars" }), {
-            status: 500,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+          return errorResponse(req, "Failed to save calendars", 500);
         }
       }
 
@@ -270,21 +232,11 @@ serve(async (req: Request) => {
         .eq("id", integrationId);
 
       console.log("[google-calendar-auth] Saved", selections.length, "calendar selections");
-
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse(req, { success: true });
     }
 
     // Step 5: Disconnect Google Calendar
     if (action === "disconnect") {
-      if (!userId) {
-        return new Response(JSON.stringify({ error: "User ID is required" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
       // Delete integration record (cascade will delete calendar selections)
       await supabase
         .from("calendar_integrations")
@@ -300,21 +252,12 @@ serve(async (req: Request) => {
         .eq("source", "google");
 
       console.log("[google-calendar-auth] Disconnected Google Calendar for user:", userId);
-
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse(req, { success: true });
     }
 
-    return new Response(JSON.stringify({ error: "Invalid action" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return errorResponse(req, "Invalid action", 400);
   } catch (error) {
     console.error("[google-calendar-auth] Error:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return errorResponse(req, error instanceof Error ? error.message : "Unknown error", 500);
   }
 });

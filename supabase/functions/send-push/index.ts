@@ -1,18 +1,29 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { 
+  verifyArloJWT, 
+  handleCorsOptions, 
+  jsonResponse, 
+  unauthorizedResponse, 
+  errorResponse 
+} from '../_shared/arloAuth.ts'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
-
-serve(async (req) => {
-  // Handle CORS preflight
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return handleCorsOptions(req);
   }
 
   try {
+    // Verify JWT authentication
+    const authResult = await verifyArloJWT(req);
+    
+    if (!authResult.authenticated) {
+      console.log('[send-push] Authentication failed:', authResult.error);
+      return unauthorizedResponse(req, authResult.error || 'Authentication required');
+    }
+
+    const userId = authResult.userId;
+    console.log('[send-push] Authenticated user:', authResult.claims?.sub, 'userId:', userId);
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY');
@@ -24,14 +35,14 @@ serve(async (req) => {
 
     // Handle subscription storage
     if (action === 'subscribe') {
-      const { user_id, platform, endpoint, p256dh, auth, user_agent } = body;
+      const { platform, endpoint, p256dh, auth, user_agent } = body;
       
-      console.log('Saving push subscription for user:', user_id);
+      console.log('Saving push subscription for user:', userId);
       
       const { error } = await supabase
         .from('push_subscriptions')
         .upsert({
-          user_id,
+          user_id: userId,
           platform,
           endpoint,
           p256dh,
@@ -44,42 +55,26 @@ serve(async (req) => {
 
       if (error) {
         console.error('Error saving subscription:', error);
-        return new Response(
-          JSON.stringify({ error: 'Failed to save subscription' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return errorResponse(req, 'Failed to save subscription', 500);
       }
 
-      return new Response(
-        JSON.stringify({ success: true }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse(req, { success: true });
     }
 
     // Handle sending push notification
-    const { user_id, notification_id, type, title, body: notifBody, data } = body;
-
-    if (!user_id) {
-      return new Response(
-        JSON.stringify({ error: 'user_id is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    const { notification_id, type, title, body: notifBody, data } = body;
 
     if (!title) {
-      return new Response(
-        JSON.stringify({ error: 'title is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return errorResponse(req, 'title is required', 400);
     }
 
-    console.log('Processing notification for user:', user_id);
+    console.log('Processing notification for user:', userId);
 
     // Check user preferences
     const { data: prefs } = await supabase
       .from('notification_preferences')
       .select('*')
-      .eq('user_id', user_id)
+      .eq('user_id', userId)
       .single();
 
     const pushEnabled = prefs?.push_enabled ?? false;
@@ -91,7 +86,7 @@ serve(async (req) => {
     const { data: notification, error: notifError } = await supabase
       .from('notifications')
       .insert({
-        user_id,
+        user_id: userId,
         title,
         content: notifBody,
         type: notificationType,
@@ -109,34 +104,28 @@ serve(async (req) => {
     // If push is not enabled or VAPID keys not set, just return the notification
     if (!pushEnabled || !typeEnabled || !vapidPublicKey || !vapidPrivateKey) {
       console.log('Push disabled or not configured:', { pushEnabled, typeEnabled, hasVapid: !!vapidPublicKey });
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          pushSent: false, 
-          reason: !vapidPublicKey ? 'VAPID not configured' : 'Push disabled by user',
-          notification_id: notification?.id 
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse(req, { 
+        success: true, 
+        pushSent: false, 
+        reason: !vapidPublicKey ? 'VAPID not configured' : 'Push disabled by user',
+        notification_id: notification?.id 
+      });
     }
 
     // Get all push subscriptions for this user
     const { data: subscriptions, error: subError } = await supabase
       .from('push_subscriptions')
       .select('*')
-      .eq('user_id', user_id);
+      .eq('user_id', userId);
 
     if (subError || !subscriptions || subscriptions.length === 0) {
       console.log('No push subscriptions found for user');
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          pushSent: false, 
-          reason: 'No subscriptions',
-          notification_id: notification?.id 
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return jsonResponse(req, { 
+        success: true, 
+        pushSent: false, 
+        reason: 'No subscriptions',
+        notification_id: notification?.id 
+      });
     }
 
     console.log(`Found ${subscriptions.length} subscription(s) for user`);
@@ -144,22 +133,16 @@ serve(async (req) => {
     // Note: Full Web Push with VAPID requires crypto operations not shown here
     // For production, use a library like web-push or implement full VAPID signing
 
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        pushSent: false,
-        reason: 'Push delivery requires full VAPID implementation',
-        subscriptionCount: subscriptions.length,
-        notification_id: notification?.id
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return jsonResponse(req, { 
+      success: true, 
+      pushSent: false,
+      reason: 'Push delivery requires full VAPID implementation',
+      subscriptionCount: subscriptions.length,
+      notification_id: notification?.id
+    });
 
   } catch (error) {
     console.error('Send push error:', error);
-    return new Response(
-      JSON.stringify({ error: String(error) }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return errorResponse(req, String(error), 500);
   }
 });
