@@ -81,9 +81,10 @@ export default function CalendarIntegrations() {
 
   const loadIntegrations = async () => {
     try {
+      // Only select non-sensitive columns - tokens are encrypted and should never be sent to client
       const { data, error } = await supabase
         .from('calendar_integrations')
-        .select('*')
+        .select('id, user_id, provider, enabled, token_expires_at, last_sync_at, last_sync_status, last_sync_error, created_at, updated_at')
         .eq('user_id', TAILSCALE_USER_ID);
 
       if (error) throw error;
