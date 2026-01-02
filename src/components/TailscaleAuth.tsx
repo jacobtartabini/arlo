@@ -4,10 +4,9 @@ import { Shield, Wifi, Lock } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { getArloToken } from '@/lib/arloAuth';
+import { getArloToken, getAuthHeaders } from '@/lib/arloAuth';
 
-// Fixed UUID for Tailscale-authenticated single-user app
-const TAILSCALE_USER_ID = '00000000-0000-0000-0000-000000000001';
+// NO MORE HARD-CODED USER ID - identity comes from JWT
 
 interface Message {
   text: string;
@@ -17,7 +16,7 @@ interface Message {
 
 const TailscaleAuth: React.FC = () => {
   const navigate = useNavigate();
-  const { verifyAuth } = useAuth();
+  const { verifyAuth, identity } = useAuth();
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
   const [isVerifying, setIsVerifying] = useState(true);
   const [networkDenied, setNetworkDenied] = useState(false);
@@ -69,12 +68,18 @@ const TailscaleAuth: React.FC = () => {
 
   const handleGoogleCallback = async (code: string, state: string) => {
     try {
-      // Get auth token for the API call
-      const token = await getArloToken();
+      // Get auth headers for the API call - identity comes from JWT
+      const headers = await getAuthHeaders();
       
+      if (!headers) {
+        throw new Error('Authentication required for OAuth callback');
+      }
+      
+      // Call exchange_code with JWT auth - no userId in body
+      // Server derives user from JWT.sub and validates nonce
       const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
-        body: { action: 'exchange_code', code, state, userId: TAILSCALE_USER_ID },
-        headers: token ? { 'Authorization': `Bearer ${token}` } : undefined,
+        body: { action: 'exchange_code', code, state },
+        headers: headers as Record<string, string>,
       });
 
       if (error) throw error;
@@ -82,10 +87,10 @@ const TailscaleAuth: React.FC = () => {
 
       toast.success('Google Calendar connected successfully');
       
-      // Trigger initial sync
+      // Trigger initial sync - server uses JWT for user identification
       await supabase.functions.invoke('calendar-sync', {
-        body: { action: 'sync_provider', provider: 'google', userId: TAILSCALE_USER_ID },
-        headers: token ? { 'Authorization': `Bearer ${token}` } : undefined,
+        body: { action: 'sync_provider', provider: 'google' },
+        headers: headers as Record<string, string>,
       });
       
       // Redirect to settings after successful connection

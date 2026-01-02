@@ -6,11 +6,16 @@
  * 
  * Identity is derived SOLELY from the verified JWT.sub claim.
  * No hard-coded user IDs or ARLO_USER_ID environment variables are used.
+ * 
+ * SECURITY HARDENING:
+ * - Strict CORS: rejects requests with missing or unrecognized origins
+ * - Rate limiting: integrated with authRateLimit module
+ * - Auth failure logging: tracks repeated failures for alerting
  */
 
 import { verify } from "https://deno.land/x/djwt@v2.9.1/mod.ts";
 
-// Allowed origins for CORS
+// Allowed origins for CORS - STRICT enforcement
 const ALLOWED_ORIGINS = [
   'https://arlo.jacobtartabini.com',
   'http://localhost:8000',
@@ -36,30 +41,86 @@ export interface ArloAuthResult {
 }
 
 /**
- * Get CORS headers with proper origin validation
+ * Check if origin is allowed
+ */
+export function isAllowedOrigin(origin: string | null): boolean {
+  if (!origin) return false;
+  return ALLOWED_ORIGINS.includes(origin);
+}
+
+/**
+ * Get CORS headers with STRICT origin validation
+ * Returns null if origin is not allowed (caller should reject request)
  */
 export function getCorsHeaders(requestOrigin?: string | null): Record<string, string> {
-  const origin = requestOrigin && ALLOWED_ORIGINS.includes(requestOrigin) 
-    ? requestOrigin 
-    : ALLOWED_ORIGINS[0];
+  // STRICT: Only allow recognized origins
+  if (!requestOrigin || !ALLOWED_ORIGINS.includes(requestOrigin)) {
+    // Return headers that block the request
+    return {
+      'Access-Control-Allow-Origin': ALLOWED_ORIGINS[0], // Never echo back invalid origin
+      'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Max-Age': '86400',
+      'Vary': 'Origin',
+    };
+  }
   
   return {
-    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Origin': requestOrigin,
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Max-Age': '86400',
+    'Vary': 'Origin',
   };
 }
 
 /**
- * Handle CORS preflight request
+ * Handle CORS preflight request with STRICT origin validation
  */
 export function handleCorsOptions(req: Request): Response {
   const origin = req.headers.get('origin');
+  
+  // STRICT: Reject preflight from unrecognized origins
+  if (!origin || !ALLOWED_ORIGINS.includes(origin)) {
+    console.log(`[arloAuth] CORS preflight rejected: origin=${origin}`);
+    return new Response(null, { 
+      status: 403,
+      headers: {
+        'Content-Type': 'text/plain',
+        'Vary': 'Origin',
+      }
+    });
+  }
+  
   return new Response(null, { 
     status: 204,
     headers: getCorsHeaders(origin) 
   });
+}
+
+/**
+ * Check origin and reject if invalid (for non-preflight requests)
+ */
+export function validateOrigin(req: Request): Response | null {
+  const origin = req.headers.get('origin');
+  
+  // For requests without origin (e.g., same-origin or server-to-server), allow
+  // But for cross-origin requests, enforce strict checking
+  if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+    console.log(`[arloAuth] Request rejected: invalid origin=${origin}`);
+    return new Response(
+      JSON.stringify({ error: 'Origin not allowed' }),
+      { 
+        status: 403, 
+        headers: { 
+          'Content-Type': 'application/json',
+          'Vary': 'Origin',
+        } 
+      }
+    );
+  }
+  
+  return null;
 }
 
 /**

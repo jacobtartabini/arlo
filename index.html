@@ -8,6 +8,27 @@
     <meta name="author" content="Tartabini Enterprises LLC" />
     <meta name="theme-color" content="#FFFFFF" />
 
+    <!-- Security Headers -->
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta http-equiv="X-Frame-Options" content="SAMEORIGIN" />
+    <meta http-equiv="X-XSS-Protection" content="1; mode=block" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    
+    <!-- Content Security Policy -->
+    <meta http-equiv="Content-Security-Policy" content="
+      default-src 'self';
+      script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://accounts.google.com;
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+      font-src 'self' https://fonts.gstatic.com;
+      img-src 'self' data: blob: https://*.googleapis.com https://*.gstatic.com;
+      connect-src 'self' https://*.supabase.co wss://*.supabase.co https://apis.google.com https://oauth2.googleapis.com https://www.googleapis.com https://raspberrypi.tailf531bd.ts.net wss://raspberrypi.tailf531bd.ts.net;
+      frame-src 'self' https://accounts.google.com;
+      frame-ancestors 'self';
+      form-action 'self' https://accounts.google.com;
+      base-uri 'self';
+      object-src 'none';
+    " />
+
     <!-- PWA Configuration -->
     <link rel="manifest" href="/manifest.json" />
     <meta name="mobile-web-app-capable" content="yes" />
