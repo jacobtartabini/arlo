@@ -1,20 +1,17 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { Resend } from "npm:resend@2.0.0";
+import { 
+  validateManageBookingInput, 
+  validateEmail,
+  validationErrorResponse,
+  type ManageBookingInput 
+} from '../_shared/validation.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-interface ManageBookingRequest {
-  eventId: string;
-  action: "get" | "reschedule" | "cancel";
-  newDate?: string;
-  newTime?: string;
-  email?: string; // For verification
-  timezone?: string; // IANA timezone
-}
 
 // Create a date in a specific timezone
 function createDateInTimezone(dateStr: string, hours: number, minutes: number, timezone: string): Date {
@@ -84,16 +81,18 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { eventId, action, newDate, newTime, email, timezone }: ManageBookingRequest = await req.json();
+    const rawInput = await req.json();
 
-    console.log("[manage-booking] Request:", { eventId, action, email, timezone });
-
-    if (!eventId) {
-      return new Response(
-        JSON.stringify({ error: "Event ID is required" }),
-        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+    // Validate all input using the shared validation module
+    const validation = validateManageBookingInput(rawInput);
+    if (!validation.success) {
+      console.error("[manage-booking] Validation failed:", validation.error, validation.errors);
+      return validationErrorResponse(validation.error!, validation.errors, corsHeaders);
     }
+
+    const { eventId, action, newDate, newTime, email, timezone } = validation.data!;
+
+    console.log("[manage-booking] Validated request:", { eventId, action, email: email ? `${email.substring(0, 3)}***` : undefined, timezone });
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -149,25 +148,20 @@ const handler = async (req: Request): Promise<Response> => {
       }
 
       case "reschedule": {
-        if (!email || !newDate || !newTime) {
+        // Validation already ensures email, newDate, newTime are present for reschedule action
+        
+        // Verify email matches the booking
+        if (email!.toLowerCase() !== guestEmail?.toLowerCase()) {
           return new Response(
-            JSON.stringify({ error: "Email, new date, and new time are required for rescheduling" }),
-            { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
-          );
-        }
-
-        // Verify email matches
-        if (email.toLowerCase() !== guestEmail?.toLowerCase()) {
-          return new Response(
-            JSON.stringify({ error: "Email verification failed" }),
+            JSON.stringify({ error: "Email verification failed. Please use the email address you used when booking." }),
             { status: 403, headers: { "Content-Type": "application/json", ...corsHeaders } }
           );
         }
 
-        // Parse new time using client timezone
-        const { hours, minutes } = parseTimeToHours(newTime);
+        // Parse new time using client timezone (already validated)
+        const { hours, minutes } = parseTimeToHours(newTime!);
         const clientTimezone = timezone || 'America/New_York';
-        const newStartDate = createDateInTimezone(newDate, hours, minutes, clientTimezone);
+        const newStartDate = createDateInTimezone(newDate!, hours, minutes, clientTimezone);
         const newEndDate = new Date(newStartDate.getTime() + 30 * 60 * 1000);
 
         console.log("[manage-booking] Rescheduling:", { 
@@ -235,17 +229,12 @@ const handler = async (req: Request): Promise<Response> => {
       }
 
       case "cancel": {
-        if (!email) {
+        // Validation already ensures email is present for cancel action
+        
+        // Verify email matches the booking
+        if (email!.toLowerCase() !== guestEmail?.toLowerCase()) {
           return new Response(
-            JSON.stringify({ error: "Email is required to cancel booking" }),
-            { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
-          );
-        }
-
-        // Verify email matches
-        if (email.toLowerCase() !== guestEmail?.toLowerCase()) {
-          return new Response(
-            JSON.stringify({ error: "Email verification failed" }),
+            JSON.stringify({ error: "Email verification failed. Please use the email address you used when booking." }),
             { status: 403, headers: { "Content-Type": "application/json", ...corsHeaders } }
           );
         }

@@ -1,6 +1,11 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { Resend } from "npm:resend@2.0.0";
+import { 
+  validateBookingInput, 
+  validationErrorResponse,
+  type BookingInput 
+} from '../_shared/validation.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,16 +14,6 @@ const corsHeaders = {
 
 // Host email for notifications
 const HOST_EMAIL = "jacobtart8@gmail.com";
-
-interface BookingRequest {
-  date: string; // ISO date string or YYYY-MM-DD
-  time: string; // e.g., "10:00 AM"
-  name: string;
-  email: string;
-  message?: string;
-  handle?: string;
-  timezone?: string; // IANA timezone like "America/New_York"
-}
 
 function parseTimeToHours(timeStr: string): { hours: number; minutes: number } {
   const match = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
@@ -404,25 +399,18 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { date, time, name, email, message, handle, timezone }: BookingRequest = await req.json();
+    const rawInput = await req.json();
 
-    console.log("[create-booking] Received booking request:", { date, time, name, email, handle, timezone });
-
-    if (!date || !time || !name || !email) {
-      console.error("[create-booking] Missing required fields");
-      return new Response(
-        JSON.stringify({ error: "Missing required fields: date, time, name, and email are required" }),
-        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+    // Validate all input using the shared validation module
+    const validation = validateBookingInput(rawInput);
+    if (!validation.success) {
+      console.error("[create-booking] Validation failed:", validation.error, validation.errors);
+      return validationErrorResponse(validation.error!, validation.errors, corsHeaders);
     }
 
-    if (!email.includes("@")) {
-      console.error("[create-booking] Invalid email format");
-      return new Response(
-        JSON.stringify({ error: "Invalid email format" }),
-        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
-    }
+    const { date, time, name, email, message, handle, timezone } = validation.data!;
+
+    console.log("[create-booking] Validated booking request:", { date, time, name, email: `${email.substring(0, 3)}***`, handle, timezone });
 
     const { hours, minutes } = parseTimeToHours(time);
     const clientTimezone = timezone || 'America/New_York';
