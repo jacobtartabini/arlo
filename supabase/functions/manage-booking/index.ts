@@ -7,6 +7,13 @@ import {
   validationErrorResponse,
   type ManageBookingInput 
 } from '../_shared/validation.ts';
+import { 
+  checkRateLimit, 
+  getClientIP, 
+  rateLimitResponse, 
+  hashForLogging,
+  RATE_LIMITS 
+} from '../_shared/rateLimit.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -80,6 +87,15 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Rate limiting by IP
+  const clientIP = getClientIP(req);
+  const ipRateCheck = checkRateLimit(clientIP, RATE_LIMITS.manageBooking);
+  
+  if (!ipRateCheck.allowed) {
+    console.log(`[manage-booking] Rate limited IP: ${hashForLogging(clientIP)}`);
+    return rateLimitResponse(ipRateCheck, corsHeaders);
+  }
+
   try {
     const rawInput = await req.json();
 
@@ -92,7 +108,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     const { eventId, action, newDate, newTime, email, timezone } = validation.data!;
 
-    console.log("[manage-booking] Validated request:", { eventId, action, email: email ? `${email.substring(0, 3)}***` : undefined, timezone });
+    console.log("[manage-booking] Validated request:", { eventId, action, email: email ? hashForLogging(email) : undefined, timezone });
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
