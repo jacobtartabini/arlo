@@ -385,6 +385,13 @@ export type Database = {
             referencedRelation: "calendar_integrations"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "google_calendar_selections_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "calendar_integrations_safe"
+            referencedColumns: ["id"]
+          },
         ]
       }
       habit_logs: {
@@ -910,7 +917,45 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      calendar_integrations_safe: {
+        Row: {
+          created_at: string | null
+          enabled: boolean | null
+          id: string | null
+          last_sync_at: string | null
+          last_sync_error: string | null
+          last_sync_status: string | null
+          provider: string | null
+          token_expires_at: string | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          enabled?: boolean | null
+          id?: string | null
+          last_sync_at?: string | null
+          last_sync_error?: string | null
+          last_sync_status?: string | null
+          provider?: string | null
+          token_expires_at?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          enabled?: boolean | null
+          id?: string | null
+          last_sync_at?: string | null
+          last_sync_error?: string | null
+          last_sync_status?: string | null
+          provider?: string | null
+          token_expires_at?: string | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       [_ in never]: never
