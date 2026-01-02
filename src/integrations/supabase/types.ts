@@ -26,6 +26,7 @@ export type Database = {
           start_time: string
           title: string
           user_id: string
+          user_key: string | null
         }
         Insert: {
           created_at?: string
@@ -38,6 +39,7 @@ export type Database = {
           start_time: string
           title: string
           user_id: string
+          user_key?: string | null
         }
         Update: {
           created_at?: string
@@ -50,6 +52,7 @@ export type Database = {
           start_time?: string
           title?: string
           user_id?: string
+          user_key?: string | null
         }
         Relationships: []
       }
@@ -178,6 +181,7 @@ export type Database = {
           name: string
           updated_at: string
           user_id: string
+          user_key: string | null
         }
         Insert: {
           color?: string
@@ -186,6 +190,7 @@ export type Database = {
           name: string
           updated_at?: string
           user_id: string
+          user_key?: string | null
         }
         Update: {
           color?: string
@@ -194,6 +199,7 @@ export type Database = {
           name?: string
           updated_at?: string
           user_id?: string
+          user_key?: string | null
         }
         Relationships: []
       }
@@ -206,6 +212,7 @@ export type Database = {
           sender: string
           status: string
           user_id: string
+          user_key: string | null
         }
         Insert: {
           content: string
@@ -215,6 +222,7 @@ export type Database = {
           sender: string
           status?: string
           user_id: string
+          user_key?: string | null
         }
         Update: {
           content?: string
@@ -224,6 +232,7 @@ export type Database = {
           sender?: string
           status?: string
           user_id?: string
+          user_key?: string | null
         }
         Relationships: [
           {
@@ -243,6 +252,7 @@ export type Database = {
           title: string
           updated_at: string
           user_id: string
+          user_key: string | null
         }
         Insert: {
           created_at?: string
@@ -251,6 +261,7 @@ export type Database = {
           title?: string
           updated_at?: string
           user_id: string
+          user_key?: string | null
         }
         Update: {
           created_at?: string
@@ -259,6 +270,7 @@ export type Database = {
           title?: string
           updated_at?: string
           user_id?: string
+          user_key?: string | null
         }
         Relationships: [
           {
@@ -408,6 +420,7 @@ export type Database = {
           notes: string | null
           skipped: boolean | null
           user_id: string
+          user_key: string | null
           value: number | null
         }
         Insert: {
@@ -417,6 +430,7 @@ export type Database = {
           notes?: string | null
           skipped?: boolean | null
           user_id: string
+          user_key?: string | null
           value?: number | null
         }
         Update: {
@@ -426,6 +440,7 @@ export type Database = {
           notes?: string | null
           skipped?: boolean | null
           user_id?: string
+          user_key?: string | null
           value?: number | null
         }
         Relationships: [
@@ -456,6 +471,7 @@ export type Database = {
           title: string
           updated_at: string
           user_id: string
+          user_key: string | null
           weekly_frequency: number | null
         }
         Insert: {
@@ -475,6 +491,7 @@ export type Database = {
           title: string
           updated_at?: string
           user_id: string
+          user_key?: string | null
           weekly_frequency?: number | null
         }
         Update: {
@@ -494,6 +511,7 @@ export type Database = {
           title?: string
           updated_at?: string
           user_id?: string
+          user_key?: string | null
           weekly_frequency?: number | null
         }
         Relationships: [
@@ -513,6 +531,7 @@ export type Database = {
           id: string
           name: string
           user_id: string
+          user_key: string | null
         }
         Insert: {
           color?: string
@@ -520,6 +539,7 @@ export type Database = {
           id?: string
           name: string
           user_id: string
+          user_key?: string | null
         }
         Update: {
           color?: string
@@ -527,6 +547,7 @@ export type Database = {
           id?: string
           name?: string
           user_id?: string
+          user_key?: string | null
         }
         Relationships: []
       }
@@ -545,6 +566,7 @@ export type Database = {
           title: string
           updated_at: string
           user_id: string
+          user_key: string | null
           zoom: number
         }
         Insert: {
@@ -561,6 +583,7 @@ export type Database = {
           title?: string
           updated_at?: string
           user_id: string
+          user_key?: string | null
           zoom?: number
         }
         Update: {
@@ -577,6 +600,7 @@ export type Database = {
           title?: string
           updated_at?: string
           user_id?: string
+          user_key?: string | null
           zoom?: number
         }
         Relationships: [
@@ -602,6 +626,7 @@ export type Database = {
           source: string
           title: string
           user_id: string
+          user_key: string | null
         }
         Insert: {
           action_data?: Json | null
@@ -615,6 +640,7 @@ export type Database = {
           source?: string
           title: string
           user_id: string
+          user_key?: string | null
         }
         Update: {
           action_data?: Json | null
@@ -628,6 +654,7 @@ export type Database = {
           source?: string
           title?: string
           user_id?: string
+          user_key?: string | null
         }
         Relationships: []
       }
@@ -664,6 +691,7 @@ export type Database = {
           redeemed_at: string
           reward_id: string
           user_id: string
+          user_key: string | null
           xp_spent: number
         }
         Insert: {
@@ -671,6 +699,7 @@ export type Database = {
           redeemed_at?: string
           reward_id: string
           user_id: string
+          user_key?: string | null
           xp_spent: number
         }
         Update: {
@@ -678,6 +707,7 @@ export type Database = {
           redeemed_at?: string
           reward_id?: string
           user_id?: string
+          user_key?: string | null
           xp_spent?: number
         }
         Relationships: [
@@ -699,6 +729,7 @@ export type Database = {
           id: string
           name: string
           user_id: string
+          user_key: string | null
           xp_cost: number
         }
         Insert: {
@@ -709,6 +740,7 @@ export type Database = {
           id?: string
           name: string
           user_id: string
+          user_key?: string | null
           xp_cost?: number
         }
         Update: {
@@ -719,6 +751,7 @@ export type Database = {
           id?: string
           name?: string
           user_id?: string
+          user_key?: string | null
           xp_cost?: number
         }
         Relationships: []
@@ -735,6 +768,7 @@ export type Database = {
           routine_type: string | null
           updated_at: string
           user_id: string
+          user_key: string | null
         }
         Insert: {
           anchor_cue?: string | null
@@ -747,6 +781,7 @@ export type Database = {
           routine_type?: string | null
           updated_at?: string
           user_id: string
+          user_key?: string | null
         }
         Update: {
           anchor_cue?: string | null
@@ -759,6 +794,7 @@ export type Database = {
           routine_type?: string | null
           updated_at?: string
           user_id?: string
+          user_key?: string | null
         }
         Relationships: []
       }
@@ -774,6 +810,7 @@ export type Database = {
           title: string
           updated_at: string
           user_id: string
+          user_key: string | null
         }
         Insert: {
           category?: string | null
@@ -786,6 +823,7 @@ export type Database = {
           title: string
           updated_at?: string
           user_id: string
+          user_key?: string | null
         }
         Update: {
           category?: string | null
@@ -798,6 +836,7 @@ export type Database = {
           title?: string
           updated_at?: string
           user_id?: string
+          user_key?: string | null
         }
         Relationships: []
       }
@@ -834,6 +873,7 @@ export type Database = {
           total_xp: number
           updated_at: string
           user_id: string
+          user_key: string | null
         }
         Insert: {
           available_xp?: number
@@ -846,6 +886,7 @@ export type Database = {
           total_xp?: number
           updated_at?: string
           user_id: string
+          user_key?: string | null
         }
         Update: {
           available_xp?: number
@@ -858,6 +899,7 @@ export type Database = {
           total_xp?: number
           updated_at?: string
           user_id?: string
+          user_key?: string | null
         }
         Relationships: []
       }
@@ -878,6 +920,7 @@ export type Database = {
           theme: string
           updated_at: string
           user_id: string
+          user_key: string | null
           voice_responses_enabled: boolean
         }
         Insert: {
@@ -896,6 +939,7 @@ export type Database = {
           theme?: string
           updated_at?: string
           user_id: string
+          user_key?: string | null
           voice_responses_enabled?: boolean
         }
         Update: {
@@ -914,6 +958,7 @@ export type Database = {
           theme?: string
           updated_at?: string
           user_id?: string
+          user_key?: string | null
           voice_responses_enabled?: boolean
         }
         Relationships: []
@@ -926,6 +971,7 @@ export type Database = {
           id: string
           reference_id: string | null
           user_id: string
+          user_key: string | null
           xp_amount: number
         }
         Insert: {
@@ -935,6 +981,7 @@ export type Database = {
           id?: string
           reference_id?: string | null
           user_id: string
+          user_key?: string | null
           xp_amount: number
         }
         Update: {
@@ -944,6 +991,7 @@ export type Database = {
           id?: string
           reference_id?: string | null
           user_id?: string
+          user_key?: string | null
           xp_amount?: number
         }
         Relationships: []

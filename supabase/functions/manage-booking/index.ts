@@ -296,9 +296,9 @@ const handler = async (req: Request): Promise<Response> => {
           }
         }
 
-        // Create notification for the host
+        // Create notification for the host (use user_key from the event)
         await supabase.from("notifications").insert({
-          user_id: event.user_id,
+          user_key: event.user_key, // Use TEXT user_key
           title: "Meeting Cancelled",
           content: `${guestName} has cancelled their meeting scheduled for ${formatDateForDisplay(eventStartTime)} at ${formatTimeForDisplay(eventStartTime)}`,
           source: "calendar",

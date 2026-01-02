@@ -40,10 +40,12 @@ Deno.serve(async (req) => {
       
       console.log('Saving push subscription for user:', userId);
       
+      // Note: push_subscriptions table may not exist yet
+      // If implementing push subscriptions, ensure table uses user_key (TEXT)
       const { error } = await supabase
         .from('push_subscriptions')
         .upsert({
-          user_id: userId,
+          user_key: userId, // Use TEXT user_key instead of UUID user_id
           platform,
           endpoint,
           p256dh,
@@ -71,11 +73,11 @@ Deno.serve(async (req) => {
 
     console.log('Processing notification for user:', userId);
 
-    // Check user preferences
+    // Check user preferences (use user_key TEXT column)
     const { data: prefs } = await supabase
       .from('notification_preferences')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_key', userId) // Use TEXT user_key
       .single();
 
     const pushEnabled = prefs?.push_enabled ?? false;
@@ -83,11 +85,11 @@ Deno.serve(async (req) => {
     const notificationType = type || 'system';
     const typeEnabled = typeToggles[notificationType] !== false;
 
-    // Create notification record in database
+    // Create notification record in database (use user_key TEXT column)
     const { data: notification, error: notifError } = await supabase
       .from('notifications')
       .insert({
-        user_id: userId,
+        user_key: userId, // Use TEXT user_key instead of UUID user_id
         title,
         content: notifBody,
         type: notificationType,
@@ -113,11 +115,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Get all push subscriptions for this user
+    // Get all push subscriptions for this user (use user_key TEXT column)
     const { data: subscriptions, error: subError } = await supabase
       .from('push_subscriptions')
       .select('*')
-      .eq('user_id', userId);
+      .eq('user_key', userId); // Use TEXT user_key
 
     if (subError || !subscriptions || subscriptions.length === 0) {
       console.log('No push subscriptions found for user');
