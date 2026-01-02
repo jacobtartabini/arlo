@@ -590,17 +590,32 @@ export default function Chat() {
     }
   };
 
-  // Drag and drop handlers
+  // Helper to check if drag event contains files (not conversation drag)
+  const hasFiles = (e: React.DragEvent): boolean => {
+    if (e.dataTransfer.types.includes('conversationId')) return false;
+    if (e.dataTransfer.types.includes('Files')) return true;
+    // Check items for file types
+    for (let i = 0; i < e.dataTransfer.items.length; i++) {
+      if (e.dataTransfer.items[i].kind === 'file') return true;
+    }
+    return false;
+  };
+
+  // Drag and drop handlers for file attachments only
   const handleDragEnter = (e: React.DragEvent) => {
+    // Only handle file drags, not conversation drags
+    if (!hasFiles(e)) return;
+    
     e.preventDefault();
     e.stopPropagation();
     dragCounterRef.current++;
-    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-      setIsDragging(true);
-    }
+    setIsDragging(true);
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
+    // Only handle file drags
+    if (!isDragging) return;
+    
     e.preventDefault();
     e.stopPropagation();
     dragCounterRef.current--;
@@ -610,18 +625,27 @@ export default function Chat() {
   };
 
   const handleDragOver = (e: React.DragEvent) => {
+    // Only prevent default for file drags
+    if (!hasFiles(e)) return;
+    
     e.preventDefault();
     e.stopPropagation();
   };
 
   const handleDrop = async (e: React.DragEvent) => {
+    // Only handle file drops, not conversation drops
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    if (droppedFiles.length === 0) {
+      // Not a file drop, let conversation drop handler take over
+      setIsDragging(false);
+      dragCounterRef.current = 0;
+      return;
+    }
+
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
     dragCounterRef.current = 0;
-
-    const droppedFiles = Array.from(e.dataTransfer.files);
-    if (droppedFiles.length === 0) return;
 
     const MAX_FILE_SIZE = 20 * 1024 * 1024;
     const MAX_FILES = 10;
