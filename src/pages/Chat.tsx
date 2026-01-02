@@ -549,11 +549,8 @@ export default function Chat() {
     const uploadedFiles: UploadedFile[] = [];
 
     for (const file of selectedFiles) {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const filePath = `uploads/${fileName}`;
-
-      const result = await uploadFile(file, filePath);
+      // Server handles path generation with user isolation
+      const result = await uploadFile(file);
 
       if (!result.success || !result.signedUrl) {
         console.error('Upload error:', result.error);
@@ -566,7 +563,7 @@ export default function Chat() {
         : 'other';
 
       uploadedFiles.push({
-        id: fileName,
+        id: result.path || crypto.randomUUID(),
         name: file.name,
         url: result.signedUrl,
         type: fileType,
