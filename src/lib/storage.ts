@@ -18,8 +18,11 @@ export interface UploadResult {
 
 /**
  * Upload a file through the authenticated storage proxy
+ * 
+ * Note: The server will automatically place the file in the user's directory
+ * based on their JWT identity. The fileName is sanitized server-side.
  */
-export async function uploadFile(file: File, filePath: string): Promise<UploadResult> {
+export async function uploadFile(file: File): Promise<UploadResult> {
   const token = await getArloToken();
   
   if (!token) {
@@ -29,7 +32,7 @@ export async function uploadFile(file: File, filePath: string): Promise<UploadRe
   try {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('path', filePath);
+    formData.append('fileName', file.name);
 
     const response = await fetch(
       `${SUPABASE_URL}/functions/v1/storage-proxy/upload`,
