@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { dataApiHelpers } from '@/lib/data-api';
-import { isAuthenticated } from '@/lib/arloAuth';
+import { isAuthenticated as checkIsAuthenticated } from '@/lib/arloAuth';
 import { Conversation, ConversationMessage, ChatSender, ChatMessageStatus } from '@/types/chat';
 
 export interface DbConversation {
@@ -51,7 +51,7 @@ export const dbToMessage = (dbMsg: DbMessage): ConversationMessage => ({
 export function useChatPersistence(userId: string | null) {
   // Fetch all conversations with messages
   const fetchConversations = useCallback(async (): Promise<Conversation[]> => {
-    if (!isTailscaleVerified()) return [];
+    if (!checkIsAuthenticated()) return [];
 
     try {
       const { data: conversations, error: convError } = await dataApiHelpers.select<DbConversation[]>('conversations', {
@@ -84,7 +84,7 @@ export function useChatPersistence(userId: string | null) {
   }, []);
 
   const createConversation = useCallback(async (title: string = 'New Chat'): Promise<Conversation | null> => {
-    if (!isTailscaleVerified()) return null;
+    if (!checkIsAuthenticated()) return null;
 
     try {
       const { data, error } = await dataApiHelpers.insert<DbConversation>('conversations', { title });
@@ -102,7 +102,7 @@ export function useChatPersistence(userId: string | null) {
   }, []);
 
   const updateConversationTitle = useCallback(async (conversationId: string, title: string): Promise<boolean> => {
-    if (!isTailscaleVerified()) return false;
+    if (!checkIsAuthenticated()) return false;
 
     try {
       const { error } = await dataApiHelpers.update('conversations', conversationId, { title });
@@ -118,7 +118,7 @@ export function useChatPersistence(userId: string | null) {
   }, []);
 
   const deleteConversation = useCallback(async (conversationId: string): Promise<boolean> => {
-    if (!isTailscaleVerified()) return false;
+    if (!checkIsAuthenticated()) return false;
 
     try {
       const { error } = await dataApiHelpers.delete('conversations', conversationId);
@@ -139,7 +139,7 @@ export function useChatPersistence(userId: string | null) {
     sender: ChatSender,
     status: ChatMessageStatus = 'sent'
   ): Promise<ConversationMessage | null> => {
-    if (!isTailscaleVerified()) return null;
+    if (!checkIsAuthenticated()) return null;
 
     try {
       const { data, error } = await dataApiHelpers.insert<DbMessage>('conversation_messages', {
@@ -171,7 +171,7 @@ export function useChatPersistence(userId: string | null) {
     status: ChatMessageStatus,
     content?: string
   ): Promise<boolean> => {
-    if (!isTailscaleVerified()) return false;
+    if (!checkIsAuthenticated()) return false;
 
     try {
       const updates: { status: string; content?: string } = { status };

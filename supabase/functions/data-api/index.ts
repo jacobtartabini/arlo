@@ -1,19 +1,17 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.89.0'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-tailscale-verified',
-}
+import { 
+  verifyArloJWT, 
+  handleCorsOptions, 
+  jsonResponse, 
+  unauthorizedResponse, 
+  errorResponse 
+} from '../_shared/arloAuth.ts'
 
 // Create Supabase client with service role key (bypasses RLS)
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 )
-
-// Static UUID for Tailscale-authenticated users (single-user system)
-// This is a fixed UUID that represents the Tailscale-verified user
-const ARLO_USER_ID = '00000000-0000-0000-0000-000000000001'
 
 interface RequestBody {
   action: string
@@ -25,44 +23,42 @@ interface RequestBody {
   limit?: number
 }
 
+// Allowed tables for security - prevents arbitrary table access
+const ALLOWED_TABLES = [
+  'notes', 'note_folders', 'tasks', 'habits', 'habit_logs',
+  'calendar_events', 'booking_slots', 'notifications',
+  'conversations', 'conversation_messages', 'chat_folders', 'user_settings',
+  'routines', 'user_progress', 'rewards', 'reward_redemptions', 'xp_events',
+  'creation_projects', 'creation_assets', 'creation_scene_state'
+]
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
+    return handleCorsOptions(req)
   }
 
   try {
-    // Verify request is from an authenticated Tailscale session
-    // The client includes this header to indicate Tailscale verification
-    const tailscaleVerified = req.headers.get('x-tailscale-verified')
+    // Verify JWT authentication
+    const authResult = await verifyArloJWT(req)
     
-    if (tailscaleVerified !== 'true') {
-      console.log('Request rejected: Missing Tailscale verification')
-      return new Response(
-        JSON.stringify({ error: 'Tailscale authentication required' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+    if (!authResult.authenticated) {
+      console.log('[data-api] Authentication failed:', authResult.error)
+      return unauthorizedResponse(req, authResult.error || 'Authentication required')
     }
+
+    const userId = authResult.userId
+    console.log('[data-api] Authenticated user:', authResult.claims?.sub, 'userId:', userId)
 
     const body: RequestBody = await req.json()
     const { action, table, data, id, filters, order, limit } = body
 
     console.log(`[data-api] Action: ${action}, Table: ${table}`)
 
-    // Allowed tables for security
-    const allowedTables = [
-      'notes', 'note_folders', 'tasks', 'habits', 'habit_logs',
-      'calendar_events', 'booking_slots', 'notifications',
-      'conversations', 'conversation_messages', 'chat_folders', 'user_settings',
-      'routines', 'user_progress', 'rewards', 'reward_redemptions', 'xp_events',
-      'creation_projects', 'creation_assets', 'creation_scene_state'
-    ]
-
-    if (!allowedTables.includes(table)) {
-      return new Response(
-        JSON.stringify({ error: `Table '${table}' is not allowed` }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+    // Validate table name against allowlist
+    if (!ALLOWED_TABLES.includes(table)) {
+      console.log(`[data-api] Table '${table}' not in allowlist`)
+      return errorResponse(req, `Table '${table}' is not allowed`, 400)
     }
 
     let result: { data: unknown; error: unknown }
@@ -72,7 +68,7 @@ Deno.serve(async (req) => {
         let query = supabase.from(table).select('*')
         
         // Apply user_id filter automatically
-        query = query.eq('user_id', ARLO_USER_ID)
+        query = query.eq('user_id', userId)
         
         // Apply additional filters
         if (filters) {
@@ -99,14 +95,11 @@ Deno.serve(async (req) => {
 
       case 'insert': {
         if (!data) {
-          return new Response(
-            JSON.stringify({ error: 'Data is required for insert' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          )
+          return errorResponse(req, 'Data is required for insert', 400)
         }
         
         // Inject user_id automatically
-        const insertData = { ...data, user_id: ARLO_USER_ID }
+        const insertData = { ...data, user_id: userId }
         
         result = await supabase
           .from(table)
@@ -118,17 +111,14 @@ Deno.serve(async (req) => {
 
       case 'update': {
         if (!id || !data) {
-          return new Response(
-            JSON.stringify({ error: 'ID and data are required for update' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          )
+          return errorResponse(req, 'ID and data are required for update', 400)
         }
         
         result = await supabase
           .from(table)
           .update(data)
           .eq('id', id)
-          .eq('user_id', ARLO_USER_ID) // Ensure user owns the record
+          .eq('user_id', userId) // Ensure user owns the record
           .select()
           .single()
         break
@@ -136,30 +126,24 @@ Deno.serve(async (req) => {
 
       case 'delete': {
         if (!id) {
-          return new Response(
-            JSON.stringify({ error: 'ID is required for delete' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          )
+          return errorResponse(req, 'ID is required for delete', 400)
         }
         
         result = await supabase
           .from(table)
           .delete()
           .eq('id', id)
-          .eq('user_id', ARLO_USER_ID) // Ensure user owns the record
+          .eq('user_id', userId) // Ensure user owns the record
         break
       }
 
       case 'upsert': {
         if (!data) {
-          return new Response(
-            JSON.stringify({ error: 'Data is required for upsert' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          )
+          return errorResponse(req, 'Data is required for upsert', 400)
         }
         
         // Inject user_id automatically
-        const upsertData = { ...data, user_id: ARLO_USER_ID }
+        const upsertData = { ...data, user_id: userId }
         
         result = await supabase
           .from(table)
@@ -176,7 +160,7 @@ Deno.serve(async (req) => {
         let query = supabase
           .from(table)
           .select('*')
-          .eq('user_id', ARLO_USER_ID)
+          .eq('user_id', userId)
           .in(column, values)
         
         if (order) {
@@ -191,7 +175,7 @@ Deno.serve(async (req) => {
         let query = supabase
           .from(table)
           .select('*', { count: 'exact', head: true })
-          .eq('user_id', ARLO_USER_ID)
+          .eq('user_id', userId)
         
         if (filters) {
           for (const [key, value] of Object.entries(filters)) {
@@ -209,16 +193,13 @@ Deno.serve(async (req) => {
       case 'update_where': {
         // Update multiple records based on filters
         if (!data || !filters) {
-          return new Response(
-            JSON.stringify({ error: 'Data and filters are required for update_where' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          )
+          return errorResponse(req, 'Data and filters are required for update_where', 400)
         }
         
         let query = supabase
           .from(table)
           .update(data)
-          .eq('user_id', ARLO_USER_ID)
+          .eq('user_id', userId)
         
         for (const [key, value] of Object.entries(filters)) {
           if (key !== 'user_id') {
@@ -231,30 +212,18 @@ Deno.serve(async (req) => {
       }
 
       default:
-        return new Response(
-          JSON.stringify({ error: `Unknown action: ${action}` }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
+        return errorResponse(req, `Unknown action: ${action}`, 400)
     }
 
     if (result.error) {
       console.error(`[data-api] Error:`, result.error)
-      return new Response(
-        JSON.stringify({ error: result.error }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
+      return errorResponse(req, JSON.stringify(result.error), 500)
     }
 
-    return new Response(
-      JSON.stringify({ data: result.data }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return jsonResponse(req, { data: result.data })
 
   } catch (error) {
     console.error('[data-api] Unexpected error:', error)
-    return new Response(
-      JSON.stringify({ error: error.message || 'Internal server error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    )
+    return errorResponse(req, error instanceof Error ? error.message : 'Internal server error', 500)
   }
 })
