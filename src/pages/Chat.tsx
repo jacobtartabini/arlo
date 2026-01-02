@@ -543,8 +543,8 @@ export default function Chat() {
       return;
     }
 
-    // Import supabase for uploads
-    const { supabase } = await import('@/integrations/supabase/client');
+    // Import storage utility for authenticated uploads
+    const { uploadFile } = await import('@/lib/storage');
 
     const uploadedFiles: UploadedFile[] = [];
 
@@ -553,19 +553,13 @@ export default function Chat() {
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
       const filePath = `uploads/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('chat-attachments')
-        .upload(filePath, file);
+      const result = await uploadFile(file, filePath);
 
-      if (uploadError) {
-        console.error('Upload error:', uploadError);
+      if (!result.success || !result.signedUrl) {
+        console.error('Upload error:', result.error);
         toast.error(`Failed to upload ${file.name}`);
         continue;
       }
-
-      const { data: urlData } = supabase.storage
-        .from('chat-attachments')
-        .getPublicUrl(filePath);
 
       const fileType = file.type.startsWith('image/') ? 'image' 
         : (file.type === 'application/pdf' || file.type.includes('document')) ? 'document' 
@@ -574,7 +568,7 @@ export default function Chat() {
       uploadedFiles.push({
         id: fileName,
         name: file.name,
-        url: urlData.publicUrl,
+        url: result.signedUrl,
         type: fileType,
         size: file.size,
       });
