@@ -3,9 +3,12 @@
  * 
  * All protected edge functions should use verifyArloJWT() to authenticate requests.
  * Tokens are minted by the Raspberry Pi /auth/verify endpoint.
+ * 
+ * Identity is derived SOLELY from the verified JWT.sub claim.
+ * No hard-coded user IDs or ARLO_USER_ID environment variables are used.
  */
 
-import { create, verify, getNumericDate } from "https://deno.land/x/djwt@v2.9.1/mod.ts";
+import { verify } from "https://deno.land/x/djwt@v2.9.1/mod.ts";
 
 // Allowed origins for CORS
 const ALLOWED_ORIGINS = [
@@ -16,7 +19,7 @@ const ALLOWED_ORIGINS = [
 ];
 
 export interface ArloJWTClaims {
-  sub: string;      // Tailscale login (email)
+  sub: string;      // User identity (Tailscale login/email) - THIS IS THE SOLE SOURCE OF IDENTITY
   iss: string;      // Issuer
   aud: string;      // Audience
   exp: number;      // Expiration timestamp
@@ -29,7 +32,7 @@ export interface ArloAuthResult {
   authenticated: boolean;
   claims?: ArloJWTClaims;
   error?: string;
-  userId: string;
+  userId: string;   // Derived from JWT.sub - the user's identity
 }
 
 /**
@@ -81,15 +84,17 @@ async function getJWTKey(): Promise<CryptoKey> {
 }
 
 /**
- * Verify the Arlo JWT from the Authorization header
+ * Verify the Arlo JWT from the Authorization header.
+ * 
+ * IMPORTANT: User identity comes SOLELY from JWT.sub.
+ * No ARLO_USER_ID or hard-coded IDs are used.
  */
 export async function verifyArloJWT(req: Request): Promise<ArloAuthResult> {
   const ARLO_JWT_ISSUER = Deno.env.get('ARLO_JWT_ISSUER');
   const ARLO_JWT_AUDIENCE = Deno.env.get('ARLO_JWT_AUDIENCE');
-  const ARLO_USER_ID = Deno.env.get('ARLO_USER_ID');
   
-  if (!ARLO_JWT_ISSUER || !ARLO_JWT_AUDIENCE || !ARLO_USER_ID) {
-    console.error('[arloAuth] Missing JWT configuration environment variables');
+  if (!ARLO_JWT_ISSUER || !ARLO_JWT_AUDIENCE) {
+    console.error('[arloAuth] Missing JWT configuration: ARLO_JWT_ISSUER or ARLO_JWT_AUDIENCE');
     return { 
       authenticated: false, 
       error: 'JWT configuration missing',
@@ -147,12 +152,24 @@ export async function verifyArloJWT(req: Request): Promise<ArloAuthResult> {
       };
     }
     
+    // Validate sub claim exists
+    if (!payload.sub) {
+      console.log('[arloAuth] Missing sub claim in JWT');
+      return { 
+        authenticated: false, 
+        error: 'Invalid token: missing subject',
+        userId: ''
+      };
+    }
+    
     console.log('[arloAuth] JWT verified for:', payload.sub);
     
+    // CRITICAL: userId is derived SOLELY from JWT.sub
+    // This is the user's Tailscale login/email identity
     return {
       authenticated: true,
       claims: payload,
-      userId: ARLO_USER_ID,
+      userId: payload.sub,
     };
     
   } catch (error) {

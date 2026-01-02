@@ -101,8 +101,9 @@ Deno.serve(async (req: Request) => {
       return unauthorizedResponse(req, authResult.error || 'Authentication required');
     }
 
+    // userId is derived from JWT.sub - no ARLO_USER_ID used
     const userId = authResult.userId;
-    console.log('[google-calendar-auth] Authenticated user:', authResult.claims?.sub, 'userId:', userId);
+    console.log('[google-calendar-auth] Authenticated user (from JWT.sub):', userId);
 
     // Step 1: Generate OAuth URL
     if (action === "get_auth_url") {
