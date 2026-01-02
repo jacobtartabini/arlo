@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { dataApiHelpers } from '@/lib/data-api';
 import { UserSettings, UserSettingsUpdate, DEFAULT_USER_SETTINGS } from '@/types/settings';
 import { toast } from 'sonner';
+import { useAuth } from '@/providers/AuthProvider';
 
 interface UserSettingsContextValue {
   settings: UserSettings | null;
@@ -13,24 +14,6 @@ interface UserSettingsContextValue {
 }
 
 const UserSettingsContext = createContext<UserSettingsContextValue | undefined>(undefined);
-
-/**
- * Check if Tailscale is verified
- */
-function isTailscaleVerified(): boolean {
-  if (typeof window === 'undefined') return false;
-  const verified = sessionStorage.getItem('arlo_access_verified') === 'true';
-  const expiry = sessionStorage.getItem('arlo_access_verified_expiry');
-  return verified && !!expiry && Date.now() < parseInt(expiry);
-}
-
-/**
- * Get user ID from session storage (set by AuthProvider from JWT)
- */
-function getUserId(): string | null {
-  if (typeof window === 'undefined') return null;
-  return sessionStorage.getItem('arlo_user_id');
-}
 
 interface DbUserSettings {
   id: string;
@@ -54,22 +37,14 @@ interface DbUserSettings {
 export function UserSettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  
+  // Use the AuthProvider for authentication state
+  const { isAuthenticated, identity } = useAuth();
+  const userId = isAuthenticated ? identity?.user ?? null : null;
 
-  // Check Tailscale auth status
-  useEffect(() => {
-    const checkAuth = () => {
-      setIsAuthenticated(isTailscaleVerified());
-    };
-    
-    checkAuth();
-    const interval = setInterval(checkAuth, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Fetch settings
+  // Fetch settings when authenticated
   const fetchSettings = useCallback(async () => {
-    if (!isTailscaleVerified()) {
+    if (!isAuthenticated || !userId) {
       setSettings(null);
       setIsLoading(false);
       return;
@@ -108,14 +83,14 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [isAuthenticated, userId]);
 
   useEffect(() => {
     fetchSettings();
   }, [fetchSettings]);
 
   const updateSettings = useCallback(async (updates: UserSettingsUpdate) => {
-    if (!isTailscaleVerified() || !settings) {
+    if (!isAuthenticated || !settings) {
       toast.error('Please connect via Tailscale to update settings');
       return;
     }
@@ -141,7 +116,7 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
       console.error('Error updating settings:', error);
       toast.error('Failed to save settings');
     }
-  }, [settings]);
+  }, [isAuthenticated, settings]);
 
   const refreshSettings = useCallback(async () => {
     await fetchSettings();
@@ -151,10 +126,10 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
     settings,
     isLoading,
     isAuthenticated,
-    userId: isAuthenticated ? getUserId() : null,
+    userId,
     updateSettings,
     refreshSettings,
-  }), [settings, isLoading, isAuthenticated, updateSettings, refreshSettings]);
+  }), [settings, isLoading, isAuthenticated, userId, updateSettings, refreshSettings]);
 
   return (
     <UserSettingsContext.Provider value={value}>
