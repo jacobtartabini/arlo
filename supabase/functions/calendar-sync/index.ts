@@ -1,10 +1,11 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { 
+  verifyArloJWT, 
+  handleCorsOptions, 
+  jsonResponse, 
+  unauthorizedResponse, 
+  errorResponse 
+} from '../_shared/arloAuth.ts'
 
 const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID")!;
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
@@ -286,13 +287,6 @@ async function syncOutlookIcal(integration: CalendarIntegration, supabase: any):
     const icalText = await response.text();
     console.log(`[calendar-sync] Received iCal data, length: ${icalText.length} chars`);
     
-    // Log a sample of the iCal content for debugging
-    if (icalText.length < 1000) {
-      console.log(`[calendar-sync] Full iCal content: ${icalText}`);
-    } else {
-      console.log(`[calendar-sync] iCal preview (first 500 chars): ${icalText.substring(0, 500)}`);
-    }
-    
     const events = parseICalEvents(icalText);
     console.log(`[calendar-sync] Parsed ${events.length} events from iCal feed`);
 
@@ -328,7 +322,7 @@ async function syncOutlookIcal(integration: CalendarIntegration, supabase: any):
         last_synced_at: new Date().toISOString(),
       };
 
-      // Check if event already exists (partial unique index doesn't work with onConflict)
+      // Check if event already exists
       const { data: existing } = await supabase
         .from("calendar_events")
         .select("id")
@@ -339,14 +333,12 @@ async function syncOutlookIcal(integration: CalendarIntegration, supabase: any):
 
       let error;
       if (existing) {
-        // Update existing event
         const { error: updateError } = await supabase
           .from("calendar_events")
           .update(eventData)
           .eq("id", existing.id);
         error = updateError;
       } else {
-        // Insert new event
         const { error: insertError } = await supabase
           .from("calendar_events")
           .insert(eventData);
@@ -449,7 +441,7 @@ function parseICalEvents(icalText: string): ParsedEvent[] {
 }
 
 function processField(event: Partial<ParsedEvent>, field: string, value: string) {
-  // Remove parameters from field name (e.g., DTSTART;VALUE=DATE -> DTSTART)
+  // Remove parameters from field name
   const fieldName = field.split(";")[0];
 
   switch (fieldName) {
@@ -484,11 +476,9 @@ function processField(event: Partial<ParsedEvent>, field: string, value: string)
 }
 
 function parseICalDate(value: string, isEnd = false): string {
-  // Format: YYYYMMDD
   const year = value.slice(0, 4);
   const month = value.slice(4, 6);
   const day = value.slice(6, 8);
-  // For all-day end dates, iCal uses exclusive end, so the actual end is the day before
   const date = new Date(`${year}-${month}-${day}T${isEnd ? "23:59:59" : "00:00:00"}`);
   if (isEnd) {
     date.setDate(date.getDate() - 1);
@@ -497,17 +487,17 @@ function parseICalDate(value: string, isEnd = false): string {
 }
 
 function parseICalDateTime(value: string): string {
-  // Format: YYYYMMDDTHHmmss or YYYYMMDDTHHmmssZ
   const year = value.slice(0, 4);
   const month = value.slice(4, 6);
   const day = value.slice(6, 8);
   const hour = value.slice(9, 11);
   const minute = value.slice(11, 13);
   const second = value.slice(13, 15) || "00";
-  const isUtc = value.endsWith("Z");
 
-  const dateStr = `${year}-${month}-${day}T${hour}:${minute}:${second}${isUtc ? "Z" : ""}`;
-  return new Date(dateStr).toISOString();
+  if (value.endsWith("Z")) {
+    return new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}Z`).toISOString();
+  }
+  return new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}`).toISOString();
 }
 
 function unescapeIcalText(text: string): string {
@@ -518,7 +508,6 @@ function unescapeIcalText(text: string): string {
     .replace(/\\\\/g, "\\");
 }
 
-// Push event to Google Calendar (2-way sync)
 async function pushEventToGoogle(
   integration: CalendarIntegration,
   event: any,
@@ -526,35 +515,42 @@ async function pushEventToGoogle(
 ): Promise<{ success: boolean; externalId?: string; error?: string }> {
   const accessToken = await getValidAccessToken(integration);
   if (!accessToken) {
-    return { success: false, error: "Failed to get valid access token" };
+    return { success: false, error: "Failed to get access token" };
   }
 
   try {
-    const baseUrl = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
+    const calendarId = "primary";
+    const baseUrl = `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events`;
 
     if (action === "delete" && event.external_id) {
-      const response = await fetch(`${baseUrl}/${event.external_id}`, {
+      const eventId = event.external_id.split("::")[1] || event.external_id;
+      const response = await fetch(`${baseUrl}/${eventId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      return { success: response.ok || response.status === 404 };
+      
+      if (!response.ok && response.status !== 404) {
+        const error = await response.text();
+        return { success: false, error };
+      }
+      return { success: true };
     }
 
     const googleEvent = {
       summary: event.title,
-      description: event.description || "",
-      location: event.location || "",
+      description: event.description || undefined,
+      location: event.location || undefined,
       start: event.is_all_day
         ? { date: event.start_time.split("T")[0] }
-        : { dateTime: event.start_time, timeZone: "UTC" },
+        : { dateTime: event.start_time },
       end: event.is_all_day
         ? { date: event.end_time.split("T")[0] }
-        : { dateTime: event.end_time, timeZone: "UTC" },
+        : { dateTime: event.end_time },
     };
 
-    let response: Response;
     if (action === "update" && event.external_id) {
-      response = await fetch(`${baseUrl}/${event.external_id}`, {
+      const eventId = event.external_id.split("::")[1] || event.external_id;
+      const response = await fetch(`${baseUrl}/${eventId}`, {
         method: "PUT",
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -562,102 +558,108 @@ async function pushEventToGoogle(
         },
         body: JSON.stringify(googleEvent),
       });
-    } else {
-      response = await fetch(baseUrl, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(googleEvent),
-      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        return { success: false, error };
+      }
+
+      const data = await response.json();
+      return { success: true, externalId: `primary::${data.id}` };
     }
+
+    // Create new event
+    const response = await fetch(baseUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(googleEvent),
+    });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[calendar-sync] Push to Google failed:", errorText);
-      return { success: false, error: `Google API error: ${response.status}` };
+      const error = await response.text();
+      return { success: false, error };
     }
 
-    const result = await response.json();
-    return { success: true, externalId: result.id };
+    const data = await response.json();
+    return { success: true, externalId: `primary::${data.id}` };
   } catch (error) {
-    console.error("[calendar-sync] Push to Google error:", error);
+    console.error("[calendar-sync] Push event error:", error);
     return { success: false, error: error.message };
   }
 }
 
-serve(async (req: Request) => {
+Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return handleCorsOptions(req);
   }
 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
   try {
-    const { action, userId, provider, event, eventAction } = await req.json();
+    // Verify JWT authentication
+    const authResult = await verifyArloJWT(req);
+    
+    if (!authResult.authenticated) {
+      console.log('[calendar-sync] Authentication failed:', authResult.error);
+      return unauthorizedResponse(req, authResult.error || 'Authentication required');
+    }
 
-    // Sync all calendars for a user
+    const userId = authResult.userId;
+    console.log('[calendar-sync] Authenticated user:', authResult.claims?.sub, 'userId:', userId);
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const body = await req.json();
+    const { action } = body;
+
+    // Sync all enabled integrations
     if (action === "sync") {
-      if (!userId) {
-        return new Response(JSON.stringify({ error: "Missing userId" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      const { data: integrations, error } = await supabase
+      const { data: integrations, error: fetchError } = await supabase
         .from("calendar_integrations")
         .select("*")
         .eq("user_id", userId)
         .eq("enabled", true);
 
-      if (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      if (fetchError) {
+        console.error("[calendar-sync] Error fetching integrations:", fetchError);
+        return errorResponse(req, "Failed to fetch integrations", 500);
       }
 
-      const results: Record<string, any> = {};
+      const results: { provider: string; success: boolean; synced?: number; error?: string }[] = [];
 
       for (const integration of integrations || []) {
+        let result;
         if (integration.provider === "google") {
-          results.google = await syncGoogleCalendar(integration, supabase);
+          result = await syncGoogleCalendar(integration, supabase);
         } else if (integration.provider === "outlook_ics") {
-          results.outlook_ics = await syncOutlookIcal(integration, supabase);
+          result = await syncOutlookIcal(integration, supabase);
+        } else {
+          continue;
         }
-      }
 
-      console.log(`[calendar-sync] Sync completed for user ${userId}:`, results);
-
-      return new Response(JSON.stringify({ success: true, results }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // Sync specific provider
-    if (action === "sync_provider" && provider) {
-      if (!userId) {
-        return new Response(JSON.stringify({ error: "Missing userId" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        results.push({
+          provider: integration.provider,
+          ...result,
         });
       }
 
-      const { data: integration, error } = await supabase
+      console.log("[calendar-sync] Sync complete:", results);
+      return jsonResponse(req, { success: true, results });
+    }
+
+    // Sync a specific provider
+    if (action === "sync_provider") {
+      const { provider } = body;
+      
+      const { data: integration, error: fetchError } = await supabase
         .from("calendar_integrations")
         .select("*")
         .eq("user_id", userId)
         .eq("provider", provider)
-        .eq("enabled", true)
         .single();
 
-      if (error || !integration) {
-        return new Response(JSON.stringify({ error: "Integration not found" }), {
-          status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      if (fetchError || !integration) {
+        return errorResponse(req, "Integration not found", 404);
       }
 
       let result;
@@ -666,62 +668,46 @@ serve(async (req: Request) => {
       } else if (provider === "outlook_ics") {
         result = await syncOutlookIcal(integration, supabase);
       } else {
-        return new Response(JSON.stringify({ error: "Unknown provider" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return errorResponse(req, "Unknown provider", 400);
       }
 
-      return new Response(JSON.stringify(result), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse(req, result);
     }
 
-    // Push event to external calendar (2-way sync for Google)
-    if (action === "push_event" && event && eventAction) {
-      const { data: integration, error } = await supabase
+    // Push event to Google Calendar (2-way sync)
+    if (action === "push_event") {
+      const { event, eventAction } = body;
+
+      const { data: integration, error: fetchError } = await supabase
         .from("calendar_integrations")
         .select("*")
-        .eq("user_id", event.user_id)
+        .eq("user_id", userId)
         .eq("provider", "google")
-        .eq("enabled", true)
         .single();
 
-      if (error || !integration) {
-        // No Google integration, that's fine
-        return new Response(JSON.stringify({ success: true, message: "No Google integration" }), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      if (fetchError || !integration) {
+        return errorResponse(req, "Google Calendar not connected", 400);
       }
 
       const result = await pushEventToGoogle(integration, event, eventAction);
-
-      if (result.success && result.externalId && eventAction !== "delete") {
-        // Update the event with the external ID
+      
+      if (result.success && result.externalId && eventAction === "create") {
+        // Update the local event with the external ID
         await supabase
           .from("calendar_events")
-          .update({
+          .update({ 
             external_id: result.externalId,
             source: "google",
-            last_synced_at: new Date().toISOString(),
           })
           .eq("id", event.id);
       }
 
-      return new Response(JSON.stringify(result), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse(req, result);
     }
 
-    return new Response(JSON.stringify({ error: "Invalid action" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return errorResponse(req, "Invalid action", 400);
   } catch (error) {
     console.error("[calendar-sync] Error:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return errorResponse(req, error instanceof Error ? error.message : "Unknown error", 500);
   }
 });

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { getAuthHeaders } from '@/lib/arloAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,8 +16,6 @@ import {
   ExternalLink,
   Loader2,
   AlertCircle,
-  ChevronDown,
-  ChevronUp,
   Settings2
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -40,6 +39,15 @@ interface GoogleCalendar {
   color: string;
   primary: boolean;
   enabled: boolean;
+}
+
+// Helper to invoke edge functions with auth
+async function invokeWithAuth(functionName: string, body: Record<string, unknown>) {
+  const headers = await getAuthHeaders();
+  return supabase.functions.invoke(functionName, {
+    body,
+    headers: headers as Record<string, string> | undefined,
+  });
 }
 
 export default function CalendarIntegrations() {
@@ -92,8 +100,9 @@ export default function CalendarIntegrations() {
     setIsLoadingCalendars(true);
     try {
       // First fetch available calendars from Google
-      const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
-        body: { action: 'list_calendars', userId: TAILSCALE_USER_ID },
+      const { data, error } = await invokeWithAuth('google-calendar-auth', {
+        action: 'list_calendars',
+        userId: TAILSCALE_USER_ID,
       });
 
       if (error) throw error;
@@ -133,17 +142,15 @@ export default function CalendarIntegrations() {
 
     setIsSavingCalendars(true);
     try {
-      const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
-        body: { 
-          action: 'save_calendars', 
-          integrationId: googleIntegration.id,
-          calendars: googleCalendars.filter(c => c.enabled).map(c => ({
-            id: c.id,
-            name: c.name,
-            color: c.color,
-            enabled: true,
-          })),
-        },
+      const { data, error } = await invokeWithAuth('google-calendar-auth', {
+        action: 'save_calendars',
+        integrationId: googleIntegration.id,
+        calendars: googleCalendars.filter(c => c.enabled).map(c => ({
+          id: c.id,
+          name: c.name,
+          color: c.color,
+          enabled: true,
+        })),
       });
 
       if (error) throw error;
@@ -173,6 +180,7 @@ export default function CalendarIntegrations() {
     setIsConnecting(prev => ({ ...prev, google: true }));
     
     try {
+      // Note: exchange_code doesn't require JWT auth (OAuth callback flow)
       const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
         body: { action: 'exchange_code', code, state, userId: TAILSCALE_USER_ID },
       });
@@ -196,8 +204,9 @@ export default function CalendarIntegrations() {
     setIsConnecting(prev => ({ ...prev, google: true }));
     
     try {
-      const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
-        body: { action: 'get_auth_url', userId: TAILSCALE_USER_ID },
+      const { data, error } = await invokeWithAuth('google-calendar-auth', {
+        action: 'get_auth_url',
+        userId: TAILSCALE_USER_ID,
       });
 
       if (error) throw error;
@@ -214,8 +223,9 @@ export default function CalendarIntegrations() {
 
   const disconnectGoogle = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
-        body: { action: 'disconnect', userId: TAILSCALE_USER_ID },
+      const { data, error } = await invokeWithAuth('google-calendar-auth', {
+        action: 'disconnect',
+        userId: TAILSCALE_USER_ID,
       });
 
       if (error) throw error;
@@ -237,8 +247,10 @@ export default function CalendarIntegrations() {
     setIsConnecting(prev => ({ ...prev, outlook: true }));
 
     try {
-      const { data, error } = await supabase.functions.invoke('outlook-ical', {
-        body: { action: 'connect', icalUrl: outlookUrl.trim(), userId: TAILSCALE_USER_ID },
+      const { data, error } = await invokeWithAuth('outlook-ical', {
+        action: 'connect',
+        icalUrl: outlookUrl.trim(),
+        userId: TAILSCALE_USER_ID,
       });
 
       if (error) throw error;
@@ -259,8 +271,9 @@ export default function CalendarIntegrations() {
 
   const disconnectOutlook = async () => {
     try {
-      const { data, error } = await supabase.functions.invoke('outlook-ical', {
-        body: { action: 'disconnect', userId: TAILSCALE_USER_ID },
+      const { data, error } = await invokeWithAuth('outlook-ical', {
+        action: 'disconnect',
+        userId: TAILSCALE_USER_ID,
       });
 
       if (error) throw error;
@@ -277,12 +290,10 @@ export default function CalendarIntegrations() {
     setIsSyncing(prev => ({ ...prev, [provider]: true }));
 
     try {
-      const { data, error } = await supabase.functions.invoke('calendar-sync', {
-        body: { 
-          action: 'sync_provider', 
-          provider,
-          userId: TAILSCALE_USER_ID 
-        },
+      const { data, error } = await invokeWithAuth('calendar-sync', {
+        action: 'sync_provider',
+        provider,
+        userId: TAILSCALE_USER_ID,
       });
 
       if (error) throw error;
@@ -491,27 +502,26 @@ export default function CalendarIntegrations() {
                 <Button
                   size="sm"
                   onClick={saveGoogleCalendars}
-                  disabled={isSavingCalendars || googleCalendars.filter(c => c.enabled).length === 0}
+                  disabled={isSavingCalendars}
                 >
-                  {isSavingCalendars ? (
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  ) : (
-                    <Check className="w-4 h-4 mr-2" />
-                  )}
-                  Save & Sync
+                  {isSavingCalendars && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                  Save
                 </Button>
               </div>
             </div>
           )}
         </div>
 
-        {/* Outlook iCal */}
+        {/* Outlook Calendar */}
         <div className={`p-4 rounded-lg border ${outlookIntegration ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/50 dark:border-emerald-800/30' : 'bg-muted/20 border-border/20'}`}>
           <div className="flex items-start justify-between">
             <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-lg bg-[#0078d4] flex items-center justify-center shadow-sm">
-                <svg viewBox="0 0 24 24" className="w-5 h-5 text-white" fill="currentColor">
-                  <path d="M21.5 2h-19A2.5 2.5 0 000 4.5v15A2.5 2.5 0 002.5 22h19a2.5 2.5 0 002.5-2.5v-15A2.5 2.5 0 0021.5 2zM8 17.5a5.5 5.5 0 115.5-5.5A5.51 5.51 0 018 17.5zm0-9a3.5 3.5 0 103.5 3.5A3.5 3.5 0 008 8.5z"/>
+              <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center shadow-sm">
+                <svg viewBox="0 0 24 24" className="w-6 h-6">
+                  <path fill="#0078D4" d="M21.17 3H7.83C6.82 3 6 3.82 6 4.83v14.34c0 1.01.82 1.83 1.83 1.83h13.34c1.01 0 1.83-.82 1.83-1.83V4.83C23 3.82 22.18 3 21.17 3z"/>
+                  <path fill="#fff" d="M15.5 15H12v-4h3.5v4zm0-5H12V6h3.5v4zm4 5H16v-4h3.5v4zm0-5H16V6h3.5v4zm-8.5 5H7.5v-4H11v4zm0-5H7.5V6H11v4z" opacity=".8"/>
+                  <path fill="#0078D4" d="M2 6h4v12H2z"/>
+                  <path fill="#103262" d="M6 18H2a2 2 0 01-2-2V8a2 2 0 012-2h4v12z" opacity=".5"/>
                 </svg>
               </div>
               <div>
@@ -525,7 +535,7 @@ export default function CalendarIntegrations() {
                   )}
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Read-only: Import via iCal feed URL
+                  Read-only: View events in Arlo
                 </p>
                 {outlookIntegration && (
                   <div className="flex items-center gap-2 mt-2">
@@ -543,7 +553,7 @@ export default function CalendarIntegrations() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {outlookIntegration && (
+              {outlookIntegration ? (
                 <>
                   <Button
                     variant="outline"
@@ -568,25 +578,27 @@ export default function CalendarIntegrations() {
                     <X className="w-4 h-4" />
                   </Button>
                 </>
-              )}
+              ) : null}
             </div>
           </div>
-
+          
+          {/* Outlook Connect Form */}
           {!outlookIntegration && (
             <div className="mt-4 space-y-3">
               <div className="space-y-2">
                 <Label htmlFor="outlook-url" className="text-sm">
-                  Private iCal subscription URL
+                  Outlook iCal URL
                 </Label>
                 <Input
                   id="outlook-url"
+                  type="url"
                   placeholder="https://outlook.live.com/owa/calendar/..."
                   value={outlookUrl}
                   onChange={(e) => setOutlookUrl(e.target.value)}
-                  className="bg-background/60"
+                  className="text-sm"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Find this in Outlook → Settings → Calendar → Shared calendars → Publish a calendar
+                  Find this in Outlook → Calendar → Settings → Shared calendars → Publish a calendar
                 </p>
               </div>
               <Button
@@ -596,32 +608,24 @@ export default function CalendarIntegrations() {
               >
                 {isConnecting.outlook ? (
                   <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                ) : null}
-                Connect Outlook
+                ) : (
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                )}
+                Connect
               </Button>
             </div>
           )}
         </div>
 
-        {/* Sync All */}
-        {(googleIntegration || outlookIntegration) && (
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={async () => {
-              if (googleIntegration) await syncCalendar('google');
-              if (outlookIntegration) await syncCalendar('outlook_ics');
-            }}
-            disabled={isSyncing.google || isSyncing.outlook_ics}
-          >
-            {(isSyncing.google || isSyncing.outlook_ics) ? (
-              <Loader2 className="w-4 h-4 animate-spin mr-2" />
-            ) : (
-              <RefreshCw className="w-4 h-4 mr-2" />
-            )}
-            Sync All Calendars
-          </Button>
-        )}
+        {/* Info */}
+        <div className="text-xs text-muted-foreground bg-muted/20 p-3 rounded-lg">
+          <p className="font-medium mb-1">How it works:</p>
+          <ul className="list-disc list-inside space-y-1">
+            <li><strong>Google Calendar:</strong> Full 2-way sync. Events created in Arlo appear in Google.</li>
+            <li><strong>Outlook Calendar:</strong> Read-only. Outlook events show in Arlo but changes don't sync back.</li>
+            <li>Calendars sync automatically every 60 seconds.</li>
+          </ul>
+        </div>
       </CardContent>
     </Card>
   );
