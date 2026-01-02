@@ -491,7 +491,8 @@ const handler = async (req: Request): Promise<Response> => {
 
     const { data: users, error: userError } = await supabase
       .from("user_settings")
-      .select("user_id")
+      .select("user_key")
+      .not("user_key", "is", null)
       .limit(1);
 
     if (userError) {
@@ -502,9 +503,10 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    const userId = users?.[0]?.user_id;
+    // Use TEXT user_key instead of UUID user_id
+    const userKey = users?.[0]?.user_key;
     
-    if (!userId) {
+    if (!userKey) {
       console.error("[create-booking] No user found for booking");
       return new Response(
         JSON.stringify({ error: "No user available for booking" }),
@@ -520,7 +522,7 @@ const handler = async (req: Request): Promise<Response> => {
     const { data: calendarEvent, error: eventError } = await supabase
       .from("calendar_events")
       .insert({
-        user_id: userId,
+        user_key: userKey, // Use TEXT user_key instead of UUID user_id
         title: eventTitle,
         description: eventDescription,
         start_time: startDate.toISOString(),
@@ -553,7 +555,7 @@ const handler = async (req: Request): Promise<Response> => {
         const { data: googleIntegration } = await supabase
           .from("calendar_integrations")
           .select("id")
-          .eq("user_id", userId)
+          .eq("user_key", userKey) // Use TEXT user_key
           .eq("provider", "google")
           .eq("enabled", true)
           .single();
@@ -570,7 +572,7 @@ const handler = async (req: Request): Promise<Response> => {
               action: "push_event",
               event: {
                 id: calendarEvent.id,
-                user_id: userId,
+                user_key: userKey, // Use TEXT user_key
                 title: eventTitle,
                 description: eventDescription,
                 start_time: startDate.toISOString(),
@@ -595,7 +597,7 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     await supabase.from("notifications").insert({
-      user_id: userId,
+      user_key: userKey, // Use TEXT user_key
       title: "New Meeting Booked",
       content: `${name} has booked a meeting for ${formatDateForDisplay(startDate)} at ${time}`,
       source: "calendar",

@@ -41,6 +41,10 @@ const ENCRYPTED_FIELDS: Record<string, string[]> = {
   'user_settings': ['api_token']
 }
 
+// All user-facing tables now use user_key (TEXT) instead of user_id (UUID)
+// This is the column name used for filtering by authenticated user
+const USER_KEY_COLUMN = 'user_key'
+
 // Helper to encrypt sensitive fields before insert/update
 async function encryptSensitiveFields(
   table: string, 
@@ -116,9 +120,9 @@ Deno.serve(async (req) => {
       return unauthorizedResponse(req, authResult.error || 'Authentication required')
     }
 
-    // userId is derived from JWT.sub - no ARLO_USER_ID used
-    const userId = authResult.userId
-    console.log('[data-api] Authenticated user (from JWT.sub):', userId)
+    // userKey is derived from JWT.sub - this is the email or Tailscale identity (TEXT, not UUID)
+    const userKey = authResult.userId
+    console.log('[data-api] Authenticated user (from JWT.sub):', userKey)
 
     const body: RequestBody = await req.json()
     const { action, table, data, id, filters, order, limit } = body
@@ -137,13 +141,13 @@ Deno.serve(async (req) => {
       case 'select': {
         let query = supabase.from(table).select('*')
         
-        // Apply user_id filter automatically
-        query = query.eq('user_id', userId)
+        // Apply user_key filter automatically (TEXT column, not UUID)
+        query = query.eq(USER_KEY_COLUMN, userKey)
         
         // Apply additional filters
         if (filters) {
           for (const [key, value] of Object.entries(filters)) {
-            if (key !== 'user_id') { // Prevent user_id override
+            if (key !== USER_KEY_COLUMN && key !== 'user_id') { // Prevent user identity override
               query = query.eq(key, value as string)
             }
           }
@@ -173,8 +177,8 @@ Deno.serve(async (req) => {
           return errorResponse(req, 'Data is required for insert', 400)
         }
         
-        // Inject user_id automatically and encrypt sensitive fields
-        const insertData = await encryptSensitiveFields(table, { ...data, user_id: userId })
+        // Inject user_key automatically (TEXT) and encrypt sensitive fields
+        const insertData = await encryptSensitiveFields(table, { ...data, [USER_KEY_COLUMN]: userKey })
         
         const insertResult = await supabase
           .from(table)
@@ -202,7 +206,7 @@ Deno.serve(async (req) => {
           .from(table)
           .update(updateData)
           .eq('id', id)
-          .eq('user_id', userId) // Ensure user owns the record
+          .eq(USER_KEY_COLUMN, userKey) // Ensure user owns the record (using TEXT user_key)
           .select()
           .single()
         
@@ -223,7 +227,7 @@ Deno.serve(async (req) => {
           .from(table)
           .delete()
           .eq('id', id)
-          .eq('user_id', userId) // Ensure user owns the record
+          .eq(USER_KEY_COLUMN, userKey) // Ensure user owns the record (using TEXT user_key)
         break
       }
 
@@ -232,8 +236,8 @@ Deno.serve(async (req) => {
           return errorResponse(req, 'Data is required for upsert', 400)
         }
         
-        // Inject user_id automatically and encrypt sensitive fields
-        const upsertData = await encryptSensitiveFields(table, { ...data, user_id: userId })
+        // Inject user_key automatically (TEXT) and encrypt sensitive fields
+        const upsertData = await encryptSensitiveFields(table, { ...data, [USER_KEY_COLUMN]: userKey })
         
         const upsertResult = await supabase
           .from(table)
@@ -256,7 +260,7 @@ Deno.serve(async (req) => {
         let query = supabase
           .from(table)
           .select('*')
-          .eq('user_id', userId)
+          .eq(USER_KEY_COLUMN, userKey) // Use TEXT user_key
           .in(column, values)
         
         if (order) {
@@ -271,11 +275,11 @@ Deno.serve(async (req) => {
         let query = supabase
           .from(table)
           .select('*', { count: 'exact', head: true })
-          .eq('user_id', userId)
+          .eq(USER_KEY_COLUMN, userKey) // Use TEXT user_key
         
         if (filters) {
           for (const [key, value] of Object.entries(filters)) {
-            if (key !== 'user_id') {
+            if (key !== USER_KEY_COLUMN && key !== 'user_id') {
               query = query.eq(key, value as string)
             }
           }
@@ -295,10 +299,10 @@ Deno.serve(async (req) => {
         let query = supabase
           .from(table)
           .update(data)
-          .eq('user_id', userId)
+          .eq(USER_KEY_COLUMN, userKey) // Use TEXT user_key
         
         for (const [key, value] of Object.entries(filters)) {
-          if (key !== 'user_id') {
+          if (key !== USER_KEY_COLUMN && key !== 'user_id') {
             query = query.eq(key, value as string)
           }
         }

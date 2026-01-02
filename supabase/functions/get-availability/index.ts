@@ -35,8 +35,8 @@ const DEFAULT_AVAILABILITY = {
   slotDurationMinutes: 30,
 };
 
-// Host user ID (you can make this configurable)
-const HOST_USER_ID = "00000000-0000-0000-0000-000000000001"; // Replace with actual user lookup
+// Host user key - now uses TEXT-based user_key column instead of UUID
+const HOST_USER_KEY = "jacobtart8@gmail.com"; // Default host email
 
 function parseTime12to24(time12: string): { hours: number; minutes: number } {
   const match = time12.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
@@ -95,17 +95,18 @@ serve(async (req: Request) => {
 
     // Get user by handle (for now, use a default user lookup)
     // In production, you'd look up the user by their booking handle
-    let userId = HOST_USER_ID;
+    let userKey = HOST_USER_KEY;
 
-    // Try to find user settings or use default
+    // Try to find user settings or use default (using TEXT user_key column)
     const { data: userData } = await supabase
       .from("user_settings")
-      .select("user_id")
+      .select("user_key")
+      .not("user_key", "is", null)
       .limit(1)
       .single();
 
-    if (userData) {
-      userId = userData.user_id;
+    if (userData?.user_key) {
+      userKey = userData.user_key;
     }
 
     const requestedDate = new Date(date + "T00:00:00");
@@ -138,7 +139,7 @@ serve(async (req: Request) => {
     const { data: events, error: eventsError } = await supabase
       .from("calendar_events")
       .select("start_time, end_time, is_all_day, source")
-      .eq("user_id", userId)
+      .eq("user_key", userKey)
       .gte("end_time", startOfDay)
       .lte("start_time", endOfDay);
 
