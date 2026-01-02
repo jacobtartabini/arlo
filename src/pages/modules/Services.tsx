@@ -43,6 +43,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { getAuthHeaders } from '@/lib/arloAuth';
 
 interface Device {
   id: string;
@@ -233,9 +234,17 @@ const Services = () => {
 
   const fetchTailscaleData = useCallback(async (action: string) => {
     try {
+      const authHeaders = await getAuthHeaders();
+      if (!authHeaders) {
+        throw new Error('Authentication required');
+      }
+
       const { data, error } = await supabase.functions.invoke('tailscale-api', {
         body: { action },
-        headers: { 'x-tailscale-verified': 'true' },
+        headers: { 
+          ...(authHeaders as Record<string, string>),
+          'x-tailscale-verified': 'true' 
+        },
       });
 
       if (error) {
