@@ -6,6 +6,7 @@ import {
   unauthorizedResponse, 
   errorResponse 
 } from '../_shared/arloAuth.ts'
+import { encrypt, decrypt, isEncrypted } from '../_shared/encryption.ts'
 
 // Create Supabase client with service role key (bypasses RLS)
 const supabase = createClient(
@@ -31,6 +32,62 @@ const ALLOWED_TABLES = [
   'routines', 'user_progress', 'rewards', 'reward_redemptions', 'xp_events',
   'creation_projects', 'creation_assets', 'creation_scene_state'
 ]
+
+// Fields that should be encrypted when stored
+const ENCRYPTED_FIELDS: Record<string, string[]> = {
+  'user_settings': ['api_token']
+}
+
+// Helper to encrypt sensitive fields before insert/update
+async function encryptSensitiveFields(
+  table: string, 
+  data: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const fieldsToEncrypt = ENCRYPTED_FIELDS[table]
+  if (!fieldsToEncrypt) return data
+  
+  const result = { ...data }
+  for (const field of fieldsToEncrypt) {
+    const value = result[field]
+    if (typeof value === 'string' && value && !isEncrypted(value)) {
+      result[field] = await encrypt(value)
+    }
+  }
+  return result
+}
+
+// Helper to decrypt sensitive fields after select
+async function decryptSensitiveFields(
+  table: string,
+  data: Record<string, unknown> | Record<string, unknown>[] | null
+): Promise<Record<string, unknown> | Record<string, unknown>[] | null> {
+  if (!data) return data
+  
+  const fieldsToDecrypt = ENCRYPTED_FIELDS[table]
+  if (!fieldsToDecrypt) return data
+  
+  const decryptRecord = async (record: Record<string, unknown>): Promise<Record<string, unknown>> => {
+    const result = { ...record }
+    for (const field of fieldsToDecrypt) {
+      const value = result[field]
+      if (typeof value === 'string' && isEncrypted(value)) {
+        try {
+          result[field] = await decrypt(value)
+        } catch (e) {
+          console.error(`[data-api] Failed to decrypt ${field}:`, e)
+          // Return null for the field if decryption fails
+          result[field] = null
+        }
+      }
+    }
+    return result
+  }
+  
+  if (Array.isArray(data)) {
+    return Promise.all(data.map(decryptRecord))
+  }
+  return decryptRecord(data)
+}
 
 Deno.serve(async (req) => {
   // Handle CORS preflight
@@ -90,7 +147,12 @@ Deno.serve(async (req) => {
           query = query.limit(limit)
         }
         
-        result = await query
+        const queryResult = await query
+        // Decrypt sensitive fields before returning
+        result = {
+          data: await decryptSensitiveFields(table, queryResult.data as Record<string, unknown>[] | null),
+          error: queryResult.error
+        }
         break
       }
 
@@ -99,14 +161,20 @@ Deno.serve(async (req) => {
           return errorResponse(req, 'Data is required for insert', 400)
         }
         
-        // Inject user_id automatically
-        const insertData = { ...data, user_id: userId }
+        // Inject user_id automatically and encrypt sensitive fields
+        const insertData = await encryptSensitiveFields(table, { ...data, user_id: userId })
         
-        result = await supabase
+        const insertResult = await supabase
           .from(table)
           .insert(insertData)
           .select()
           .single()
+        
+        // Decrypt before returning
+        result = {
+          data: await decryptSensitiveFields(table, insertResult.data as Record<string, unknown> | null),
+          error: insertResult.error
+        }
         break
       }
 
@@ -115,13 +183,22 @@ Deno.serve(async (req) => {
           return errorResponse(req, 'ID and data are required for update', 400)
         }
         
-        result = await supabase
+        // Encrypt sensitive fields before update
+        const updateData = await encryptSensitiveFields(table, data)
+        
+        const updateResult = await supabase
           .from(table)
-          .update(data)
+          .update(updateData)
           .eq('id', id)
           .eq('user_id', userId) // Ensure user owns the record
           .select()
           .single()
+        
+        // Decrypt before returning
+        result = {
+          data: await decryptSensitiveFields(table, updateResult.data as Record<string, unknown> | null),
+          error: updateResult.error
+        }
         break
       }
 
@@ -143,14 +220,20 @@ Deno.serve(async (req) => {
           return errorResponse(req, 'Data is required for upsert', 400)
         }
         
-        // Inject user_id automatically
-        const upsertData = { ...data, user_id: userId }
+        // Inject user_id automatically and encrypt sensitive fields
+        const upsertData = await encryptSensitiveFields(table, { ...data, user_id: userId })
         
-        result = await supabase
+        const upsertResult = await supabase
           .from(table)
           .upsert(upsertData)
           .select()
           .single()
+        
+        // Decrypt before returning
+        result = {
+          data: await decryptSensitiveFields(table, upsertResult.data as Record<string, unknown> | null),
+          error: upsertResult.error
+        }
         break
       }
 
