@@ -21,6 +21,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     identity: null,
   });
 
+  // Helper to set legacy compatibility flags
+  const setLegacyAuthFlags = (identity: ArloIdentity | null) => {
+    if (identity?.user) {
+      sessionStorage.setItem('arlo_user_id', identity.user);
+      sessionStorage.setItem('arlo_access_verified', 'true');
+      // Set expiry to 24 hours from now
+      sessionStorage.setItem('arlo_access_verified_expiry', String(Date.now() + 24 * 60 * 60 * 1000));
+    }
+  };
+
+  // Helper to clear legacy compatibility flags
+  const clearLegacyAuthFlags = () => {
+    sessionStorage.removeItem('arlo_user_id');
+    sessionStorage.removeItem('arlo_access_verified');
+    sessionStorage.removeItem('arlo_access_verified_expiry');
+  };
+
   // Initialize - check if we have a valid cached token
   useEffect(() => {
     const initAuth = async () => {
@@ -34,10 +51,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             error: null,
             identity: identity,
           });
-          // Store user ID in session storage for components that need it
-          if (identity?.user) {
-            sessionStorage.setItem('arlo_user_id', identity.user);
-          }
+          // Store legacy flags for backward compatibility
+          setLegacyAuthFlags(identity);
         } else {
           // No valid token in memory
           setAuthState({
@@ -76,13 +91,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           error: null,
           identity: identity,
         });
-        // Store user ID in session storage for components that need it
-        if (identity?.user) {
-          sessionStorage.setItem('arlo_user_id', identity.user);
-        }
+        // Store legacy flags for backward compatibility
+        setLegacyAuthFlags(identity);
         return true;
       } else {
-        sessionStorage.removeItem('arlo_user_id');
+        clearLegacyAuthFlags();
         setAuthState({
           isAuthenticated: false,
           isLoading: false,
@@ -93,7 +106,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     } catch (error) {
       console.error('Auth verification failed:', error);
-      sessionStorage.removeItem('arlo_user_id');
+      clearLegacyAuthFlags();
       setAuthState({
         isAuthenticated: false,
         isLoading: false,
@@ -107,7 +120,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Logout - clear token
   const logout = useCallback(() => {
     clearArloToken();
-    sessionStorage.removeItem('arlo_user_id');
+    clearLegacyAuthFlags();
     setAuthState({
       isAuthenticated: false,
       isLoading: false,

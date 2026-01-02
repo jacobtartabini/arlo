@@ -13,8 +13,8 @@ import type {
 } from "@/types/habits";
 import { XP_VALUES, calculateLevel } from "@/types/habits";
 
-// Check if Tailscale is verified
-function isTailscaleVerified(): boolean {
+// Check legacy auth flags for backward compatibility
+function checkAuthFromSession(): boolean {
   if (typeof window === 'undefined') return false;
   const verified = sessionStorage.getItem('arlo_access_verified') === 'true';
   const expiry = sessionStorage.getItem('arlo_access_verified_expiry');
@@ -230,7 +230,7 @@ export function useHabitSystem() {
 
   // Fetch all habits with streaks
   const fetchHabitsWithStreaks = useCallback(async (): Promise<HabitWithStreak[]> => {
-    if (!isTailscaleVerified()) return [];
+    if (!checkAuthFromSession()) return [];
 
     const [habitsRes, logsRes] = await Promise.all([
       dataApiHelpers.select<DbHabit[]>('habits', {
@@ -266,7 +266,7 @@ export function useHabitSystem() {
 
   // Fetch routines with their habits
   const fetchRoutinesWithHabits = useCallback(async (): Promise<RoutineWithHabits[]> => {
-    if (!isTailscaleVerified()) return [];
+    if (!checkAuthFromSession()) return [];
 
     const [routinesRes, habitsWithStreaks] = await Promise.all([
       dataApiHelpers.select<DbRoutine[]>('routines', {
@@ -297,7 +297,7 @@ export function useHabitSystem() {
 
   // Fetch user progress
   const fetchUserProgress = useCallback(async (): Promise<UserProgress | null> => {
-    if (!isTailscaleVerified()) return null;
+    if (!checkAuthFromSession()) return null;
 
     const { data, error } = await dataApiHelpers.select<DbUserProgress[]>('user_progress', {
       limit: 1,
@@ -315,7 +315,7 @@ export function useHabitSystem() {
 
   // Fetch rewards
   const fetchRewards = useCallback(async (): Promise<Reward[]> => {
-    if (!isTailscaleVerified()) return [];
+    if (!checkAuthFromSession()) return [];
 
     const { data, error } = await dataApiHelpers.select<DbReward[]>('rewards', {
       order: { column: 'xp_cost', ascending: true },
@@ -327,7 +327,7 @@ export function useHabitSystem() {
 
   // Create habit
   const createHabit = useCallback(async (habit: Partial<Habit>): Promise<Habit | null> => {
-    if (!isTailscaleVerified()) return null;
+    if (!checkAuthFromSession()) return null;
 
     const { data, error } = await dataApiHelpers.insert<DbHabit>('habits', {
       title: habit.title,
@@ -350,7 +350,7 @@ export function useHabitSystem() {
 
   // Create routine
   const createRoutine = useCallback(async (routine: Partial<Routine>): Promise<Routine | null> => {
-    if (!isTailscaleVerified()) return null;
+    if (!checkAuthFromSession()) return null;
 
     const { data, error } = await dataApiHelpers.insert<DbRoutine>('routines', {
       name: routine.name,
@@ -371,7 +371,7 @@ export function useHabitSystem() {
     skipped: boolean = false,
     notes?: string
   ): Promise<{ log: HabitLog | null; xpEarned: number; bonuses: string[] }> => {
-    if (!isTailscaleVerified()) return { log: null, xpEarned: 0, bonuses: [] };
+    if (!checkAuthFromSession()) return { log: null, xpEarned: 0, bonuses: [] };
 
     const { data, error } = await dataApiHelpers.insert<DbHabitLog>('habit_logs', {
       habit_id: habitId,
@@ -563,7 +563,7 @@ export function useHabitSystem() {
 
   // Redeem reward
   const redeemReward = useCallback(async (rewardId: string): Promise<boolean> => {
-    if (!isTailscaleVerified()) return false;
+    if (!checkAuthFromSession()) return false;
 
     const [rewardRes, progressRes] = await Promise.all([
       dataApiHelpers.select<DbReward[]>('rewards', { filters: { id: rewardId } }),
@@ -593,7 +593,7 @@ export function useHabitSystem() {
 
   // Create reward
   const createReward = useCallback(async (reward: Partial<Reward>): Promise<Reward | null> => {
-    if (!isTailscaleVerified()) return null;
+    if (!checkAuthFromSession()) return null;
 
     const { data, error } = await dataApiHelpers.insert<DbReward>('rewards', {
       name: reward.name,
@@ -608,7 +608,7 @@ export function useHabitSystem() {
 
   // Update habit
   const updateHabit = useCallback(async (id: string, updates: Partial<Habit>): Promise<boolean> => {
-    if (!isTailscaleVerified()) return false;
+    if (!checkAuthFromSession()) return false;
 
     const dbUpdates: Record<string, unknown> = {};
     if (updates.title !== undefined) dbUpdates.title = updates.title;
@@ -630,14 +630,14 @@ export function useHabitSystem() {
 
   // Delete habit
   const deleteHabit = useCallback(async (id: string): Promise<boolean> => {
-    if (!isTailscaleVerified()) return false;
+    if (!checkAuthFromSession()) return false;
     const { error } = await dataApiHelpers.delete('habits', id);
     return !error;
   }, []);
 
   // Update routine
   const updateRoutine = useCallback(async (id: string, updates: Partial<Routine>): Promise<boolean> => {
-    if (!isTailscaleVerified()) return false;
+    if (!checkAuthFromSession()) return false;
 
     const dbUpdates: Record<string, unknown> = {};
     if (updates.name !== undefined) dbUpdates.name = updates.name;
@@ -653,7 +653,7 @@ export function useHabitSystem() {
 
   // Delete routine
   const deleteRoutine = useCallback(async (id: string): Promise<boolean> => {
-    if (!isTailscaleVerified()) return false;
+    if (!checkAuthFromSession()) return false;
     const { error } = await dataApiHelpers.delete('routines', id);
     return !error;
   }, []);

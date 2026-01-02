@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { dataApiHelpers } from '@/lib/data-api';
-import { isAuthenticated as checkIsAuthenticated } from '@/lib/arloAuth';
+import { useAuth } from '@/providers/AuthProvider';
 import { toast } from 'sonner';
 import type { CalendarEvent, BookingSlot } from '@/lib/calendar-data';
 
@@ -94,22 +94,11 @@ export function useCalendarPersistence() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [bookingSlots, setBookingSlots] = useState<BookingSlot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  // Check auth status
-  useEffect(() => {
-    const checkAuth = () => {
-      setIsAuthenticated(checkIsAuthenticated());
-    };
-    
-    checkAuth();
-    const interval = setInterval(checkAuth, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  const { isAuthenticated } = useAuth();
 
   // Fetch events and bookings
   const fetchData = useCallback(async () => {
-    if (!checkIsAuthenticated()) {
+    if (!isAuthenticated) {
       setEvents([]);
       setBookingSlots([]);
       setIsLoading(false);
@@ -147,12 +136,14 @@ export function useCalendarPersistence() {
   }, []);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (isAuthenticated) {
+      fetchData();
+    }
+  }, [fetchData, isAuthenticated]);
 
   // Create event
   const createEvent = useCallback(async (event: Omit<CalendarEvent, 'id'>): Promise<CalendarEvent | null> => {
-    if (!checkIsAuthenticated()) {
+    if (!isAuthenticated) {
       toast.error('Please log in to create events');
       return null;
     }
@@ -179,7 +170,7 @@ export function useCalendarPersistence() {
 
   // Update event
   const updateEvent = useCallback(async (eventId: string, updates: Partial<CalendarEvent>): Promise<boolean> => {
-    if (!checkIsAuthenticated()) return false;
+    if (!isAuthenticated) return false;
 
     const currentEvent = events.find(e => e.id === eventId);
     if (!currentEvent) return false;
@@ -208,7 +199,7 @@ export function useCalendarPersistence() {
 
   // Delete event
   const deleteEvent = useCallback(async (eventId: string): Promise<boolean> => {
-    if (!checkIsAuthenticated()) return false;
+    if (!isAuthenticated) return false;
 
     // Optimistic update
     const previousEvents = events;
@@ -239,7 +230,7 @@ export function useCalendarPersistence() {
     dayOfWeek: number,
     description?: string
   ): Promise<BookingSlot | null> => {
-    if (!checkIsAuthenticated()) {
+    if (!isAuthenticated) {
       toast.error('Please log in to create booking slots');
       return null;
     }
@@ -277,7 +268,7 @@ export function useCalendarPersistence() {
 
   // Update booking slot
   const updateBookingSlot = useCallback(async (slotId: string, updates: Partial<BookingSlot>): Promise<boolean> => {
-    if (!checkIsAuthenticated()) return false;
+    if (!isAuthenticated) return false;
 
     try {
       const { error } = await dataApiHelpers.update('booking_slots', slotId, {
@@ -303,7 +294,7 @@ export function useCalendarPersistence() {
 
   // Delete booking slot
   const deleteBookingSlot = useCallback(async (slotId: string): Promise<boolean> => {
-    if (!checkIsAuthenticated()) return false;
+    if (!isAuthenticated) return false;
 
     const previousSlots = bookingSlots;
     setBookingSlots(prev => prev.filter(s => s.id !== slotId));
