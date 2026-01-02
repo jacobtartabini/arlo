@@ -6,6 +6,7 @@ import {
   unauthorizedResponse, 
   errorResponse 
 } from '../_shared/arloAuth.ts'
+import { encrypt } from '../_shared/encryption.ts'
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -47,14 +48,17 @@ Deno.serve(async (req: Request) => {
         return errorResponse(req, "Unable to access iCal URL. Please check the URL is correct.", 400);
       }
 
-      // Store the iCal URL
+      // Encrypt the iCal URL before storing
+      const encryptedIcalUrl = await encrypt(icalUrl);
+
+      // Store the encrypted iCal URL
       const { error: upsertError } = await supabase
         .from("calendar_integrations")
         .upsert({
           user_id: userId,
           provider: "outlook_ics",
           enabled: true,
-          ical_url: icalUrl,
+          ical_url: encryptedIcalUrl,
           last_sync_status: "pending",
         }, {
           onConflict: "user_id,provider",
