@@ -1,6 +1,11 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
-import { AuthContextType, AuthState } from '@/types/auth';
-import { useSecurityNotifications } from '@/hooks/useSecurityNotifications';
+import { AuthContextType, AuthState, ArloIdentity } from '@/types/auth';
+import { 
+  getArloToken, 
+  clearArloToken, 
+  isAuthenticated as checkIsAuthenticated,
+  getIdentity 
+} from '@/lib/arloAuth';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -10,30 +15,40 @@ interface AuthProviderProps {
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [authState, setAuthState] = useState<AuthState>({
-    tailscaleVerified: false,
+    isAuthenticated: false,
     isLoading: true,
     error: null,
+    identity: null,
   });
 
-  // Initialize verification state
+  // Initialize - check if we have a valid cached token
   useEffect(() => {
-    const initAuth = () => {
+    const initAuth = async () => {
       try {
-        const tailscaleVerified = sessionStorage.getItem('arlo_access_verified') === 'true';
-        const verificationExpiry = sessionStorage.getItem('arlo_access_verified_expiry');
-        const isVerificationValid = verificationExpiry && Date.now() < parseInt(verificationExpiry);
-
-        setAuthState({
-          tailscaleVerified: tailscaleVerified && !!isVerificationValid,
-          isLoading: false,
-          error: null,
-        });
+        // Check if already authenticated (has valid in-memory token)
+        if (checkIsAuthenticated()) {
+          setAuthState({
+            isAuthenticated: true,
+            isLoading: false,
+            error: null,
+            identity: getIdentity(),
+          });
+        } else {
+          // No valid token in memory
+          setAuthState({
+            isAuthenticated: false,
+            isLoading: false,
+            error: null,
+            identity: null,
+          });
+        }
       } catch (error) {
         console.error('Auth initialization failed:', error);
         setAuthState({
-          tailscaleVerified: false,
+          isAuthenticated: false,
           isLoading: false,
           error: 'Failed to initialize authentication',
+          identity: null,
         });
       }
     };
@@ -41,72 +56,57 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     initAuth();
   }, []);
 
-  // Verify Tailscale access (checks both Pi and Mac endpoints)
-  const verifyTailscaleAccess = async (): Promise<void> => {
-    const endpoints = [
-      'https://raspberrypi.tailf531bd.ts.net/auth/verify',
-      'https://jacobs-macbook-pro.tailf531bd.ts.net/api/verify',
-    ];
+  // Verify authentication by fetching/refreshing token
+  const verifyAuth = useCallback(async (): Promise<boolean> => {
+    setAuthState(prev => ({ ...prev, isLoading: true, error: null }));
 
-    let success = false;
-    let lastError: any = null;
-
-    for (const url of endpoints) {
-      try {
-        const response = await fetch(url, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
+    try {
+      const token = await getArloToken();
+      
+      if (token) {
+        setAuthState({
+          isAuthenticated: true,
+          isLoading: false,
+          error: null,
+          identity: getIdentity(),
         });
-
-        if (response.ok) {
-          success = true;
-          break;
-        } else {
-          lastError = new Error(`Access denied via ${url}`);
-        }
-      } catch (err) {
-        lastError = err;
+        return true;
+      } else {
+        setAuthState({
+          isAuthenticated: false,
+          isLoading: false,
+          error: 'Network access required',
+          identity: null,
+        });
+        return false;
       }
+    } catch (error) {
+      console.error('Auth verification failed:', error);
+      setAuthState({
+        isAuthenticated: false,
+        isLoading: false,
+        error: error instanceof Error ? error.message : 'Failed to verify access',
+        identity: null,
+      });
+      return false;
     }
+  }, []);
 
-    if (!success) {
-      sessionStorage.removeItem('arlo_access_verified');
-      sessionStorage.removeItem('arlo_access_verified_expiry');
-
-      setAuthState(prev => ({
-        ...prev,
-        tailscaleVerified: false,
-        error: lastError instanceof Error ? lastError.message : 'Failed to verify access',
-      }));
-      throw lastError || new Error('Verification failed');
-    }
-
-    // Store verification with 15-minute expiry
-    const expiry = Date.now() + 15 * 60 * 1000;
-    sessionStorage.setItem('arlo_access_verified', 'true');
-    sessionStorage.setItem('arlo_access_verified_expiry', expiry.toString());
-
-    setAuthState(prev => ({ ...prev, tailscaleVerified: true, error: null }));
-  };
-
-  // Set Tailscale verification status
-  const setTailscaleVerified = (verified: boolean) => {
-    if (verified) {
-      const expiry = Date.now() + 15 * 60 * 1000;
-      sessionStorage.setItem('arlo_access_verified', 'true');
-      sessionStorage.setItem('arlo_access_verified_expiry', expiry.toString());
-    } else {
-      sessionStorage.removeItem('arlo_access_verified');
-      sessionStorage.removeItem('arlo_access_verified_expiry');
-    }
-
-    setAuthState(prev => ({ ...prev, tailscaleVerified: verified }));
-  };
+  // Logout - clear token
+  const logout = useCallback(() => {
+    clearArloToken();
+    setAuthState({
+      isAuthenticated: false,
+      isLoading: false,
+      error: null,
+      identity: null,
+    });
+  }, []);
 
   const contextValue: AuthContextType = {
     ...authState,
-    verifyTailscaleAccess,
-    setTailscaleVerified,
+    verifyAuth,
+    logout,
   };
 
   return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;

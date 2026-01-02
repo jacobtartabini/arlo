@@ -7,7 +7,7 @@ import { StatusChip } from "@/components/dashboard/StatusChip";
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { tailscaleVerified } = useAuth();
+  const { isAuthenticated, verifyAuth } = useAuth();
   const { isConnected, checkConnection } = useArlo();
   const [gridScale, setGridScale] = useState(1);
   const [isFit, setIsFit] = useState(false);
@@ -65,14 +65,14 @@ export default function Dashboard() {
 
   useEffect(() => {
     const verify = async () => {
-      if (tailscaleVerified) return;
+      if (isAuthenticated) return;
       const ok = await checkConnection();
       if (!ok) navigate("/unauthorized");
     };
     verify();
-  }, [checkConnection, navigate, tailscaleVerified]);
+  }, [checkConnection, navigate, isAuthenticated]);
 
-  if (!tailscaleVerified && !isConnected) {
+  if (!isAuthenticated && !isConnected) {
     return null;
   }
 
