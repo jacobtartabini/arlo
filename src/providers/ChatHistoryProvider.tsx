@@ -84,10 +84,8 @@ const generateId = () => {
   return Math.random().toString(36).slice(2);
 };
 
-/**
- * Check if Tailscale is verified
- */
-function isTailscaleVerified(): boolean {
+// Check legacy auth flags for backward compatibility
+function checkAuthFromSession(): boolean {
   if (typeof window === 'undefined') return false;
   const verified = sessionStorage.getItem('arlo_access_verified') === 'true';
   const expiry = sessionStorage.getItem('arlo_access_verified_expiry');
@@ -140,26 +138,18 @@ export function ChatHistoryProvider({
   const [activeConversationId, setActiveConversationIdState] = useState<string | null>(null);
   const [hasPendingPersistence, setHasPendingPersistence] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   
+  // Check legacy flags for backward compatibility
+  const isAuthenticated = (() => {
+    if (typeof window === 'undefined') return false;
+    const verified = sessionStorage.getItem('arlo_access_verified') === 'true';
+    const expiry = sessionStorage.getItem('arlo_access_verified_expiry');
+    return verified && !!expiry && Date.now() < parseInt(expiry);
+  })();
+  
   const pendingDbOperationsRef = useRef<Set<string>>(new Set());
-  const dbPersistence = useChatPersistence(isAuthenticated ? 'arlo-tailscale-user' : null);
-
-  // Check Tailscale auth status
-  useEffect(() => {
-    const checkAuth = () => {
-      const verified = isTailscaleVerified();
-      if (verified !== isAuthenticated) {
-        setIsAuthenticated(verified);
-        setIsInitialized(false);
-      }
-    };
-    
-    checkAuth();
-    const interval = setInterval(checkAuth, 30000);
-    return () => clearInterval(interval);
-  }, [isAuthenticated]);
+  const dbPersistence = useChatPersistence(isAuthenticated);
 
   // Load conversations based on auth state
   useEffect(() => {

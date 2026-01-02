@@ -1,6 +1,5 @@
 import { useCallback } from 'react';
 import { dataApiHelpers } from '@/lib/data-api';
-import { isAuthenticated as checkIsAuthenticated } from '@/lib/arloAuth';
 import { Conversation, ConversationMessage, ChatSender, ChatMessageStatus } from '@/types/chat';
 
 export interface DbConversation {
@@ -48,10 +47,10 @@ export const dbToMessage = (dbMsg: DbMessage): ConversationMessage => ({
   status: dbMsg.status as ChatMessageStatus,
 });
 
-export function useChatPersistence(userId: string | null) {
+export function useChatPersistence(isAuthenticated: boolean) {
   // Fetch all conversations with messages
   const fetchConversations = useCallback(async (): Promise<Conversation[]> => {
-    if (!checkIsAuthenticated()) return [];
+    if (!isAuthenticated) return [];
 
     try {
       const { data: conversations, error: convError } = await dataApiHelpers.select<DbConversation[]>('conversations', {
@@ -84,7 +83,7 @@ export function useChatPersistence(userId: string | null) {
   }, []);
 
   const createConversation = useCallback(async (title: string = 'New Chat'): Promise<Conversation | null> => {
-    if (!checkIsAuthenticated()) return null;
+    if (!isAuthenticated) return null;
 
     try {
       const { data, error } = await dataApiHelpers.insert<DbConversation>('conversations', { title });
@@ -102,7 +101,7 @@ export function useChatPersistence(userId: string | null) {
   }, []);
 
   const updateConversationTitle = useCallback(async (conversationId: string, title: string): Promise<boolean> => {
-    if (!checkIsAuthenticated()) return false;
+    if (!isAuthenticated) return false;
 
     try {
       const { error } = await dataApiHelpers.update('conversations', conversationId, { title });
@@ -118,7 +117,7 @@ export function useChatPersistence(userId: string | null) {
   }, []);
 
   const deleteConversation = useCallback(async (conversationId: string): Promise<boolean> => {
-    if (!checkIsAuthenticated()) return false;
+    if (!isAuthenticated) return false;
 
     try {
       const { error } = await dataApiHelpers.delete('conversations', conversationId);
@@ -139,7 +138,7 @@ export function useChatPersistence(userId: string | null) {
     sender: ChatSender,
     status: ChatMessageStatus = 'sent'
   ): Promise<ConversationMessage | null> => {
-    if (!checkIsAuthenticated()) return null;
+    if (!isAuthenticated) return null;
 
     try {
       const { data, error } = await dataApiHelpers.insert<DbMessage>('conversation_messages', {
@@ -171,7 +170,7 @@ export function useChatPersistence(userId: string | null) {
     status: ChatMessageStatus,
     content?: string
   ): Promise<boolean> => {
-    if (!checkIsAuthenticated()) return false;
+    if (!isAuthenticated) return false;
 
     try {
       const updates: { status: string; content?: string } = { status };

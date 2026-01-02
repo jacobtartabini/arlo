@@ -1,13 +1,8 @@
 import * as React from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { isAuthenticated as checkIsAuthenticated, getAuthHeaders } from "@/lib/arloAuth";
+import { getAuthHeaders } from "@/lib/arloAuth";
+import { useAuth } from "@/providers/AuthProvider";
 import type { BookingSlot, CalendarEvent } from "@/lib/calendar-data";
-
-// Get user ID from session storage (set by AuthProvider from JWT)
-const getUserId = (): string | null => {
-  if (typeof window === 'undefined') return null;
-  return sessionStorage.getItem('arlo_user_id');
-};
 
 // Auto-sync interval in milliseconds (60 seconds)
 const AUTO_SYNC_INTERVAL = 60 * 1000;
@@ -93,16 +88,11 @@ export function useCalendarDatabase(): [
   const [events, setEventsState] = React.useState<CalendarEvent[]>([]);
   const [bookings, setBookingsState] = React.useState<BookingSlot[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
-  const [isAuthenticated, setIsAuthenticated] = React.useState(false);
+  const { isAuthenticated, identity } = useAuth();
   const pendingUpdatesRef = React.useRef<Set<string>>(new Set());
 
-  // Get user ID from JWT-derived session storage
-  const userId = getUserId();
-
-  // Check authentication status
-  React.useEffect(() => {
-    setIsAuthenticated(checkIsAuthenticated());
-  }, []);
+  // Get user ID from auth context
+  const userId = identity?.user ?? null;
 
   // Sync external calendars (Google, Outlook)
   const syncExternalCalendars = React.useCallback(async () => {

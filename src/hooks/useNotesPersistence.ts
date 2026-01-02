@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { dataApiHelpers } from '@/lib/data-api';
-import { isAuthenticated as checkIsAuthenticated } from '@/lib/arloAuth';
+import { useAuth } from '@/providers/AuthProvider';
 import type { Note, NoteFolder } from '@/types/notes';
 import { toast } from 'sonner';
 
@@ -72,22 +72,11 @@ export function useNotesPersistence() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [folders, setFolders] = useState<NoteFolder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-
-  // Check auth status
-  useEffect(() => {
-    const checkAuth = () => {
-      setIsAuthenticated(checkIsAuthenticated());
-    };
-    
-    checkAuth();
-    const interval = setInterval(checkAuth, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  const { isAuthenticated } = useAuth();
 
   // Fetch notes and folders
   const fetchNotes = useCallback(async () => {
-    if (!checkIsAuthenticated()) {
+    if (!isAuthenticated) {
       setNotes([]);
       setFolders([]);
       setIsLoading(false);
@@ -131,8 +120,10 @@ export function useNotesPersistence() {
   }, []);
 
   useEffect(() => {
-    fetchNotes();
-  }, [fetchNotes]);
+    if (isAuthenticated) {
+      fetchNotes();
+    }
+  }, [fetchNotes, isAuthenticated]);
 
   // Sort helper
   const sortNotes = (notesList: Note[]): Note[] => {
@@ -144,7 +135,7 @@ export function useNotesPersistence() {
 
   // Create a new note
   const createNote = useCallback(async (overrides: Partial<Note> = {}): Promise<Note | null> => {
-    if (!checkIsAuthenticated()) {
+    if (!isAuthenticated) {
       toast.error('Please log in to create notes');
       return null;
     }
@@ -184,7 +175,7 @@ export function useNotesPersistence() {
 
   // Save/update a note
   const saveNote = useCallback(async (note: Note): Promise<boolean> => {
-    if (!checkIsAuthenticated()) return false;
+    if (!isAuthenticated) return false;
 
     // Optimistic update
     setNotes(prev => sortNotes(prev.map(n => n.id === note.id ? note : n)));
@@ -210,7 +201,7 @@ export function useNotesPersistence() {
 
   // Delete a note
   const deleteNote = useCallback(async (noteId: string): Promise<boolean> => {
-    if (!checkIsAuthenticated()) return false;
+    if (!isAuthenticated) return false;
 
     // Optimistic update
     const previousNotes = notes;
@@ -237,7 +228,7 @@ export function useNotesPersistence() {
   // Duplicate a note
   const duplicateNote = useCallback(async (noteId: string): Promise<Note | null> => {
     const original = notes.find(n => n.id === noteId);
-    if (!original || !checkIsAuthenticated()) return null;
+    if (!original || !isAuthenticated) return null;
 
     return createNote({
       ...original,
@@ -249,7 +240,7 @@ export function useNotesPersistence() {
   // Toggle pin
   const togglePinNote = useCallback(async (noteId: string): Promise<boolean> => {
     const note = notes.find(n => n.id === noteId);
-    if (!note || !checkIsAuthenticated()) return false;
+    if (!note || !isAuthenticated) return false;
 
     const updatedNote = { ...note, pinned: !note.pinned };
     return saveNote(updatedNote);
@@ -258,7 +249,7 @@ export function useNotesPersistence() {
   // Rename note
   const renameNote = useCallback(async (noteId: string, title: string): Promise<boolean> => {
     const note = notes.find(n => n.id === noteId);
-    if (!note || !checkIsAuthenticated()) return false;
+    if (!note || !isAuthenticated) return false;
 
     const updatedNote = { ...note, title };
     return saveNote(updatedNote);
@@ -266,7 +257,7 @@ export function useNotesPersistence() {
 
   // Create folder
   const createFolder = useCallback(async (name: string, color: string = '#3b82f6'): Promise<NoteFolder | null> => {
-    if (!checkIsAuthenticated()) return null;
+    if (!isAuthenticated) return null;
 
     try {
       const { data, error } = await dataApiHelpers.insert<DbNoteFolder>('note_folders', { name, color });
@@ -288,7 +279,7 @@ export function useNotesPersistence() {
 
   // Delete folder
   const deleteFolder = useCallback(async (folderId: string): Promise<boolean> => {
-    if (!checkIsAuthenticated()) return false;
+    if (!isAuthenticated) return false;
 
     try {
       // First, remove folder reference from notes
