@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import DOMPurify from "dompurify";
 import { Note } from "@/types/notes";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,26 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+// Configure DOMPurify with strict allowlist for rich text editing
+const ALLOWED_TAGS = [
+  'p', 'br', 'strong', 'b', 'em', 'i', 'u', 
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'ul', 'ol', 'li', 
+  'blockquote', 'pre', 'code', 
+  'hr', 'div', 'span'
+];
+
+const ALLOWED_ATTR = ['style', 'class'];
+
+// Sanitize HTML content for safe rendering and storage
+function sanitizeHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS,
+    ALLOWED_ATTR,
+    KEEP_CONTENT: true,
+  });
+}
+
 interface PageNoteEditorProps {
   note: Note;
   onSave: (content: string) => void;
@@ -56,17 +77,18 @@ export function PageNoteEditor({ note, onSave }: PageNoteEditorProps) {
     align: "left",
   });
 
-  // Load initial content
+  // Load initial content with sanitization
   useEffect(() => {
     if (editorRef.current && note.canvasState) {
       try {
         const content = JSON.parse(note.canvasState);
         if (content.html) {
-          editorRef.current.innerHTML = content.html;
+          // Sanitize HTML before rendering to prevent XSS
+          editorRef.current.innerHTML = sanitizeHtml(content.html);
         }
       } catch {
-        // If not JSON, treat as plain text
-        editorRef.current.innerHTML = note.canvasState || "";
+        // If not JSON, treat as plain text and sanitize
+        editorRef.current.innerHTML = sanitizeHtml(note.canvasState || "");
       }
     }
   }, [note.id]);
@@ -91,10 +113,12 @@ export function PageNoteEditor({ note, onSave }: PageNoteEditorProps) {
     });
   }, []);
 
-  // Auto-save on content change
+  // Auto-save on content change with sanitization
   const handleInput = useCallback(() => {
     if (editorRef.current) {
-      const content = JSON.stringify({ html: editorRef.current.innerHTML });
+      // Sanitize HTML before storing to prevent stored XSS
+      const sanitizedHtml = sanitizeHtml(editorRef.current.innerHTML);
+      const content = JSON.stringify({ html: sanitizedHtml });
       onSave(content);
     }
     updateFormatState();
