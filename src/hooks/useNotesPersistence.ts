@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { dataApiHelpers } from '@/lib/data-api';
+import { isAuthenticated as checkIsAuthenticated } from '@/lib/arloAuth';
 import type { Note, NoteFolder } from '@/types/notes';
 import { toast } from 'sonner';
 
@@ -67,38 +68,26 @@ const dbToFolder = (dbFolder: DbNoteFolder): NoteFolder => ({
   createdAt: dbFolder.created_at,
 });
 
-/**
- * Check if Tailscale is verified
- */
-function isTailscaleVerified(): boolean {
-  if (typeof window === 'undefined') return false;
-  const verified = sessionStorage.getItem('arlo_access_verified') === 'true';
-  const expiry = sessionStorage.getItem('arlo_access_verified_expiry');
-  return verified && !!expiry && Date.now() < parseInt(expiry);
-}
-
 export function useNotesPersistence() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [folders, setFolders] = useState<NoteFolder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  // Check Tailscale auth status
+  // Check auth status
   useEffect(() => {
     const checkAuth = () => {
-      setIsAuthenticated(isTailscaleVerified());
+      setIsAuthenticated(checkIsAuthenticated());
     };
     
     checkAuth();
-    
-    // Re-check periodically in case session expires
     const interval = setInterval(checkAuth, 30000);
     return () => clearInterval(interval);
   }, []);
 
   // Fetch notes and folders
   const fetchNotes = useCallback(async () => {
-    if (!isTailscaleVerified()) {
+    if (!checkIsAuthenticated()) {
       setNotes([]);
       setFolders([]);
       setIsLoading(false);

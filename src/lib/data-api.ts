@@ -1,8 +1,9 @@
 /**
  * Data API client for server-side database operations.
- * All database operations go through the edge function which uses the service role key.
- * Tailscale verification is passed via header.
+ * All database operations go through the edge function which validates JWT tokens.
  */
+
+import { getArloToken, isAuthenticated } from '@/lib/arloAuth';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 
@@ -22,24 +23,14 @@ interface DataApiResponse<T = unknown> {
 }
 
 /**
- * Check if user is Tailscale-verified from session storage
- */
-function isTailscaleVerified(): boolean {
-  if (typeof window === 'undefined') return false;
-  
-  const verified = sessionStorage.getItem('arlo_access_verified') === 'true';
-  const expiry = sessionStorage.getItem('arlo_access_verified_expiry');
-  const isValid = expiry && Date.now() < parseInt(expiry);
-  
-  return verified && !!isValid;
-}
-
-/**
- * Call the data-api edge function
+ * Call the data-api edge function with JWT authentication
  */
 export async function dataApi<T = unknown>(request: DataApiRequest): Promise<DataApiResponse<T>> {
-  if (!isTailscaleVerified()) {
-    return { error: { message: 'Tailscale authentication required' } };
+  // Get a valid token (will auto-refresh if needed)
+  const token = await getArloToken();
+  
+  if (!token) {
+    return { error: { message: 'Authentication required' } };
   }
 
   try {
@@ -47,7 +38,7 @@ export async function dataApi<T = unknown>(request: DataApiRequest): Promise<Dat
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-tailscale-verified': 'true',
+        'Authorization': `Bearer ${token}`,
       },
       body: JSON.stringify(request),
     });
@@ -63,6 +54,13 @@ export async function dataApi<T = unknown>(request: DataApiRequest): Promise<Dat
     console.error('[dataApi] Error:', error);
     return { error: { message: error instanceof Error ? error.message : 'Network error' } };
   }
+}
+
+/**
+ * Check if authenticated (for quick sync checks)
+ */
+export function isArloAuthenticated(): boolean {
+  return isAuthenticated();
 }
 
 /**

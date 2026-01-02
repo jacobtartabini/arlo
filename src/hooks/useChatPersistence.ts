@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { dataApiHelpers } from '@/lib/data-api';
+import { isAuthenticated } from '@/lib/arloAuth';
 import { Conversation, ConversationMessage, ChatSender, ChatMessageStatus } from '@/types/chat';
 
 export interface DbConversation {
@@ -46,16 +47,6 @@ export const dbToMessage = (dbMsg: DbMessage): ConversationMessage => ({
   timestamp: dbMsg.created_at,
   status: dbMsg.status as ChatMessageStatus,
 });
-
-/**
- * Check if Tailscale is verified
- */
-function isTailscaleVerified(): boolean {
-  if (typeof window === 'undefined') return false;
-  const verified = sessionStorage.getItem('arlo_access_verified') === 'true';
-  const expiry = sessionStorage.getItem('arlo_access_verified_expiry');
-  return verified && !!expiry && Date.now() < parseInt(expiry);
-}
 
 export function useChatPersistence(userId: string | null) {
   // Fetch all conversations with messages

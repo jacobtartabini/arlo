@@ -1,10 +1,17 @@
+export interface ArloIdentity {
+  user?: string;
+  node?: string;
+  tailnet?: string;
+}
+
 export interface AuthState {
-  tailscaleVerified: boolean;
+  isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  identity: ArloIdentity | null;
 }
 
 export interface AuthContextType extends AuthState {
-  verifyTailscaleAccess: () => Promise<void>;
-  setTailscaleVerified: (verified: boolean) => void;
+  verifyAuth: () => Promise<boolean>;
+  logout: () => void;
 }

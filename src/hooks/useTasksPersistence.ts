@@ -1,4 +1,5 @@
 import { dataApiHelpers } from "@/lib/data-api";
+import { isAuthenticated } from "@/lib/arloAuth";
 import type { Task } from "@/types/tasks";
 
 interface DbTask {
@@ -26,19 +27,9 @@ const dbToTask = (db: DbTask): Task => ({
   updatedAt: new Date(db.updated_at),
 });
 
-/**
- * Check if Tailscale is verified
- */
-function isTailscaleVerified(): boolean {
-  if (typeof window === 'undefined') return false;
-  const verified = sessionStorage.getItem('arlo_access_verified') === 'true';
-  const expiry = sessionStorage.getItem('arlo_access_verified_expiry');
-  return verified && !!expiry && Date.now() < parseInt(expiry);
-}
-
 export function useTasksPersistence() {
   const fetchTasks = async (): Promise<Task[]> => {
-    if (!isTailscaleVerified()) return [];
+    if (!isAuthenticated()) return [];
 
     const { data, error } = await dataApiHelpers.select<DbTask[]>('tasks', {
       order: { column: 'priority', ascending: false },
@@ -58,7 +49,7 @@ export function useTasksPersistence() {
     category?: string,
     dueDate?: Date
   ): Promise<Task | null> => {
-    if (!isTailscaleVerified()) return null;
+    if (!isAuthenticated()) return null;
 
     const { data, error } = await dataApiHelpers.insert<DbTask>('tasks', {
       title,
@@ -79,7 +70,7 @@ export function useTasksPersistence() {
     id: string,
     updates: Partial<Omit<Task, "id" | "createdAt" | "updatedAt">>
   ): Promise<boolean> => {
-    if (!isTailscaleVerified()) return false;
+    if (!isAuthenticated()) return false;
 
     const dbUpdates: Record<string, unknown> = {};
     if (updates.title !== undefined) dbUpdates.title = updates.title;
@@ -100,7 +91,7 @@ export function useTasksPersistence() {
   };
 
   const deleteTask = async (id: string): Promise<boolean> => {
-    if (!isTailscaleVerified()) return false;
+    if (!isAuthenticated()) return false;
 
     const { error } = await dataApiHelpers.delete('tasks', id);
 

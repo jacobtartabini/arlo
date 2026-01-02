@@ -4,6 +4,7 @@ import { Shield, Wifi, Lock } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { getArloToken } from '@/lib/arloAuth';
 
 // Fixed UUID for Tailscale-authenticated single-user app
 const TAILSCALE_USER_ID = '00000000-0000-0000-0000-000000000001';
@@ -16,7 +17,7 @@ interface Message {
 
 const TailscaleAuth: React.FC = () => {
   const navigate = useNavigate();
-  const { verifyTailscaleAccess } = useAuth();
+  const { verifyAuth } = useAuth();
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
   const [isVerifying, setIsVerifying] = useState(true);
   const [networkDenied, setNetworkDenied] = useState(false);
@@ -68,8 +69,12 @@ const TailscaleAuth: React.FC = () => {
 
   const handleGoogleCallback = async (code: string, state: string) => {
     try {
+      // Get auth token for the API call
+      const token = await getArloToken();
+      
       const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
         body: { action: 'exchange_code', code, state, userId: TAILSCALE_USER_ID },
+        headers: token ? { 'Authorization': `Bearer ${token}` } : undefined,
       });
 
       if (error) throw error;
@@ -80,6 +85,7 @@ const TailscaleAuth: React.FC = () => {
       // Trigger initial sync
       await supabase.functions.invoke('calendar-sync', {
         body: { action: 'sync_provider', provider: 'google', userId: TAILSCALE_USER_ID },
+        headers: token ? { 'Authorization': `Bearer ${token}` } : undefined,
       });
       
       // Redirect to settings after successful connection
@@ -90,7 +96,7 @@ const TailscaleAuth: React.FC = () => {
     }
   };
 
-  // Verify Tailscale network connection
+  // Verify network connection using new JWT auth
   useEffect(() => {
     // Skip if this is a Google OAuth callback
     const params = new URLSearchParams(window.location.search);
@@ -98,32 +104,38 @@ const TailscaleAuth: React.FC = () => {
       return;
     }
 
-    const verifyTailscaleConnection = async () => {
+    const verifyConnection = async () => {
       try {
         // Wait a moment for better UX
         await new Promise(resolve => setTimeout(resolve, 2000));
 
-        // Use the auth context to verify access (throws if access denied)
-        await verifyTailscaleAccess();
+        // Use the new auth context to verify access
+        const success = await verifyAuth();
 
-        // Access verified, proceed with success animation
-        setShowMessages(false);
-        setCurrentMessageIndex(0);
+        if (success) {
+          // Access verified, proceed with success animation
+          setShowMessages(false);
+          setCurrentMessageIndex(0);
 
-        setTimeout(() => {
+          setTimeout(() => {
+            setIsVerifying(false);
+            setTimeout(() => navigate('/dashboard'), 1000);
+          }, 500);
+        } else {
           setIsVerifying(false);
-          setTimeout(() => navigate('/dashboard'), 1000);
-        }, 500);
+          setNetworkDenied(true);
+          setShowMessages(false);
+        }
       } catch (error) {
-        console.log('Tailscale network verification failed:', error);
+        console.log('Network verification failed:', error);
         setIsVerifying(false);
         setNetworkDenied(true);
         setShowMessages(false);
       }
     };
 
-    verifyTailscaleConnection();
-  }, [navigate, verifyTailscaleAccess]);
+    verifyConnection();
+  }, [navigate, verifyAuth]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 relative overflow-hidden">

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { dataApiHelpers } from '@/lib/data-api';
+import { isAuthenticated as checkIsAuthenticated } from '@/lib/arloAuth';
 import { toast } from 'sonner';
 import type { CalendarEvent, BookingSlot } from '@/lib/calendar-data';
 
@@ -84,20 +85,10 @@ const dbToBooking = (dbSlot: DbBookingSlot): BookingSlot => ({
   description: dbSlot.description ?? undefined,
   startTime: dbSlot.start_time,
   endTime: dbSlot.end_time,
-  date: '', // Will be calculated based on day_of_week
+  date: '',
   available: dbSlot.enabled,
   bookedBy: null,
 });
-
-/**
- * Check if Tailscale is verified
- */
-function isTailscaleVerified(): boolean {
-  if (typeof window === 'undefined') return false;
-  const verified = sessionStorage.getItem('arlo_access_verified') === 'true';
-  const expiry = sessionStorage.getItem('arlo_access_verified_expiry');
-  return verified && !!expiry && Date.now() < parseInt(expiry);
-}
 
 export function useCalendarPersistence() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);

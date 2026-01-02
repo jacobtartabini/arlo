@@ -78,10 +78,10 @@ const eventToDb = (event: Partial<CalendarEvent>, userId: string) => {
   };
 };
 
-// Check if user is authenticated via Tailscale
-const isTailscaleVerified = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  return sessionStorage.getItem('tailscale-verified') === 'true';
+// Check if user is authenticated
+const isUserAuthenticated = (): boolean => {
+  // This hook uses direct Supabase queries, auth is handled by RLS
+  return true;
 };
 
 export function useCalendarDatabase(): [

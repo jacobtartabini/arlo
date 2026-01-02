@@ -1,4 +1,5 @@
 import { dataApiHelpers } from "@/lib/data-api";
+import { isAuthenticated } from "@/lib/arloAuth";
 import type { Habit, HabitLog, HabitWithStreak } from "@/types/habits";
 
 interface DbHabit {
@@ -105,19 +106,9 @@ const countLast7Days = (logs: HabitLog[]): number => {
   ).length;
 };
 
-/**
- * Check if Tailscale is verified
- */
-function isTailscaleVerified(): boolean {
-  if (typeof window === 'undefined') return false;
-  const verified = sessionStorage.getItem('arlo_access_verified') === 'true';
-  const expiry = sessionStorage.getItem('arlo_access_verified_expiry');
-  return verified && !!expiry && Date.now() < parseInt(expiry);
-}
-
 export function useHabitsPersistence() {
   const fetchHabits = async (): Promise<Habit[]> => {
-    if (!isTailscaleVerified()) return [];
+    if (!isAuthenticated()) return [];
 
     const { data, error } = await dataApiHelpers.select<DbHabit[]>('habits', {
       order: { column: 'created_at', ascending: false },
@@ -154,7 +145,7 @@ export function useHabitsPersistence() {
   };
 
   const fetchAllHabitLogs = async (): Promise<HabitLog[]> => {
-    if (!isTailscaleVerified()) return [];
+    if (!isAuthenticated()) return [];
 
     const { data, error } = await dataApiHelpers.select<DbHabitLog[]>('habit_logs', {
       order: { column: 'completed_at', ascending: false },
@@ -173,7 +164,7 @@ export function useHabitsPersistence() {
     description?: string,
     category: Habit["category"] = "routine"
   ): Promise<Habit | null> => {
-    if (!isTailscaleVerified()) return null;
+    if (!isAuthenticated()) return null;
 
     const { data, error } = await dataApiHelpers.insert<DbHabit>('habits', {
       title,
@@ -193,7 +184,7 @@ export function useHabitsPersistence() {
     id: string,
     updates: Partial<Omit<Habit, "id" | "createdAt" | "updatedAt">>
   ): Promise<boolean> => {
-    if (!isTailscaleVerified()) return false;
+    if (!isAuthenticated()) return false;
 
     const dbUpdates: Record<string, unknown> = {};
     if (updates.title !== undefined) dbUpdates.title = updates.title;
@@ -221,7 +212,7 @@ export function useHabitsPersistence() {
   };
 
   const deleteHabit = async (id: string): Promise<boolean> => {
-    if (!isTailscaleVerified()) return false;
+    if (!isAuthenticated()) return false;
 
     const { error } = await dataApiHelpers.delete('habits', id);
 
@@ -237,7 +228,7 @@ export function useHabitsPersistence() {
     habitId: string,
     notes?: string
   ): Promise<HabitLog | null> => {
-    if (!isTailscaleVerified()) return null;
+    if (!isAuthenticated()) return null;
 
     const { data, error } = await dataApiHelpers.insert<DbHabitLog>('habit_logs', {
       habit_id: habitId,
@@ -255,7 +246,7 @@ export function useHabitsPersistence() {
   };
 
   const deleteHabitLog = async (logId: string): Promise<boolean> => {
-    if (!isTailscaleVerified()) return false;
+    if (!isAuthenticated()) return false;
 
     const { error } = await dataApiHelpers.delete('habit_logs', logId);
 

@@ -1,4 +1,5 @@
 import { dataApiHelpers } from "@/lib/data-api";
+import { isAuthenticated } from "@/lib/arloAuth";
 import type { Notification } from "@/types/notifications";
 
 interface DbNotification {
@@ -24,19 +25,9 @@ const dbToNotification = (db: DbNotification): Notification => ({
   createdAt: new Date(db.created_at),
 });
 
-/**
- * Check if Tailscale is verified
- */
-function isTailscaleVerified(): boolean {
-  if (typeof window === 'undefined') return false;
-  const verified = sessionStorage.getItem('arlo_access_verified') === 'true';
-  const expiry = sessionStorage.getItem('arlo_access_verified_expiry');
-  return verified && !!expiry && Date.now() < parseInt(expiry);
-}
-
 export function useNotificationsPersistence() {
   const fetchNotifications = async (): Promise<Notification[]> => {
-    if (!isTailscaleVerified()) return [];
+    if (!isAuthenticated()) return [];
 
     const { data, error } = await dataApiHelpers.select<DbNotification[]>('notifications', {
       order: { column: 'created_at', ascending: false },
@@ -52,7 +43,7 @@ export function useNotificationsPersistence() {
   };
 
   const fetchUnreadCount = async (): Promise<number> => {
-    if (!isTailscaleVerified()) return 0;
+    if (!isAuthenticated()) return 0;
 
     const { count, error } = await dataApiHelpers.count('notifications', { read: false });
 
@@ -71,7 +62,7 @@ export function useNotificationsPersistence() {
     actionType?: string,
     actionData?: Record<string, unknown>
   ): Promise<Notification | null> => {
-    if (!isTailscaleVerified()) return null;
+    if (!isAuthenticated()) return null;
 
     const { data, error } = await dataApiHelpers.insert<DbNotification>('notifications', {
       title,
@@ -90,7 +81,7 @@ export function useNotificationsPersistence() {
   };
 
   const markAsRead = async (id: string): Promise<boolean> => {
-    if (!isTailscaleVerified()) return false;
+    if (!isAuthenticated()) return false;
 
     const { error } = await dataApiHelpers.update('notifications', id, { read: true });
 
@@ -103,7 +94,7 @@ export function useNotificationsPersistence() {
   };
 
   const markAllAsRead = async (): Promise<boolean> => {
-    if (!isTailscaleVerified()) return false;
+    if (!isAuthenticated()) return false;
 
     const { error } = await dataApiHelpers.updateWhere(
       'notifications',
@@ -120,7 +111,7 @@ export function useNotificationsPersistence() {
   };
 
   const deleteNotification = async (id: string): Promise<boolean> => {
-    if (!isTailscaleVerified()) return false;
+    if (!isAuthenticated()) return false;
 
     const { error } = await dataApiHelpers.delete('notifications', id);
 
