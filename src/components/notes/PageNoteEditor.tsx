@@ -29,9 +29,8 @@ import {
   StretchHorizontal,
   Circle,
   Square,
-  Plus,
   Eraser,
-  PenTool,
+  Globe,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Toggle } from "@/components/ui/toggle";
@@ -49,7 +48,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Slider } from "@/components/ui/slider";
-import { DrawingToolbar } from "./DrawingToolbar";
+import { ResearchPanel } from "./modules/ResearchPanel";
 
 // Configure DOMPurify with strict allowlist for rich text editing
 const ALLOWED_TAGS = [
@@ -111,6 +110,7 @@ export function PageNoteEditor({ note, onSave }: PageNoteEditorProps) {
   const [undoStack, setUndoStack] = useState<string[]>([]);
   const [redoStack, setRedoStack] = useState<string[]>([]);
   const [textBoxes, setTextBoxes] = useState<Array<{ id: string; x: number; y: number; content: string }>>([]);
+  const [researchPanelOpen, setResearchPanelOpen] = useState(false);
 
   // Parse stored content
   useEffect(() => {
@@ -427,8 +427,17 @@ export function PageNoteEditor({ note, onSave }: PageNoteEditorProps) {
     </TooltipProvider>
   );
 
+  // Handler for inserting links from Research Panel
+  const handleInsertLink = useCallback((url: string, title: string) => {
+    if (mode === "type" && editorRef.current) {
+      const link = `<a href="${url}" target="_blank" rel="noopener noreferrer">${title}</a>`;
+      document.execCommand("insertHTML", false, link);
+      saveContent();
+    }
+  }, [mode, saveContent]);
+
   return (
-    <div className="flex h-full flex-col bg-muted/30">
+    <div className="flex h-full flex-col bg-muted/30 relative">
       {/* Toolbar */}
       <div className="flex items-center gap-1 border-b border-border/60 bg-card/80 px-4 py-2 flex-wrap backdrop-blur-sm">
         {/* Mode Toggle */}
@@ -713,6 +722,20 @@ export function PageNoteEditor({ note, onSave }: PageNoteEditorProps) {
             )}
           </>
         )}
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Research Panel Toggle */}
+        <Button
+          variant={researchPanelOpen ? "secondary" : "ghost"}
+          size="sm"
+          className="h-8 gap-1.5"
+          onClick={() => setResearchPanelOpen(!researchPanelOpen)}
+        >
+          <Globe className="h-4 w-4" />
+          <span className="text-xs hidden sm:inline">Research</span>
+        </Button>
       </div>
 
       {/* Document Page Area */}
@@ -772,6 +795,13 @@ export function PageNoteEditor({ note, onSave }: PageNoteEditorProps) {
           )}
         </div>
       </div>
+
+      {/* Research Panel */}
+      <ResearchPanel
+        isOpen={researchPanelOpen}
+        onClose={() => setResearchPanelOpen(false)}
+        onInsertLink={handleInsertLink}
+      />
 
       {/* Styles for placeholder */}
       <style>{`
