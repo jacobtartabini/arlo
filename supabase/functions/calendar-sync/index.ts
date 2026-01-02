@@ -29,6 +29,7 @@ interface GoogleEvent {
 interface CalendarIntegration {
   id: string;
   user_id: string;
+  user_key: string; // TEXT identifier from JWT.sub
   provider: string;
   access_token: string;
   refresh_token: string;
@@ -182,11 +183,11 @@ async function syncGoogleCalendar(integration: CalendarIntegration, supabase: an
         const externalId = `${cal.id}::${event.id}`;
         
         if (event.status === "cancelled") {
-          // Delete cancelled events
+          // Delete cancelled events using user_key
           await supabase
             .from("calendar_events")
             .delete()
-            .eq("user_id", integration.user_id)
+            .eq("user_key", integration.user_key)
             .eq("source", "google")
             .eq("external_id", externalId);
           continue;
@@ -197,7 +198,7 @@ async function syncGoogleCalendar(integration: CalendarIntegration, supabase: an
         const endTime = event.end.dateTime || `${event.end.date}T23:59:59`;
 
         const eventData = {
-          user_id: integration.user_id,
+          user_key: integration.user_key, // Use TEXT identifier
           title: event.summary || "Untitled Event",
           description: event.description || null,
           location: event.location || null,
@@ -212,11 +213,11 @@ async function syncGoogleCalendar(integration: CalendarIntegration, supabase: an
           last_synced_at: new Date().toISOString(),
         };
 
-        // Check if event already exists
+        // Check if event already exists using user_key
         const { data: existing } = await supabase
           .from("calendar_events")
           .select("id")
-          .eq("user_id", integration.user_id)
+          .eq("user_key", integration.user_key)
           .eq("source", "google")
           .eq("external_id", externalId)
           .maybeSingle();
@@ -270,7 +271,7 @@ async function syncGoogleCalendar(integration: CalendarIntegration, supabase: an
       })
       .eq("id", integration.id);
 
-    console.log(`[calendar-sync] Synced ${totalSynced} total Google events for user ${integration.user_id}`);
+    console.log(`[calendar-sync] Synced ${totalSynced} total Google events for user_key ${integration.user_key}`);
     return { success: true, synced: totalSynced };
   } catch (error) {
     console.error("[calendar-sync] Sync error:", error);
@@ -303,11 +304,11 @@ async function syncOutlookIcal(integration: CalendarIntegration, supabase: any):
     let syncedCount = 0;
     let errorCount = 0;
 
-    // Get existing external IDs to detect deletions
+    // Get existing external IDs to detect deletions using user_key
     const { data: existingEvents } = await supabase
       .from("calendar_events")
       .select("external_id")
-      .eq("user_id", integration.user_id)
+      .eq("user_key", integration.user_key)
       .eq("source", "outlook_ics");
 
     const existingIds = new Set((existingEvents || []).map((e: any) => e.external_id));
@@ -317,7 +318,7 @@ async function syncOutlookIcal(integration: CalendarIntegration, supabase: any):
       currentIds.add(event.uid);
 
       const eventData = {
-        user_id: integration.user_id,
+        user_key: integration.user_key, // Use TEXT identifier
         title: event.summary || "Untitled Event",
         description: event.description || null,
         location: event.location || null,
@@ -332,11 +333,11 @@ async function syncOutlookIcal(integration: CalendarIntegration, supabase: any):
         last_synced_at: new Date().toISOString(),
       };
 
-      // Check if event already exists
+      // Check if event already exists using user_key
       const { data: existing } = await supabase
         .from("calendar_events")
         .select("id")
-        .eq("user_id", integration.user_id)
+        .eq("user_key", integration.user_key)
         .eq("source", "outlook_ics")
         .eq("external_id", event.uid)
         .maybeSingle();
@@ -363,13 +364,13 @@ async function syncOutlookIcal(integration: CalendarIntegration, supabase: any):
       }
     }
 
-    // Delete events that no longer exist in the feed
+    // Delete events that no longer exist in the feed using user_key
     for (const existingId of existingIds) {
       if (!currentIds.has(existingId)) {
         await supabase
           .from("calendar_events")
           .delete()
-          .eq("user_id", integration.user_id)
+          .eq("user_key", integration.user_key)
           .eq("source", "outlook_ics")
           .eq("external_id", existingId);
       }
@@ -384,7 +385,7 @@ async function syncOutlookIcal(integration: CalendarIntegration, supabase: any):
       })
       .eq("id", integration.id);
 
-    console.log(`[calendar-sync] Synced ${syncedCount} Outlook iCal events (${errorCount} errors) for user ${integration.user_id}`);
+    console.log(`[calendar-sync] Synced ${syncedCount} Outlook iCal events (${errorCount} errors) for user_key ${integration.user_key}`);
     return { success: true, synced: syncedCount };
   } catch (error) {
     console.error("[calendar-sync] iCal sync error:", error);
@@ -624,20 +625,20 @@ Deno.serve(async (req) => {
       return unauthorizedResponse(req, authResult.error || 'Authentication required');
     }
 
-    // userId is derived from JWT.sub - no ARLO_USER_ID used
-    const userId = authResult.userId;
-    console.log('[calendar-sync] Authenticated user (from JWT.sub):', userId);
+    // userKey is derived from JWT.sub - TEXT identifier (email/tailnet)
+    const userKey = authResult.userId;
+    console.log('[calendar-sync] Authenticated user_key (from JWT.sub):', userKey);
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const body = await req.json();
     const { action } = body;
 
-    // Sync all enabled integrations
+    // Sync all enabled integrations using user_key
     if (action === "sync") {
       const { data: integrations, error: fetchError } = await supabase
         .from("calendar_integrations")
         .select("*")
-        .eq("user_id", userId)
+        .eq("user_key", userKey)
         .eq("enabled", true);
 
       if (fetchError) {
@@ -667,18 +668,19 @@ Deno.serve(async (req) => {
       return jsonResponse(req, { success: true, results });
     }
 
-    // Sync a specific provider
+    // Sync a specific provider using user_key
     if (action === "sync_provider") {
       const { provider } = body;
       
       const { data: integration, error: fetchError } = await supabase
         .from("calendar_integrations")
         .select("*")
-        .eq("user_id", userId)
+        .eq("user_key", userKey)
         .eq("provider", provider)
         .single();
 
       if (fetchError || !integration) {
+        console.log("[calendar-sync] Integration not found for user_key:", userKey, "provider:", provider);
         return errorResponse(req, "Integration not found", 404);
       }
 
@@ -694,14 +696,14 @@ Deno.serve(async (req) => {
       return jsonResponse(req, result);
     }
 
-    // Push event to Google Calendar (2-way sync)
+    // Push event to Google Calendar (2-way sync) using user_key
     if (action === "push_event") {
       const { event, eventAction } = body;
 
       const { data: integration, error: fetchError } = await supabase
         .from("calendar_integrations")
         .select("*")
-        .eq("user_id", userId)
+        .eq("user_key", userKey)
         .eq("provider", "google")
         .single();
 
