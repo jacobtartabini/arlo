@@ -7,6 +7,7 @@ import {
   unauthorizedResponse, 
   errorResponse 
 } from '../_shared/arloAuth.ts'
+import { encrypt, decrypt, isEncrypted } from '../_shared/encryption.ts'
 
 const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID")!;
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
@@ -69,15 +70,19 @@ Deno.serve(async (req: Request) => {
       const { access_token, refresh_token, expires_in } = tokenData;
       const expiresAt = new Date(Date.now() + expires_in * 1000).toISOString();
 
-      // Store tokens in database
+      // Encrypt tokens before storing
+      const encryptedAccessToken = await encrypt(access_token);
+      const encryptedRefreshToken = await encrypt(refresh_token);
+
+      // Store encrypted tokens in database
       const { error: upsertError } = await supabase
         .from("calendar_integrations")
         .upsert({
           user_id: decodedUserId,
           provider: "google",
           enabled: true,
-          access_token,
-          refresh_token,
+          access_token: encryptedAccessToken,
+          refresh_token: encryptedRefreshToken,
           token_expires_at: expiresAt,
           last_sync_status: "pending",
         }, {
@@ -142,8 +147,10 @@ Deno.serve(async (req: Request) => {
         return errorResponse(req, "Google Calendar not connected", 400);
       }
 
-      // Refresh token if needed
-      let accessToken = integration.access_token;
+      // Decrypt and refresh token if needed
+      let accessToken = await decrypt(integration.access_token);
+      const decryptedRefreshToken = await decrypt(integration.refresh_token);
+      
       const expiresAt = new Date(integration.token_expires_at);
       if (expiresAt.getTime() - Date.now() < 5 * 60 * 1000) {
         const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
@@ -152,17 +159,19 @@ Deno.serve(async (req: Request) => {
           body: new URLSearchParams({
             client_id: GOOGLE_CLIENT_ID,
             client_secret: GOOGLE_CLIENT_SECRET,
-            refresh_token: integration.refresh_token,
+            refresh_token: decryptedRefreshToken,
             grant_type: "refresh_token",
           }),
         });
         const tokenData = await tokenResponse.json();
         if (tokenData.access_token) {
           accessToken = tokenData.access_token;
+          // Encrypt the new access token before storing
+          const encryptedAccessToken = await encrypt(accessToken);
           await supabase
             .from("calendar_integrations")
             .update({
-              access_token: accessToken,
+              access_token: encryptedAccessToken,
               token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
             })
             .eq("id", integration.id);

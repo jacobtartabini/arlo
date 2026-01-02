@@ -6,6 +6,7 @@ import {
   unauthorizedResponse, 
   errorResponse 
 } from '../_shared/arloAuth.ts'
+import { encrypt, decrypt, isEncrypted } from '../_shared/encryption.ts'
 
 const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID")!;
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
@@ -36,13 +37,16 @@ interface CalendarIntegration {
 
 async function refreshGoogleToken(integration: CalendarIntegration): Promise<string | null> {
   try {
+    // Decrypt the refresh token
+    const decryptedRefreshToken = await decrypt(integration.refresh_token);
+    
     const response = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         client_id: GOOGLE_CLIENT_ID,
         client_secret: GOOGLE_CLIENT_SECRET,
-        refresh_token: integration.refresh_token,
+        refresh_token: decryptedRefreshToken,
         grant_type: "refresh_token",
       }),
     });
@@ -53,14 +57,15 @@ async function refreshGoogleToken(integration: CalendarIntegration): Promise<str
       return null;
     }
 
-    // Update token in database
+    // Update token in database - encrypt the new access token
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     const expiresAt = new Date(Date.now() + data.expires_in * 1000).toISOString();
+    const encryptedAccessToken = await encrypt(data.access_token);
 
     await supabase
       .from("calendar_integrations")
       .update({
-        access_token: data.access_token,
+        access_token: encryptedAccessToken,
         token_expires_at: expiresAt,
       })
       .eq("id", integration.id);
@@ -81,7 +86,8 @@ async function getValidAccessToken(integration: CalendarIntegration): Promise<st
     return await refreshGoogleToken(integration);
   }
 
-  return integration.access_token;
+  // Decrypt and return the access token
+  return await decrypt(integration.access_token);
 }
 
 interface CalendarSelection {
@@ -276,9 +282,11 @@ async function syncOutlookIcal(integration: CalendarIntegration, supabase: any):
   }
 
   try {
-    console.log(`[calendar-sync] Fetching Outlook iCal from: ${integration.ical_url.substring(0, 50)}...`);
+    // Decrypt the iCal URL if it's encrypted
+    const decryptedIcalUrl = await decrypt(integration.ical_url);
+    console.log(`[calendar-sync] Fetching Outlook iCal from: ${decryptedIcalUrl.substring(0, 50)}...`);
     
-    const response = await fetch(integration.ical_url);
+    const response = await fetch(decryptedIcalUrl);
     if (!response.ok) {
       console.error(`[calendar-sync] Failed to fetch iCal: ${response.status} ${response.statusText}`);
       return { success: false, error: `Failed to fetch iCal: ${response.status}` };
