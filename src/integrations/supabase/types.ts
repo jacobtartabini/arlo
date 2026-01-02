@@ -580,10 +580,12 @@ export type Database = {
         Row: {
           action_data: Json | null
           action_type: string | null
+          archived_at: string | null
           content: string | null
           created_at: string
           id: string
           read: boolean
+          read_at: string | null
           source: string
           title: string
           user_id: string
@@ -591,10 +593,12 @@ export type Database = {
         Insert: {
           action_data?: Json | null
           action_type?: string | null
+          archived_at?: string | null
           content?: string | null
           created_at?: string
           id?: string
           read?: boolean
+          read_at?: string | null
           source?: string
           title: string
           user_id: string
@@ -602,10 +606,12 @@ export type Database = {
         Update: {
           action_data?: Json | null
           action_type?: string | null
+          archived_at?: string | null
           content?: string | null
           created_at?: string
           id?: string
           read?: boolean
+          read_at?: string | null
           source?: string
           title?: string
           user_id?: string
