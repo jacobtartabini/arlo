@@ -3,11 +3,25 @@ import {
   verifyArloJWT, 
   handleCorsOptions, 
   getCorsHeaders,
+  validateOrigin,
   jsonResponse, 
   unauthorizedResponse, 
   errorResponse 
 } from '../_shared/arloAuth.ts'
 import { encrypt, decrypt, isEncrypted } from '../_shared/encryption.ts'
+import { 
+  createOAuthNonce, 
+  validateAndConsumeNonce, 
+  encodeOAuthState, 
+  decodeOAuthState,
+  cleanupExpiredNonces
+} from '../_shared/oauthNonce.ts'
+import { 
+  checkAuthRateLimit, 
+  AUTH_RATE_LIMITS, 
+  logOAuthEvent,
+  logAuthFailure
+} from '../_shared/authRateLimit.ts'
 
 const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID")!;
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
@@ -24,25 +38,65 @@ Deno.serve(async (req: Request) => {
     return handleCorsOptions(req);
   }
 
+  // Validate origin for non-preflight requests
+  const originError = validateOrigin(req);
+  if (originError) return originError;
+
   try {
     const body = await req.json();
     const { action, code, state, calendars, integrationId } = body;
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Step 2: Exchange code for tokens - This is called from the OAuth callback
-    // It needs special handling because the user might not have a JWT yet
+    // Periodically clean up expired nonces
+    await cleanupExpiredNonces();
+
+    // Step 2: Exchange code for tokens - SECURED WITH NONCE VALIDATION
+    // This is called from the OAuth callback and now requires JWT + valid nonce
     if (action === "exchange_code") {
+      // Rate limit code exchange attempts
+      const rateLimitResponse = checkAuthRateLimit(req, AUTH_RATE_LIMITS.oauthExchange);
+      if (rateLimitResponse) return rateLimitResponse;
+
       if (!code || !state) {
+        logOAuthEvent('state_invalid', req, { reason: 'missing code or state' });
         return errorResponse(req, "Missing code or state", 400);
       }
 
-      let decodedUserId: string;
-      try {
-        const decoded = JSON.parse(atob(state));
-        decodedUserId = decoded.userId;
-      } catch {
-        return errorResponse(req, "Invalid state", 400);
+      // Verify JWT authentication for code exchange
+      const authResult = await verifyArloJWT(req);
+      
+      if (!authResult.authenticated) {
+        logAuthFailure(req, 'OAuth exchange without valid JWT');
+        return unauthorizedResponse(req, authResult.error || 'Authentication required');
+      }
+
+      const jwtUserId = authResult.userId;
+
+      // Decode and validate the nonce from state
+      const { nonce, provider } = decodeOAuthState(state);
+      
+      if (!nonce || provider !== 'google') {
+        logOAuthEvent('state_invalid', req, { reason: 'invalid state format' });
+        return errorResponse(req, "Invalid OAuth state", 400);
+      }
+
+      // Validate and consume the nonce (single-use)
+      const nonceResult = await validateAndConsumeNonce(nonce, 'google');
+      
+      if (!nonceResult.valid) {
+        logOAuthEvent('nonce_invalid', req, { error: nonceResult.error });
+        return errorResponse(req, nonceResult.error || "Invalid or expired OAuth session", 400);
+      }
+
+      // CRITICAL: Verify the JWT user matches the nonce user
+      if (nonceResult.userId !== jwtUserId) {
+        logOAuthEvent('nonce_invalid', req, { 
+          reason: 'user mismatch', 
+          nonceUser: nonceResult.userId?.substring(0, 10),
+          jwtUser: jwtUserId?.substring(0, 10)
+        });
+        return errorResponse(req, "OAuth session mismatch", 400);
       }
 
       const redirectUri = getRedirectUri();
@@ -63,6 +117,7 @@ Deno.serve(async (req: Request) => {
       const tokenData = await tokenResponse.json();
 
       if (tokenData.error) {
+        logOAuthEvent('code_exchange_failed', req, { error: tokenData.error });
         console.error("[google-calendar-auth] Token exchange error:", tokenData);
         return errorResponse(req, tokenData.error_description || tokenData.error, 400);
       }
@@ -74,11 +129,11 @@ Deno.serve(async (req: Request) => {
       const encryptedAccessToken = await encrypt(access_token);
       const encryptedRefreshToken = await encrypt(refresh_token);
 
-      // Store encrypted tokens in database
+      // Store encrypted tokens - BOUND TO JWT USER ONLY
       const { error: upsertError } = await supabase
         .from("calendar_integrations")
         .upsert({
-          user_id: decodedUserId,
+          user_id: jwtUserId, // CRITICAL: Use JWT.sub, never client-provided ID
           provider: "google",
           enabled: true,
           access_token: encryptedAccessToken,
@@ -94,7 +149,7 @@ Deno.serve(async (req: Request) => {
         return errorResponse(req, "Failed to save tokens", 500);
       }
 
-      console.log("[google-calendar-auth] Successfully connected Google Calendar for user:", decodedUserId);
+      console.log("[google-calendar-auth] Successfully connected Google Calendar for user (from JWT):", jwtUserId);
       return jsonResponse(req, { success: true });
     }
 
@@ -102,6 +157,7 @@ Deno.serve(async (req: Request) => {
     const authResult = await verifyArloJWT(req);
     
     if (!authResult.authenticated) {
+      logAuthFailure(req, `OAuth action ${action} without valid JWT`);
       console.log('[google-calendar-auth] Authentication failed:', authResult.error);
       return unauthorizedResponse(req, authResult.error || 'Authentication required');
     }
@@ -110,15 +166,23 @@ Deno.serve(async (req: Request) => {
     const userId = authResult.userId;
     console.log('[google-calendar-auth] Authenticated user (from JWT.sub):', userId);
 
-    // Step 1: Generate OAuth URL
+    // Step 1: Generate OAuth URL with secure nonce
     if (action === "get_auth_url") {
+      // Rate limit auth URL requests
+      const rateLimitResponse = checkAuthRateLimit(req, AUTH_RATE_LIMITS.oauthAuthUrl);
+      if (rateLimitResponse) return rateLimitResponse;
+
       const redirectUri = getRedirectUri();
       const scopes = [
         "https://www.googleapis.com/auth/calendar.readonly",
         "https://www.googleapis.com/auth/calendar.events",
       ].join(" ");
 
-      const encodedState = btoa(JSON.stringify({ userId }));
+      // Create a secure nonce bound to this user
+      const nonce = await createOAuthNonce(userId, 'google');
+      
+      // Encode state with nonce (not user ID)
+      const encodedState = encodeOAuthState(nonce, 'google');
 
       const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
       authUrl.searchParams.set("client_id", GOOGLE_CLIENT_ID);
@@ -129,7 +193,7 @@ Deno.serve(async (req: Request) => {
       authUrl.searchParams.set("prompt", "consent");
       authUrl.searchParams.set("state", encodedState);
 
-      console.log("[google-calendar-auth] Generated auth URL for user:", userId);
+      console.log("[google-calendar-auth] Generated auth URL with nonce for user:", userId);
       return jsonResponse(req, { url: authUrl.toString() });
     }
 
@@ -175,6 +239,8 @@ Deno.serve(async (req: Request) => {
               token_expires_at: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
             })
             .eq("id", integration.id);
+        } else {
+          logOAuthEvent('token_refresh_failed', req, { error: tokenData.error });
         }
       }
 
@@ -207,6 +273,18 @@ Deno.serve(async (req: Request) => {
     if (action === "save_calendars") {
       if (!integrationId || !calendars) {
         return errorResponse(req, "Missing required fields", 400);
+      }
+
+      // Verify the integration belongs to this user
+      const { data: integration } = await supabase
+        .from("calendar_integrations")
+        .select("id")
+        .eq("id", integrationId)
+        .eq("user_id", userId)
+        .single();
+
+      if (!integration) {
+        return errorResponse(req, "Integration not found or access denied", 403);
       }
 
       // Delete existing selections for this integration

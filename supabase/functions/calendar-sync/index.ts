@@ -1,12 +1,14 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { 
   verifyArloJWT, 
-  handleCorsOptions, 
+  handleCorsOptions,
+  validateOrigin,
   jsonResponse, 
   unauthorizedResponse, 
   errorResponse 
 } from '../_shared/arloAuth.ts'
 import { encrypt, decrypt, isEncrypted } from '../_shared/encryption.ts'
+import { checkAuthRateLimit, AUTH_RATE_LIMITS, logAuthFailure } from '../_shared/authRateLimit.ts'
 
 const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID")!;
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
@@ -604,11 +606,20 @@ Deno.serve(async (req) => {
     return handleCorsOptions(req);
   }
 
+  // Validate origin for non-preflight requests
+  const originError = validateOrigin(req);
+  if (originError) return originError;
+
   try {
+    // Rate limit calendar sync requests
+    const rateLimitResponse = checkAuthRateLimit(req, AUTH_RATE_LIMITS.calendarSync);
+    if (rateLimitResponse) return rateLimitResponse;
+
     // Verify JWT authentication
     const authResult = await verifyArloJWT(req);
     
     if (!authResult.authenticated) {
+      logAuthFailure(req, `calendar-sync: ${authResult.error}`);
       console.log('[calendar-sync] Authentication failed:', authResult.error);
       return unauthorizedResponse(req, authResult.error || 'Authentication required');
     }

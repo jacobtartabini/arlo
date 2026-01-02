@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { getAuthHeaders } from '@/lib/arloAuth';
+import { useAuth } from '@/providers/AuthProvider';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,8 +21,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-// Fixed UUID for Tailscale-authenticated single-user app
-const TAILSCALE_USER_ID = '00000000-0000-0000-0000-000000000001';
+// NO MORE HARD-CODED USER ID - identity comes from JWT via AuthProvider
 
 interface CalendarIntegration {
   id: string;
@@ -41,16 +41,20 @@ interface GoogleCalendar {
   enabled: boolean;
 }
 
-// Helper to invoke edge functions with auth
+// Helper to invoke edge functions with auth - no userId needed in body
 async function invokeWithAuth(functionName: string, body: Record<string, unknown>) {
   const headers = await getAuthHeaders();
+  if (!headers) {
+    throw new Error('Authentication required');
+  }
   return supabase.functions.invoke(functionName, {
     body,
-    headers: headers as Record<string, string> | undefined,
+    headers: headers as Record<string, string>,
   });
 }
 
 export default function CalendarIntegrations() {
+  const { identity } = useAuth();
   const [integrations, setIntegrations] = useState<CalendarIntegration[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [outlookUrl, setOutlookUrl] = useState('');
@@ -81,15 +85,14 @@ export default function CalendarIntegrations() {
 
   const loadIntegrations = async () => {
     try {
-      // Use the safe view that excludes sensitive token columns
-      // Tokens are encrypted server-side and should never be sent to client
-      const { data, error } = await supabase
-        .from('calendar_integrations_safe')
-        .select('*')
-        .eq('user_id', TAILSCALE_USER_ID);
+      // Use the data-api which enforces user_id via JWT
+      const { data, error } = await invokeWithAuth('data-api', {
+        action: 'select',
+        table: 'calendar_integrations',
+      });
 
       if (error) throw error;
-      setIntegrations(data || []);
+      setIntegrations(data?.data || []);
     } catch (error) {
       console.error('Error loading integrations:', error);
     } finally {
@@ -101,10 +104,9 @@ export default function CalendarIntegrations() {
   const loadGoogleCalendars = async (integrationId: string) => {
     setIsLoadingCalendars(true);
     try {
-      // First fetch available calendars from Google
+      // Server derives userId from JWT
       const { data, error } = await invokeWithAuth('google-calendar-auth', {
         action: 'list_calendars',
-        userId: TAILSCALE_USER_ID,
       });
 
       if (error) throw error;
@@ -124,7 +126,6 @@ export default function CalendarIntegrations() {
         name: cal.name,
         color: cal.color,
         primary: cal.primary,
-        // If we have a saved selection, use it; otherwise enable primary by default
         enabled: savedMap.has(cal.id) ? savedMap.get(cal.id) : cal.primary,
       }));
 
@@ -160,8 +161,6 @@ export default function CalendarIntegrations() {
 
       toast.success('Calendar selections saved');
       setShowCalendarSelector(false);
-      
-      // Trigger sync to fetch events from selected calendars
       await syncCalendar('google');
     } catch (error: any) {
       toast.error('Failed to save calendars: ' + error.message);
@@ -182,17 +181,15 @@ export default function CalendarIntegrations() {
     setIsConnecting(prev => ({ ...prev, google: true }));
     
     try {
-      // Note: exchange_code doesn't require JWT auth (OAuth callback flow)
-      const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
-        body: { action: 'exchange_code', code, state, userId: TAILSCALE_USER_ID },
+      // exchange_code now requires JWT auth with nonce validation
+      const { data, error } = await invokeWithAuth('google-calendar-auth', {
+        action: 'exchange_code', code, state,
       });
 
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
       toast.success('Google Calendar connected successfully');
-      
-      // Trigger initial sync
       await syncCalendar('google');
       loadIntegrations();
     } catch (error: any) {
@@ -208,7 +205,6 @@ export default function CalendarIntegrations() {
     try {
       const { data, error } = await invokeWithAuth('google-calendar-auth', {
         action: 'get_auth_url',
-        userId: TAILSCALE_USER_ID,
       });
 
       if (error) throw error;
@@ -227,7 +223,6 @@ export default function CalendarIntegrations() {
     try {
       const { data, error } = await invokeWithAuth('google-calendar-auth', {
         action: 'disconnect',
-        userId: TAILSCALE_USER_ID,
       });
 
       if (error) throw error;
@@ -252,7 +247,6 @@ export default function CalendarIntegrations() {
       const { data, error } = await invokeWithAuth('outlook-ical', {
         action: 'connect',
         icalUrl: outlookUrl.trim(),
-        userId: TAILSCALE_USER_ID,
       });
 
       if (error) throw error;
@@ -260,8 +254,6 @@ export default function CalendarIntegrations() {
 
       toast.success('Outlook Calendar connected successfully');
       setOutlookUrl('');
-      
-      // Trigger initial sync
       await syncCalendar('outlook_ics');
       loadIntegrations();
     } catch (error: any) {
@@ -275,7 +267,6 @@ export default function CalendarIntegrations() {
     try {
       const { data, error } = await invokeWithAuth('outlook-ical', {
         action: 'disconnect',
-        userId: TAILSCALE_USER_ID,
       });
 
       if (error) throw error;
@@ -295,7 +286,6 @@ export default function CalendarIntegrations() {
       const { data, error } = await invokeWithAuth('calendar-sync', {
         action: 'sync_provider',
         provider,
-        userId: TAILSCALE_USER_ID,
       });
 
       if (error) throw error;

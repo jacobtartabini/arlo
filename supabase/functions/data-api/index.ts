@@ -2,11 +2,13 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.89.0'
 import { 
   verifyArloJWT, 
   handleCorsOptions, 
+  validateOrigin,
   jsonResponse, 
   unauthorizedResponse, 
   errorResponse 
 } from '../_shared/arloAuth.ts'
 import { encrypt, decrypt, isEncrypted } from '../_shared/encryption.ts'
+import { checkAuthRateLimit, AUTH_RATE_LIMITS, logAuthFailure } from '../_shared/authRateLimit.ts'
 
 // Create Supabase client with service role key (bypasses RLS)
 const supabase = createClient(
@@ -95,11 +97,20 @@ Deno.serve(async (req) => {
     return handleCorsOptions(req)
   }
 
+  // Validate origin for non-preflight requests
+  const originError = validateOrigin(req)
+  if (originError) return originError
+
   try {
+    // Rate limit data API requests
+    const rateLimitResponse = checkAuthRateLimit(req, AUTH_RATE_LIMITS.dataApi)
+    if (rateLimitResponse) return rateLimitResponse
+
     // Verify JWT authentication
     const authResult = await verifyArloJWT(req)
     
     if (!authResult.authenticated) {
+      logAuthFailure(req, `data-api: ${authResult.error}`)
       console.log('[data-api] Authentication failed:', authResult.error)
       return unauthorizedResponse(req, authResult.error || 'Authentication required')
     }

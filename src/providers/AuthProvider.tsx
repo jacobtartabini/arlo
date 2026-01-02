@@ -27,12 +27,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       try {
         // Check if already authenticated (has valid in-memory token)
         if (checkIsAuthenticated()) {
+          const identity = getIdentity();
           setAuthState({
             isAuthenticated: true,
             isLoading: false,
             error: null,
-            identity: getIdentity(),
+            identity: identity,
           });
+          // Store user ID in session storage for components that need it
+          if (identity?.user) {
+            sessionStorage.setItem('arlo_user_id', identity.user);
+          }
         } else {
           // No valid token in memory
           setAuthState({
@@ -64,14 +69,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const token = await getArloToken();
       
       if (token) {
+        const identity = getIdentity();
         setAuthState({
           isAuthenticated: true,
           isLoading: false,
           error: null,
-          identity: getIdentity(),
+          identity: identity,
         });
+        // Store user ID in session storage for components that need it
+        if (identity?.user) {
+          sessionStorage.setItem('arlo_user_id', identity.user);
+        }
         return true;
       } else {
+        sessionStorage.removeItem('arlo_user_id');
         setAuthState({
           isAuthenticated: false,
           isLoading: false,
@@ -82,6 +93,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
     } catch (error) {
       console.error('Auth verification failed:', error);
+      sessionStorage.removeItem('arlo_user_id');
       setAuthState({
         isAuthenticated: false,
         isLoading: false,
@@ -95,6 +107,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Logout - clear token
   const logout = useCallback(() => {
     clearArloToken();
+    sessionStorage.removeItem('arlo_user_id');
     setAuthState({
       isAuthenticated: false,
       isLoading: false,
@@ -118,3 +131,12 @@ export const useAuth = (): AuthContextType => {
   if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };
+
+/**
+ * Get the current user's identity from the auth context
+ * This should be used instead of hard-coded user IDs
+ */
+export function useUserId(): string | null {
+  const { identity, isAuthenticated } = useAuth();
+  return isAuthenticated ? identity?.user ?? null : null;
+}
