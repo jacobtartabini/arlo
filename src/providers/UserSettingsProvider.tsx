@@ -24,8 +24,13 @@ function isTailscaleVerified(): boolean {
   return verified && !!expiry && Date.now() < parseInt(expiry);
 }
 
-// Static UUID for Tailscale-authenticated users
-const ARLO_USER_ID = '00000000-0000-0000-0000-000000000001';
+/**
+ * Get user ID from session storage (set by AuthProvider from JWT)
+ */
+function getUserId(): string | null {
+  if (typeof window === 'undefined') return null;
+  return sessionStorage.getItem('arlo_user_id');
+}
 
 interface DbUserSettings {
   id: string;
@@ -146,7 +151,7 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
     settings,
     isLoading,
     isAuthenticated,
-    userId: isAuthenticated ? ARLO_USER_ID : null,
+    userId: isAuthenticated ? getUserId() : null,
     updateSettings,
     refreshSettings,
   }), [settings, isLoading, isAuthenticated, updateSettings, refreshSettings]);

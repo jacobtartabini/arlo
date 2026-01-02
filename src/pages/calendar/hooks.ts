@@ -3,8 +3,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { isAuthenticated as checkIsAuthenticated, getAuthHeaders } from "@/lib/arloAuth";
 import type { BookingSlot, CalendarEvent } from "@/lib/calendar-data";
 
-// Fixed UUID for Tailscale-authenticated single-user app
-const TAILSCALE_USER_ID = '00000000-0000-0000-0000-000000000001';
+// Get user ID from session storage (set by AuthProvider from JWT)
+const getUserId = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  return sessionStorage.getItem('arlo_user_id');
+};
 
 // Auto-sync interval in milliseconds (60 seconds)
 const AUTO_SYNC_INTERVAL = 60 * 1000;
@@ -93,8 +96,8 @@ export function useCalendarDatabase(): [
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   const pendingUpdatesRef = React.useRef<Set<string>>(new Set());
 
-  // For this Tailscale-authenticated app, we always use the fixed user ID
-  const userId = TAILSCALE_USER_ID;
+  // Get user ID from JWT-derived session storage
+  const userId = getUserId();
 
   // Check authentication status
   React.useEffect(() => {
@@ -114,7 +117,7 @@ export function useCalendarDatabase(): [
       }
 
       const { data, error } = await supabase.functions.invoke('calendar-sync', {
-        body: { action: 'sync', userId: TAILSCALE_USER_ID },
+        body: { action: 'sync' },
         headers: headers as Record<string, string>,
       });
       
@@ -138,6 +141,11 @@ export function useCalendarDatabase(): [
 
   // Fetch events from database
   const fetchEvents = React.useCallback(async (silent = false) => {
+    if (!userId) {
+      setIsLoading(false);
+      return;
+    }
+    
     try {
       if (!silent) {
         setIsLoading(true);

@@ -16,7 +16,14 @@ import type {
 } from '@/types/creation';
 import { toast } from 'sonner';
 
-const ARLO_USER_ID = '00000000-0000-0000-0000-000000000001';
+// Get user ID from session storage (set by AuthProvider from JWT)
+const getUserId = (): string => {
+  const userId = sessionStorage.getItem('arlo_user_id');
+  if (!userId) {
+    throw new Error('User not authenticated');
+  }
+  return userId;
+};
 
 const defaultSceneState: SceneState = {
   objects: [],
@@ -139,7 +146,7 @@ export function useCreationProject() {
     try {
       const response = await dataApiHelpers.insert<CreationProject>('creation_projects', {
         name,
-        user_id: ARLO_USER_ID
+        user_id: getUserId()
       });
       
       if (response.data) {
@@ -246,7 +253,7 @@ export function useCreationProject() {
 
     try {
       const projectId = currentProject!.id;
-      const filePath = `${ARLO_USER_ID}/${projectId}/${Date.now()}_${file.name}`;
+      const filePath = `${getUserId()}/${projectId}/${Date.now()}_${file.name}`;
 
       const { error: uploadError } = await supabase.storage
         .from('creation-assets')
