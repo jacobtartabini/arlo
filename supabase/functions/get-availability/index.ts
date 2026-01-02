@@ -1,5 +1,11 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { 
+  checkRateLimit, 
+  getClientIP, 
+  rateLimitResponse, 
+  RATE_LIMITS 
+} from '../_shared/rateLimit.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -58,6 +64,15 @@ serve(async (req: Request) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Rate limiting
+  const clientIP = getClientIP(req);
+  const rateCheck = checkRateLimit(clientIP, RATE_LIMITS.availability);
+  
+  if (!rateCheck.allowed) {
+    console.log(`[get-availability] Rate limited IP: ${clientIP.substring(0, 8)}***`);
+    return rateLimitResponse(rateCheck, corsHeaders);
+  }
+
   try {
     const { handle, date, timezone, durationMinutes }: AvailabilityRequest = await req.json();
 
@@ -67,7 +82,15 @@ serve(async (req: Request) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-
+    
+    // Validate date format
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(date)) {
+      return new Response(JSON.stringify({ error: "Invalid date format. Use YYYY-MM-DD" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Get user by handle (for now, use a default user lookup)

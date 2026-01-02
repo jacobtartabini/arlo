@@ -6,6 +6,16 @@ import {
   validationErrorResponse,
   type BookingInput 
 } from '../_shared/validation.ts';
+import { 
+  checkRateLimit, 
+  getClientIP, 
+  rateLimitResponse, 
+  isHoneypotTriggered,
+  isSuspiciousRequest,
+  generateSecureToken,
+  hashForLogging,
+  RATE_LIMITS 
+} from '../_shared/rateLimit.ts';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -398,8 +408,36 @@ const handler = async (req: Request): Promise<Response> => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Rate limiting by IP
+  const clientIP = getClientIP(req);
+  const ipRateCheck = checkRateLimit(clientIP, RATE_LIMITS.createBooking);
+  
+  if (!ipRateCheck.allowed) {
+    console.log(`[create-booking] Rate limited IP: ${hashForLogging(clientIP)}`);
+    return rateLimitResponse(ipRateCheck, corsHeaders);
+  }
+
   try {
     const rawInput = await req.json();
+    
+    // Bot detection: check honeypot fields
+    if (isHoneypotTriggered(rawInput as Record<string, unknown>)) {
+      console.log('[create-booking] Honeypot triggered - silently rejecting');
+      // Return fake success to not tip off bots
+      return new Response(
+        JSON.stringify({ success: true, message: 'Booking confirmed' }),
+        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+    
+    // Bot detection: check suspicious patterns
+    if (isSuspiciousRequest(req, rawInput as Record<string, unknown>)) {
+      console.log('[create-booking] Suspicious request pattern detected');
+      return new Response(
+        JSON.stringify({ error: 'Request could not be processed. Please try again.' }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
 
     // Validate all input using the shared validation module
     const validation = validateBookingInput(rawInput);
@@ -409,8 +447,21 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const { date, time, name, email, message, handle, timezone } = validation.data!;
+    
+    // Additional rate limiting by email
+    const emailRateCheck = checkRateLimit(email, RATE_LIMITS.bookingPerEmail);
+    if (!emailRateCheck.allowed) {
+      console.log(`[create-booking] Rate limited email: ${hashForLogging(email)}`);
+      return new Response(
+        JSON.stringify({ 
+          error: 'You have reached the maximum number of bookings for today. Please try again tomorrow.',
+          code: 'BOOKING_LIMIT_EXCEEDED'
+        }),
+        { status: 429, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
 
-    console.log("[create-booking] Validated booking request:", { date, time, name, email: `${email.substring(0, 3)}***`, handle, timezone });
+    console.log("[create-booking] Validated booking request:", { date, time, name, email: hashForLogging(email), handle, timezone });
 
     const { hours, minutes } = parseTimeToHours(time);
     const clientTimezone = timezone || 'America/New_York';
