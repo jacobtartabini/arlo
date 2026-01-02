@@ -58,7 +58,8 @@ Deno.serve(async (req) => {
       return unauthorizedResponse(req, authResult.error || 'Authentication required')
     }
 
-    console.log('[tailscale-api] Authenticated user:', authResult.claims?.sub)
+    // userId is derived from JWT.sub - no ARLO_USER_ID used
+    console.log('[tailscale-api] Authenticated user (from JWT.sub):', authResult.userId)
 
     const TAILSCALE_API_KEY = Deno.env.get('TAILSCALE_API_KEY')
     const TAILSCALE_TAILNET = Deno.env.get('TAILSCALE_TAILNET')

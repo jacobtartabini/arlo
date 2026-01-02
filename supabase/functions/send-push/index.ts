@@ -21,8 +21,9 @@ Deno.serve(async (req) => {
       return unauthorizedResponse(req, authResult.error || 'Authentication required');
     }
 
+    // userId is derived from JWT.sub - no ARLO_USER_ID used
     const userId = authResult.userId;
-    console.log('[send-push] Authenticated user:', authResult.claims?.sub, 'userId:', userId);
+    console.log('[send-push] Authenticated user (from JWT.sub):', userId);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;

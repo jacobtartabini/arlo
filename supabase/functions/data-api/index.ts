@@ -47,8 +47,9 @@ Deno.serve(async (req) => {
       return unauthorizedResponse(req, authResult.error || 'Authentication required')
     }
 
+    // userId is derived from JWT.sub - no ARLO_USER_ID used
     const userId = authResult.userId
-    console.log('[data-api] Authenticated user:', authResult.claims?.sub, 'userId:', userId)
+    console.log('[data-api] Authenticated user (from JWT.sub):', userId)
 
     const body: RequestBody = await req.json()
     const { action, table, data, id, filters, order, limit } = body
