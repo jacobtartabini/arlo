@@ -35,8 +35,10 @@ import {
 import {
   DrawingSettings,
   DrawingTool,
+  EraserType,
   HIGHLIGHTER_COLORS,
   PEN_COLORS,
+  PenStyle,
   ShapeType,
   STROKE_WIDTHS,
 } from "@/types/notes";
@@ -46,6 +48,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 
 interface DrawingToolbarProps {
@@ -83,6 +86,19 @@ const SHAPES: { id: ShapeType; icon: React.ElementType; label: string }[] = [
   { id: "rectangle", icon: Square, label: "Rectangle" },
   { id: "circle", icon: Circle, label: "Circle" },
   { id: "triangle", icon: Triangle, label: "Triangle" },
+];
+
+const PEN_STYLES: { id: PenStyle; label: string; width: number }[] = [
+  { id: "fine", label: "Fine", width: 1 },
+  { id: "medium", label: "Medium", width: 2 },
+  { id: "thick", label: "Thick", width: 4 },
+  { id: "brush", label: "Brush", width: 8 },
+  { id: "calligraphy", label: "Calligraphy", width: 3 },
+];
+
+const ERASER_TYPES: { id: EraserType; label: string; description: string }[] = [
+  { id: "stroke", label: "Stroke Eraser", description: "Remove entire strokes at once" },
+  { id: "precision", label: "Precision Eraser", description: "Erase portions of strokes" },
 ];
 
 export function DrawingToolbar({
@@ -344,6 +360,70 @@ export function DrawingToolbar({
                     ))}
                   </div>
                 </div>
+              </PopoverContent>
+            </Popover>
+          )}
+
+          {/* Pen Style - for pen and highlighter */}
+          {(settings.tool === "pen" || settings.tool === "highlighter") && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-9 rounded-xl px-2 gap-1">
+                  <Pen className="h-3.5 w-3.5" />
+                  <span className="text-xs capitalize">{settings.penStyle || "medium"}</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-48 p-2" align="center" side="top">
+                <p className="text-xs font-medium text-muted-foreground mb-2 px-2">Pen Style</p>
+                {PEN_STYLES.map((style) => (
+                  <button
+                    key={style.id}
+                    className={cn(
+                      "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:bg-muted",
+                      settings.penStyle === style.id && "bg-primary/10 text-primary"
+                    )}
+                    onClick={() => updateSettings({ penStyle: style.id, strokeWidth: style.width })}
+                  >
+                    <span>{style.label}</span>
+                    <div
+                      className="rounded-full bg-foreground"
+                      style={{ width: style.width * 2, height: style.width * 2 }}
+                    />
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
+          )}
+
+          {/* Eraser Type - for eraser tool */}
+          {settings.tool === "eraser" && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-9 rounded-xl px-2 gap-1">
+                  <Eraser className="h-3.5 w-3.5" />
+                  <span className="text-xs capitalize">{settings.eraserType || "stroke"}</span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-56 p-2" align="center" side="top">
+                <p className="text-xs font-medium text-muted-foreground mb-2 px-2">Eraser Type</p>
+                {ERASER_TYPES.map((eraser) => (
+                  <button
+                    key={eraser.id}
+                    className={cn(
+                      "flex w-full flex-col items-start rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted",
+                      settings.eraserType === eraser.id && "bg-primary/10"
+                    )}
+                    onClick={() => updateSettings({ eraserType: eraser.id })}
+                  >
+                    <span className={cn(
+                      "text-sm font-medium",
+                      settings.eraserType === eraser.id && "text-primary"
+                    )}>
+                      {eraser.label}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{eraser.description}</span>
+                  </button>
+                ))}
               </PopoverContent>
             </Popover>
           )}

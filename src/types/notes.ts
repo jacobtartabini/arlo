@@ -2,6 +2,10 @@
 
 export type NoteId = string;
 export type NoteType = "canvas" | "page";
+export type PageMode = "type" | "write";
+export type BackgroundStyle = "blank" | "lined" | "dotted" | "grid";
+export type EraserType = "stroke" | "precision";
+export type PenStyle = "fine" | "medium" | "thick" | "brush" | "calligraphy";
 
 export interface NoteElement {
   id: string;
@@ -59,7 +63,7 @@ export interface Note {
   title: string;
   noteType: NoteType;
   thumbnail?: string;
-  canvasState: string; // Serialized Fabric.js canvas JSON
+  canvasState: string; // Serialized Fabric.js canvas JSON or page content
   elements: NoteElement[];
   tags: string[];
   folderId?: string;
@@ -69,6 +73,9 @@ export interface Note {
   zoom: number;
   panX: number;
   panY: number;
+  // Page note specific
+  pageMode?: PageMode;
+  backgroundStyle?: BackgroundStyle;
 }
 
 export interface NoteFolder {
@@ -97,6 +104,8 @@ export interface DrawingSettings {
   strokeWidth: number;
   opacity: number;
   shape?: ShapeType;
+  penStyle?: PenStyle;
+  eraserType?: EraserType;
 }
 
 export interface CanvasViewport {
@@ -110,6 +119,8 @@ export const DEFAULT_DRAWING_SETTINGS: DrawingSettings = {
   color: "#1a1a1a",
   strokeWidth: 2,
   opacity: 1,
+  penStyle: "medium",
+  eraserType: "stroke",
 };
 
 export const PEN_COLORS = [

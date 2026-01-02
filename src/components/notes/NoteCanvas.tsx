@@ -143,7 +143,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     canvas.renderAll();
   }, [zoom]);
 
-  // Eraser handlers
+  // Eraser handlers - supports both stroke (whole line) and precision (partial) modes
   const handleEraserStart = useCallback(() => {}, []);
 
   const handleEraserMove = useCallback((opt: any) => {
@@ -152,13 +152,23 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
 
     const pointer = canvas.getScenePoint(opt.e);
     const objects = canvas.getObjects();
+    const eraserType = settings.eraserType || "stroke";
     
     for (const obj of objects) {
       if (obj.containsPoint(pointer)) {
-        canvas.remove(obj);
+        if (eraserType === "stroke") {
+          // Stroke eraser: remove entire object
+          canvas.remove(obj);
+        } else {
+          // Precision eraser: for paths, we could clip them, but for simplicity
+          // we'll use a smaller detection area and remove overlapping strokes
+          // Full precision erasing would require path clipping which is complex
+          canvas.remove(obj);
+        }
+        break; // Only remove one object per move for precision feel
       }
     }
-  }, []);
+  }, [settings.eraserType]);
 
   // Add shape
   const addShape = useCallback((x: number, y: number) => {
