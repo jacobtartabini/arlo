@@ -25,7 +25,7 @@ export type Database = {
           id: string
           start_time: string
           title: string
-          user_id: string
+          user_id: string | null
           user_key: string | null
         }
         Insert: {
@@ -38,7 +38,7 @@ export type Database = {
           id?: string
           start_time: string
           title: string
-          user_id: string
+          user_id?: string | null
           user_key?: string | null
         }
         Update: {
@@ -51,7 +51,7 @@ export type Database = {
           id?: string
           start_time?: string
           title?: string
-          user_id?: string
+          user_id?: string | null
           user_key?: string | null
         }
         Relationships: []
@@ -74,7 +74,7 @@ export type Database = {
           start_time: string
           title: string
           updated_at: string
-          user_id: string
+          user_id: string | null
           user_key: string | null
         }
         Insert: {
@@ -94,7 +94,7 @@ export type Database = {
           start_time: string
           title: string
           updated_at?: string
-          user_id: string
+          user_id?: string | null
           user_key?: string | null
         }
         Update: {
@@ -114,7 +114,7 @@ export type Database = {
           start_time?: string
           title?: string
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
           user_key?: string | null
         }
         Relationships: []
@@ -134,7 +134,7 @@ export type Database = {
           sync_cursor: string | null
           token_expires_at: string | null
           updated_at: string
-          user_id: string
+          user_id: string | null
           user_key: string | null
         }
         Insert: {
@@ -151,7 +151,7 @@ export type Database = {
           sync_cursor?: string | null
           token_expires_at?: string | null
           updated_at?: string
-          user_id: string
+          user_id?: string | null
           user_key?: string | null
         }
         Update: {
@@ -168,7 +168,7 @@ export type Database = {
           sync_cursor?: string | null
           token_expires_at?: string | null
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
           user_key?: string | null
         }
         Relationships: []
@@ -180,7 +180,7 @@ export type Database = {
           id: string
           name: string
           updated_at: string
-          user_id: string
+          user_id: string | null
           user_key: string | null
         }
         Insert: {
@@ -189,7 +189,7 @@ export type Database = {
           id?: string
           name: string
           updated_at?: string
-          user_id: string
+          user_id?: string | null
           user_key?: string | null
         }
         Update: {
@@ -198,7 +198,7 @@ export type Database = {
           id?: string
           name?: string
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
           user_key?: string | null
         }
         Relationships: []
@@ -211,7 +211,7 @@ export type Database = {
           id: string
           sender: string
           status: string
-          user_id: string
+          user_id: string | null
           user_key: string | null
         }
         Insert: {
@@ -221,7 +221,7 @@ export type Database = {
           id?: string
           sender: string
           status?: string
-          user_id: string
+          user_id?: string | null
           user_key?: string | null
         }
         Update: {
@@ -231,7 +231,7 @@ export type Database = {
           id?: string
           sender?: string
           status?: string
-          user_id?: string
+          user_id?: string | null
           user_key?: string | null
         }
         Relationships: [
@@ -251,7 +251,7 @@ export type Database = {
           id: string
           title: string
           updated_at: string
-          user_id: string
+          user_id: string | null
           user_key: string | null
         }
         Insert: {
@@ -260,7 +260,7 @@ export type Database = {
           id?: string
           title?: string
           updated_at?: string
-          user_id: string
+          user_id?: string | null
           user_key?: string | null
         }
         Update: {
@@ -269,7 +269,7 @@ export type Database = {
           id?: string
           title?: string
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
           user_key?: string | null
         }
         Relationships: [
@@ -419,7 +419,7 @@ export type Database = {
           id: string
           notes: string | null
           skipped: boolean | null
-          user_id: string
+          user_id: string | null
           user_key: string | null
           value: number | null
         }
@@ -429,7 +429,7 @@ export type Database = {
           id?: string
           notes?: string | null
           skipped?: boolean | null
-          user_id: string
+          user_id?: string | null
           user_key?: string | null
           value?: number | null
         }
@@ -439,7 +439,7 @@ export type Database = {
           id?: string
           notes?: string | null
           skipped?: boolean | null
-          user_id?: string
+          user_id?: string | null
           user_key?: string | null
           value?: number | null
         }
@@ -470,7 +470,7 @@ export type Database = {
           target_value: number | null
           title: string
           updated_at: string
-          user_id: string
+          user_id: string | null
           user_key: string | null
           weekly_frequency: number | null
         }
@@ -490,7 +490,7 @@ export type Database = {
           target_value?: number | null
           title: string
           updated_at?: string
-          user_id: string
+          user_id?: string | null
           user_key?: string | null
           weekly_frequency?: number | null
         }
@@ -510,7 +510,7 @@ export type Database = {
           target_value?: number | null
           title?: string
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
           user_key?: string | null
           weekly_frequency?: number | null
         }
@@ -530,7 +530,7 @@ export type Database = {
           created_at: string
           id: string
           name: string
-          user_id: string
+          user_id: string | null
           user_key: string | null
         }
         Insert: {
@@ -538,7 +538,7 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
-          user_id: string
+          user_id?: string | null
           user_key?: string | null
         }
         Update: {
@@ -546,7 +546,7 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
-          user_id?: string
+          user_id?: string | null
           user_key?: string | null
         }
         Relationships: []
@@ -565,7 +565,7 @@ export type Database = {
           tags: string[] | null
           title: string
           updated_at: string
-          user_id: string
+          user_id: string | null
           user_key: string | null
           zoom: number
         }
@@ -582,7 +582,7 @@ export type Database = {
           tags?: string[] | null
           title?: string
           updated_at?: string
-          user_id: string
+          user_id?: string | null
           user_key?: string | null
           zoom?: number
         }
@@ -599,7 +599,7 @@ export type Database = {
           tags?: string[] | null
           title?: string
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
           user_key?: string | null
           zoom?: number
         }
@@ -625,7 +625,7 @@ export type Database = {
           read_at: string | null
           source: string
           title: string
-          user_id: string
+          user_id: string | null
           user_key: string | null
         }
         Insert: {
@@ -639,7 +639,7 @@ export type Database = {
           read_at?: string | null
           source?: string
           title: string
-          user_id: string
+          user_id?: string | null
           user_key?: string | null
         }
         Update: {
@@ -653,7 +653,7 @@ export type Database = {
           read_at?: string | null
           source?: string
           title?: string
-          user_id?: string
+          user_id?: string | null
           user_key?: string | null
         }
         Relationships: []
@@ -690,7 +690,7 @@ export type Database = {
           id: string
           redeemed_at: string
           reward_id: string
-          user_id: string
+          user_id: string | null
           user_key: string | null
           xp_spent: number
         }
@@ -698,7 +698,7 @@ export type Database = {
           id?: string
           redeemed_at?: string
           reward_id: string
-          user_id: string
+          user_id?: string | null
           user_key?: string | null
           xp_spent: number
         }
@@ -706,7 +706,7 @@ export type Database = {
           id?: string
           redeemed_at?: string
           reward_id?: string
-          user_id?: string
+          user_id?: string | null
           user_key?: string | null
           xp_spent?: number
         }
@@ -728,7 +728,7 @@ export type Database = {
           icon: string | null
           id: string
           name: string
-          user_id: string
+          user_id: string | null
           user_key: string | null
           xp_cost: number
         }
@@ -739,7 +739,7 @@ export type Database = {
           icon?: string | null
           id?: string
           name: string
-          user_id: string
+          user_id?: string | null
           user_key?: string | null
           xp_cost?: number
         }
@@ -750,7 +750,7 @@ export type Database = {
           icon?: string | null
           id?: string
           name?: string
-          user_id?: string
+          user_id?: string | null
           user_key?: string | null
           xp_cost?: number
         }
@@ -767,7 +767,7 @@ export type Database = {
           reward_description: string | null
           routine_type: string | null
           updated_at: string
-          user_id: string
+          user_id: string | null
           user_key: string | null
         }
         Insert: {
@@ -780,7 +780,7 @@ export type Database = {
           reward_description?: string | null
           routine_type?: string | null
           updated_at?: string
-          user_id: string
+          user_id?: string | null
           user_key?: string | null
         }
         Update: {
@@ -793,7 +793,7 @@ export type Database = {
           reward_description?: string | null
           routine_type?: string | null
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
           user_key?: string | null
         }
         Relationships: []
@@ -809,7 +809,7 @@ export type Database = {
           priority: number
           title: string
           updated_at: string
-          user_id: string
+          user_id: string | null
           user_key: string | null
         }
         Insert: {
@@ -822,7 +822,7 @@ export type Database = {
           priority?: number
           title: string
           updated_at?: string
-          user_id: string
+          user_id?: string | null
           user_key?: string | null
         }
         Update: {
@@ -835,7 +835,7 @@ export type Database = {
           priority?: number
           title?: string
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
           user_key?: string | null
         }
         Relationships: []
@@ -872,7 +872,7 @@ export type Database = {
           longest_streak: number
           total_xp: number
           updated_at: string
-          user_id: string
+          user_id: string | null
           user_key: string | null
         }
         Insert: {
@@ -885,7 +885,7 @@ export type Database = {
           longest_streak?: number
           total_xp?: number
           updated_at?: string
-          user_id: string
+          user_id?: string | null
           user_key?: string | null
         }
         Update: {
@@ -898,7 +898,7 @@ export type Database = {
           longest_streak?: number
           total_xp?: number
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
           user_key?: string | null
         }
         Relationships: []
@@ -919,7 +919,7 @@ export type Database = {
           sound_enabled: boolean
           theme: string
           updated_at: string
-          user_id: string
+          user_id: string | null
           user_key: string | null
           voice_responses_enabled: boolean
         }
@@ -938,7 +938,7 @@ export type Database = {
           sound_enabled?: boolean
           theme?: string
           updated_at?: string
-          user_id: string
+          user_id?: string | null
           user_key?: string | null
           voice_responses_enabled?: boolean
         }
@@ -957,7 +957,7 @@ export type Database = {
           sound_enabled?: boolean
           theme?: string
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
           user_key?: string | null
           voice_responses_enabled?: boolean
         }
@@ -970,7 +970,7 @@ export type Database = {
           event_type: string
           id: string
           reference_id: string | null
-          user_id: string
+          user_id: string | null
           user_key: string | null
           xp_amount: number
         }
@@ -980,7 +980,7 @@ export type Database = {
           event_type: string
           id?: string
           reference_id?: string | null
-          user_id: string
+          user_id?: string | null
           user_key?: string | null
           xp_amount: number
         }
@@ -990,7 +990,7 @@ export type Database = {
           event_type?: string
           id?: string
           reference_id?: string | null
-          user_id?: string
+          user_id?: string | null
           user_key?: string | null
           xp_amount?: number
         }
