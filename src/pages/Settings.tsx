@@ -3,6 +3,7 @@ import { useArlo } from '@/providers/ArloProvider';
 import { useUserSettings } from '@/providers/UserSettingsProvider';
 import EnhancedThemeToggle from '@/components/EnhancedThemeToggle';
 import CalendarIntegrations from '@/components/settings/CalendarIntegrations';
+import InboxSettings from '@/components/settings/InboxSettings';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,10 +32,11 @@ import {
   Server, 
   Bell,
   Cpu,
-  LogIn
+  LogIn,
+  Mail
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 export default function Settings() {
   const { config, setConfig, status, isConnected } = useArlo();
@@ -162,6 +164,24 @@ export default function Settings() {
         {/* Calendar Integrations */}
         <section>
           <CalendarIntegrations />
+        </section>
+
+        {/* Inbox Integrations */}
+        <section>
+          <Card className="bg-background/40 backdrop-blur-md border border-border/30">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Mail className="h-5 w-5 text-primary" />
+                Inbox Integrations
+              </CardTitle>
+              <CardDescription>
+                Connect your email and messaging accounts to view all messages in one place
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <InboxSettings />
+            </CardContent>
+          </Card>
         </section>
 
         {/* AI Assistant Settings */}

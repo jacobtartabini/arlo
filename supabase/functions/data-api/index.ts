@@ -35,7 +35,9 @@ const ALLOWED_TABLES = [
   'conversations', 'conversation_messages', 'chat_folders', 'user_settings',
   'routines', 'user_progress', 'rewards', 'reward_redemptions', 'xp_events',
   'creation_projects', 'creation_assets', 'creation_scene_state',
-  'calendar_integrations', 'calendar_integrations_safe', 'google_calendar_selections'
+  'calendar_integrations', 'calendar_integrations_safe', 'google_calendar_selections',
+  'inbox_accounts', 'inbox_accounts_safe', 'inbox_threads', 'inbox_messages', 
+  'inbox_drafts', 'inbox_sync_state'
 ]
 
 // Fields that should be encrypted when stored
