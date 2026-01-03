@@ -52,8 +52,8 @@ const dbToEvent = (dbEvent: DbCalendarEvent): CalendarEvent => {
   };
 };
 
-// Transform app CalendarEvent to DB format
-const eventToDb = (event: Partial<CalendarEvent>, userId: string) => {
+// Transform app CalendarEvent to DB format (no user_id needed - data-api adds user_key)
+const eventToDb = (event: Partial<CalendarEvent>) => {
   const startDateTime = event.allDay 
     ? `${event.date}T00:00:00`
     : `${event.date}T${event.startTime || '00:00'}:00`;
@@ -64,7 +64,6 @@ const eventToDb = (event: Partial<CalendarEvent>, userId: string) => {
     : `${endDateValue}T${event.endTime || '23:59'}:00`;
 
   return {
-    user_id: userId,
     title: event.title,
     description: event.description ?? null,
     start_time: startDateTime,
@@ -91,8 +90,8 @@ export function useCalendarDatabase(): [
   const { isAuthenticated, identity } = useAuth();
   const pendingUpdatesRef = React.useRef<Set<string>>(new Set());
 
-  // Get user ID from auth context
-  const userId = identity?.user ?? null;
+  // Get user_key from auth context (the primary identifier)
+  const userKey = identity?.user ?? null;
 
   // Sync external calendars (Google, Outlook)
   const syncExternalCalendars = React.useCallback(async () => {
@@ -129,9 +128,10 @@ export function useCalendarDatabase(): [
     }
   }, []);
 
-  // Fetch events from database
+  // Fetch events from database via data-api (uses user_key)
   const fetchEvents = React.useCallback(async (silent = false) => {
-    if (!userId) {
+    if (!userKey) {
+      console.log('[calendar-hooks] No userKey, skipping fetch');
       setIsLoading(false);
       return;
     }
@@ -141,33 +141,59 @@ export function useCalendarDatabase(): [
         setIsLoading(true);
       }
 
-      // Fetch calendar events
-      const { data: eventsData, error: eventsError } = await supabase
-        .from('calendar_events')
-        .select('*')
-        .eq('user_id', userId)
-        .order('start_time', { ascending: true });
+      console.log('[calendar-hooks] Fetching events for userKey:', userKey);
 
-      if (eventsError) {
-        console.error('Error fetching events:', eventsError);
-        setEventsState([]);
-      } else {
-        setEventsState((eventsData ?? []).map(dbToEvent));
+      // Get auth headers for data-api calls
+      const headers = await getAuthHeaders();
+      if (!headers) {
+        console.log('[calendar-hooks] Not authenticated, skipping fetch');
+        setIsLoading(false);
+        return;
       }
 
-      // Fetch booking slots and convert to BookingSlot format
-      const { data: bookingsData, error: bookingsError } = await supabase
-        .from('booking_slots')
-        .select('*')
-        .eq('user_id', userId);
+      // Fetch calendar events via data-api (which handles user_key filtering)
+      const { data: eventsResponse, error: eventsError } = await supabase.functions.invoke('data-api', {
+        body: { 
+          action: 'list', 
+          table: 'calendar_events',
+          orderBy: 'start_time',
+          orderDirection: 'asc'
+        },
+        headers: headers as Record<string, string>,
+      });
+
+      if (eventsError) {
+        console.error('[calendar-hooks] Error fetching events:', eventsError);
+        setEventsState([]);
+      } else if (eventsResponse?.error) {
+        console.error('[calendar-hooks] Data API error:', eventsResponse.error);
+        setEventsState([]);
+      } else {
+        const eventsData = eventsResponse?.data ?? [];
+        console.log('[calendar-hooks] Fetched events:', eventsData.length);
+        setEventsState(eventsData.map(dbToEvent));
+      }
+
+      // Fetch booking slots via data-api
+      const { data: bookingsResponse, error: bookingsError } = await supabase.functions.invoke('data-api', {
+        body: { 
+          action: 'list', 
+          table: 'booking_slots'
+        },
+        headers: headers as Record<string, string>,
+      });
 
       if (bookingsError) {
-        console.error('Error fetching bookings:', bookingsError);
+        console.error('[calendar-hooks] Error fetching bookings:', bookingsError);
+        setBookingsState([]);
+      } else if (bookingsResponse?.error) {
+        console.error('[calendar-hooks] Data API error for bookings:', bookingsResponse.error);
         setBookingsState([]);
       } else {
+        const bookingsData = bookingsResponse?.data ?? [];
         // Convert booking slots to calendar-compatible format
         const today = new Date();
-        const convertedBookings: BookingSlot[] = (bookingsData ?? []).flatMap(slot => {
+        const convertedBookings: BookingSlot[] = bookingsData.flatMap((slot: any) => {
           // Generate booking slots for the next 30 days based on day_of_week
           const slots: BookingSlot[] = [];
           for (let i = 0; i < 30; i++) {
@@ -190,13 +216,13 @@ export function useCalendarDatabase(): [
         setBookingsState(convertedBookings);
       }
     } catch (error) {
-      console.error('Error in fetchEvents:', error);
+      console.error('[calendar-hooks] Error in fetchEvents:', error);
     } finally {
       if (!silent) {
         setIsLoading(false);
       }
     }
-  }, [userId]);
+  }, [userKey]);
 
   // Initial fetch
   React.useEffect(() => {
@@ -226,80 +252,112 @@ export function useCalendarDatabase(): [
     return () => clearInterval(intervalId);
   }, [syncExternalCalendars, fetchEvents]);
 
-  // Create wrapped setEvents that syncs to database
+  // Create wrapped setEvents that syncs to database via data-api
   const setEvents: React.Dispatch<React.SetStateAction<CalendarEvent[]>> = React.useCallback(
     (updater) => {
       setEventsState((prev) => {
         const next = typeof updater === 'function' ? updater(prev) : updater;
 
         // Find changes and sync to database
-        next.forEach((event) => {
+        next.forEach(async (event) => {
           const existing = prev.find((e) => e.id === event.id);
           
           if (!existing) {
             // New event - check if it looks like a new event (generated ID)
             if (event.id.startsWith('event-')) {
-              // Create in database
-              supabase
-                .from('calendar_events')
-                .insert(eventToDb(event, userId))
-                .select()
-                .single()
-                .then(({ data, error }) => {
-                  if (error) {
-                    console.error('Error creating event:', error);
-                  } else if (data) {
-                    // Update local state with DB ID
-                    setEventsState((current) =>
-                      current.map((e) =>
-                        e.id === event.id ? dbToEvent(data) : e
-                      )
-                    );
-                  }
+              try {
+                const headers = await getAuthHeaders();
+                if (!headers) return;
+                
+                // Create in database via data-api
+                const { data, error } = await supabase.functions.invoke('data-api', {
+                  body: { 
+                    action: 'create', 
+                    table: 'calendar_events',
+                    data: eventToDb(event)
+                  },
+                  headers: headers as Record<string, string>,
                 });
+                
+                if (error) {
+                  console.error('[calendar-hooks] Error creating event:', error);
+                } else if (data?.data) {
+                  // Update local state with DB ID
+                  setEventsState((current) =>
+                    current.map((e) =>
+                      e.id === event.id ? dbToEvent(data.data) : e
+                    )
+                  );
+                }
+              } catch (err) {
+                console.error('[calendar-hooks] Error creating event:', err);
+              }
             }
           } else if (JSON.stringify(existing) !== JSON.stringify(event)) {
             // Updated event - debounce updates
             if (!pendingUpdatesRef.current.has(event.id)) {
               pendingUpdatesRef.current.add(event.id);
               
-              setTimeout(() => {
-                supabase
-                  .from('calendar_events')
-                  .update(eventToDb(event, userId))
-                  .eq('id', event.id)
-                  .eq('user_id', userId)
-                  .then(({ error }) => {
-                    if (error) {
-                      console.error('Error updating event:', error);
-                    }
+              setTimeout(async () => {
+                try {
+                  const headers = await getAuthHeaders();
+                  if (!headers) {
                     pendingUpdatesRef.current.delete(event.id);
+                    return;
+                  }
+                  
+                  const { error } = await supabase.functions.invoke('data-api', {
+                    body: { 
+                      action: 'update', 
+                      table: 'calendar_events',
+                      id: event.id,
+                      data: eventToDb(event)
+                    },
+                    headers: headers as Record<string, string>,
                   });
+                  
+                  if (error) {
+                    console.error('[calendar-hooks] Error updating event:', error);
+                  }
+                } catch (err) {
+                  console.error('[calendar-hooks] Error updating event:', err);
+                } finally {
+                  pendingUpdatesRef.current.delete(event.id);
+                }
               }, 500);
             }
           }
         });
 
         // Handle deletions
-        prev.forEach((event) => {
+        prev.forEach(async (event) => {
           if (!next.find((e) => e.id === event.id)) {
-            supabase
-              .from('calendar_events')
-              .delete()
-              .eq('id', event.id)
-              .eq('user_id', userId)
-              .then(({ error }) => {
-                if (error) {
-                  console.error('Error deleting event:', error);
-                }
+            try {
+              const headers = await getAuthHeaders();
+              if (!headers) return;
+              
+              const { error } = await supabase.functions.invoke('data-api', {
+                body: { 
+                  action: 'delete', 
+                  table: 'calendar_events',
+                  id: event.id
+                },
+                headers: headers as Record<string, string>,
               });
+              
+              if (error) {
+                console.error('[calendar-hooks] Error deleting event:', error);
+              }
+            } catch (err) {
+              console.error('[calendar-hooks] Error deleting event:', err);
+            }
           }
         });
 
         return next;
       });
     },
-    [userId]
+    []
   );
 
   // Bookings wrapper

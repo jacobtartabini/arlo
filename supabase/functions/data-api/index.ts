@@ -23,6 +23,8 @@ interface RequestBody {
   id?: string
   filters?: Record<string, unknown>
   order?: { column: string; ascending?: boolean }
+  orderBy?: string
+  orderDirection?: string
   limit?: number
 }
 
@@ -138,6 +140,7 @@ Deno.serve(async (req) => {
     let result: { data: unknown; error: unknown }
 
     switch (action) {
+      case 'list':
       case 'select': {
         let query = supabase.from(table).select('*')
         
@@ -153,9 +156,11 @@ Deno.serve(async (req) => {
           }
         }
         
-        // Apply ordering
+        // Apply ordering - support both formats
         if (order) {
           query = query.order(order.column, { ascending: order.ascending ?? true })
+        } else if (body.orderBy) {
+          query = query.order(body.orderBy as string, { ascending: body.orderDirection !== 'desc' })
         }
         
         // Apply limit
@@ -172,6 +177,7 @@ Deno.serve(async (req) => {
         break
       }
 
+      case 'create':
       case 'insert': {
         if (!data) {
           return errorResponse(req, 'Data is required for insert', 400)
