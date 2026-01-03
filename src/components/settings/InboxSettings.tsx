@@ -35,6 +35,10 @@ import { PROVIDER_META, type InboxProvider, type InboxAccount } from '@/types/in
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { getAuthHeadersWithContentType } from '@/lib/arloAuth';
+
+// Providers that have full OAuth implementation
+const IMPLEMENTED_PROVIDERS: InboxProvider[] = ['gmail', 'outlook', 'teams'];
 
 // Provider icon component
 function ProviderIcon({ provider, className }: { provider: InboxProvider; className?: string }) {
@@ -70,9 +74,10 @@ function ProviderCard({
 }) {
   const meta = PROVIDER_META[provider];
   const accountsForProvider = existingAccounts.filter(a => a.provider === provider);
+  const isImplemented = IMPLEMENTED_PROVIDERS.includes(provider);
   
   return (
-    <Card className="relative overflow-hidden">
+    <Card className={cn("relative overflow-hidden", !isImplemented && "opacity-60")}>
       <div 
         className="absolute top-0 left-0 right-0 h-1" 
         style={{ backgroundColor: meta.color }} 
@@ -84,7 +89,10 @@ function ProviderCard({
             <div>
               <CardTitle className="text-base">{meta.name}</CardTitle>
               <CardDescription className="text-xs">
-                {accountsForProvider.length} account{accountsForProvider.length !== 1 ? 's' : ''} connected
+                {isImplemented 
+                  ? `${accountsForProvider.length} account${accountsForProvider.length !== 1 ? 's' : ''} connected`
+                  : 'Integration not yet available'
+                }
               </CardDescription>
             </div>
           </div>
@@ -92,10 +100,12 @@ function ProviderCard({
             variant="outline"
             size="sm"
             onClick={() => onConnect(provider)}
-            disabled={isConnecting}
+            disabled={isConnecting || !isImplemented}
           >
             {isConnecting ? (
               <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : !isImplemented ? (
+              'Coming soon'
             ) : (
               <>
                 <Plus className="h-4 w-4 mr-1" />
@@ -106,7 +116,7 @@ function ProviderCard({
         </div>
       </CardHeader>
       
-      {meta.requiresBridge && (
+      {meta.requiresBridge && isImplemented && (
         <CardContent className="pt-0">
           <Badge variant="secondary" className="text-xs">
             Requires business API or bridge
@@ -114,7 +124,7 @@ function ProviderCard({
         </CardContent>
       )}
       
-      {!meta.supportsSend && (
+      {!meta.supportsSend && isImplemented && (
         <CardContent className="pt-0">
           <Badge variant="outline" className="text-xs">
             Read-only
@@ -248,26 +258,39 @@ export default function InboxSettings() {
   const [connectingProvider, setConnectingProvider] = useState<InboxProvider | null>(null);
 
   const handleConnect = async (provider: InboxProvider) => {
-    if (!userKey) return;
+    if (!userKey) {
+      toast.error('Please log in to connect accounts');
+      return;
+    }
+    
+    // Check if provider is implemented
+    if (!IMPLEMENTED_PROVIDERS.includes(provider)) {
+      toast.info(`${PROVIDER_META[provider].name} integration is coming soon`);
+      return;
+    }
     
     setConnectingProvider(provider);
     
     try {
+      // Get auth headers from the centralized auth module
+      const headers = await getAuthHeadersWithContentType();
+      if (!headers) {
+        throw new Error('Authentication required');
+      }
+
       // Call edge function to get OAuth URL
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/inbox-connect`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${sessionStorage.getItem('arlo_jwt')}`,
-          },
+          headers,
           body: JSON.stringify({ provider }),
         }
       );
       
       if (!response.ok) {
-        throw new Error('Failed to get OAuth URL');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to get OAuth URL');
       }
       
       const data = await response.json();
@@ -275,33 +298,37 @@ export default function InboxSettings() {
       if (data.oauth_url) {
         // Open OAuth flow in new window
         window.open(data.oauth_url, '_blank', 'width=600,height=700');
+        toast.info('Complete the sign-in in the popup window');
       } else if (data.instructions) {
         // Show instructions for non-OAuth providers
         toast.info(data.instructions);
       }
     } catch (err) {
       console.error('Connect error:', err);
-      toast.error(`Failed to connect ${PROVIDER_META[provider].name}`);
+      toast.error(err instanceof Error ? err.message : `Failed to connect ${PROVIDER_META[provider].name}`);
     } finally {
       setConnectingProvider(null);
     }
   };
 
   const handleSync = async (accountId: string) => {
+    const headers = await getAuthHeadersWithContentType();
+    if (!headers) {
+      throw new Error('Authentication required');
+    }
+
     const response = await fetch(
       `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/inbox-sync`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionStorage.getItem('arlo_jwt')}`,
-        },
+        headers,
         body: JSON.stringify({ account_id: accountId, sync_type: 'incremental' }),
       }
     );
     
     if (!response.ok) {
-      throw new Error('Failed to start sync');
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || 'Failed to start sync');
     }
   };
 
