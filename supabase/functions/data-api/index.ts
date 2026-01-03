@@ -43,6 +43,12 @@ const ENCRYPTED_FIELDS: Record<string, string[]> = {
   'user_settings': ['api_token']
 }
 
+// Tables that don't have user_key directly but use parent table references
+// These tables need special handling - don't auto-filter by user_key
+const PARENT_REF_TABLES: Record<string, { parentTable: string; foreignKey: string }> = {
+  'google_calendar_selections': { parentTable: 'calendar_integrations', foreignKey: 'integration_id' }
+}
+
 // All user-facing tables now use user_key (TEXT) instead of user_id (UUID)
 // This is the column name used for filtering by authenticated user
 const USER_KEY_COLUMN = 'user_key'
@@ -144,8 +150,27 @@ Deno.serve(async (req) => {
       case 'select': {
         let query = supabase.from(table).select('*')
         
-        // Apply user_key filter automatically (TEXT column, not UUID)
-        query = query.eq(USER_KEY_COLUMN, userKey)
+        // Check if this table uses parent references instead of direct user_key
+        const parentRef = PARENT_REF_TABLES[table]
+        if (parentRef) {
+          // For tables like google_calendar_selections, filter via parent table
+          // First get the parent IDs that belong to this user
+          const { data: parentData } = await supabase
+            .from(parentRef.parentTable)
+            .select('id')
+            .eq(USER_KEY_COLUMN, userKey)
+          
+          const parentIds = (parentData || []).map((p: { id: string }) => p.id)
+          if (parentIds.length === 0) {
+            // User has no parent records, return empty
+            result = { data: [], error: null }
+            break
+          }
+          query = query.in(parentRef.foreignKey, parentIds)
+        } else {
+          // Apply user_key filter automatically (TEXT column, not UUID)
+          query = query.eq(USER_KEY_COLUMN, userKey)
+        }
         
         // Apply additional filters
         if (filters) {
