@@ -10,6 +10,41 @@ const AUTH_ENDPOINT = 'https://raspberrypi.tailf531bd.ts.net/auth/verify';
 // Buffer time before expiry to trigger refresh (15 seconds)
 const REFRESH_BUFFER_MS = 15 * 1000;
 
+function base64UrlToString(input: string): string {
+  const pad = '='.repeat((4 - (input.length % 4)) % 4);
+  const base64 = (input + pad).replace(/-/g, '+').replace(/_/g, '/');
+
+  // atob() returns a binary string. This keeps Unicode safe when present.
+  try {
+    return decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + c.charCodeAt(0).toString(16).padStart(2, '0'))
+        .join('')
+    );
+  } catch {
+    return atob(base64);
+  }
+}
+
+function decodeJwtPayload<T = unknown>(token: string): T | null {
+  const parts = token.split('.');
+  if (parts.length < 2) return null;
+
+  try {
+    const json = base64UrlToString(parts[1]);
+    return JSON.parse(json) as T;
+  } catch {
+    return null;
+  }
+}
+
+function deriveUserKeyFromJwt(token: string): string | null {
+  const payload = decodeJwtPayload<{ sub?: unknown }>(token);
+  const sub = payload?.sub;
+  return typeof sub === 'string' && sub.length > 0 ? sub : null;
+}
+
 interface ArloAuthResponse {
   status: string;
   token: string;
@@ -69,11 +104,17 @@ async function fetchNewToken(): Promise<CachedToken | null> {
     }
 
     const expiresAt = new Date(data.expiresAt).getTime();
-    
+
+    // Single source of truth: user_key comes from JWT `sub`
+    const userKey = deriveUserKeyFromJwt(data.token) ?? data.identity?.user ?? null;
+
     return {
       token: data.token,
       expiresAt,
-      identity: data.identity,
+      identity: {
+        ...data.identity,
+        user: userKey ?? undefined,
+      },
     };
   } catch (error) {
     console.error('[arloAuth] Failed to fetch token:', error);
@@ -129,7 +170,21 @@ export function isAuthenticated(): boolean {
  */
 export function getIdentity(): ArloAuthResponse['identity'] | null {
   if (!cachedToken) return null;
+
+  // Backfill userKey from JWT if the verify endpoint didn't include it
+  if (!cachedToken.identity?.user) {
+    const derived = deriveUserKeyFromJwt(cachedToken.token);
+    if (derived) {
+      return { ...cachedToken.identity, user: derived };
+    }
+  }
+
   return cachedToken.identity;
+}
+
+/** Canonical user identifier used across the app (maps to DB `user_key`). */
+export function getUserKey(): string | null {
+  return getIdentity()?.user ?? null;
 }
 
 /**

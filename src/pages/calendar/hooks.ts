@@ -87,14 +87,18 @@ export function useCalendarDatabase(): [
   const [events, setEventsState] = React.useState<CalendarEvent[]>([]);
   const [bookings, setBookingsState] = React.useState<BookingSlot[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
-  const { isAuthenticated, identity, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, userKey, isLoading: authLoading } = useAuth();
   const pendingUpdatesRef = React.useRef<Set<string>>(new Set());
 
-  // Get user_key from auth context (the primary identifier)
-  const userKey = identity?.user ?? null;
-  
-  // Track if auth has finished loading
-  const authReady = !authLoading && isAuthenticated;
+  // Track if auth has finished loading and we have a userKey
+  const authReady = !authLoading && isAuthenticated && !!userKey;
+
+  // TEMP DEBUG (remove after verifying): ensure /calendar receives userKey
+  React.useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.log('[calendar-hooks] received userKey:', userKey);
+    }
+  }, [userKey]);
 
   // Sync external calendars (Google, Outlook)
   const syncExternalCalendars = React.useCallback(async () => {

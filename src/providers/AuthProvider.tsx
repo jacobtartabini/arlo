@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
-import { AuthContextType, AuthState, ArloIdentity } from '@/types/auth';
-import { 
+import { AuthContextType, AuthState } from '@/types/auth';
+import {
   getArloToken, 
   clearArloToken, 
   isAuthenticated as checkIsAuthenticated,
@@ -19,15 +19,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isLoading: true,
     error: null,
     identity: null,
+    userKey: null,
   });
 
   // Helper to set legacy compatibility flags
-  const setLegacyAuthFlags = (identity: ArloIdentity | null) => {
-    if (identity?.user) {
-      sessionStorage.setItem('arlo_user_id', identity.user);
+  const setLegacyAuthFlags = (userKey: string | null) => {
+    if (userKey) {
+      sessionStorage.setItem('arlo_user_id', userKey);
       sessionStorage.setItem('arlo_access_verified', 'true');
       // Set expiry to 24 hours from now
-      sessionStorage.setItem('arlo_access_verified_expiry', String(Date.now() + 24 * 60 * 60 * 1000));
+      sessionStorage.setItem(
+        'arlo_access_verified_expiry',
+        String(Date.now() + 24 * 60 * 60 * 1000)
+      );
     }
   };
 
@@ -45,14 +49,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // Check if already authenticated (has valid in-memory token)
         if (checkIsAuthenticated()) {
           const identity = getIdentity();
+          const userKey = identity?.user ?? null;
+
+          if (import.meta.env.DEV) {
+            console.log('[auth] init identity/userKey', { userKey, identity });
+          }
+
           setAuthState({
             isAuthenticated: true,
             isLoading: false,
             error: null,
-            identity: identity,
+            identity,
+            userKey,
           });
           // Store legacy flags for backward compatibility
-          setLegacyAuthFlags(identity);
+          setLegacyAuthFlags(userKey);
         } else {
           // No valid token in memory
           setAuthState({
@@ -60,6 +71,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             isLoading: false,
             error: null,
             identity: null,
+            userKey: null,
           });
         }
       } catch (error) {
@@ -69,6 +81,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           isLoading: false,
           error: 'Failed to initialize authentication',
           identity: null,
+          userKey: null,
         });
       }
     };
@@ -85,14 +98,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       if (token) {
         const identity = getIdentity();
+        const userKey = identity?.user ?? null;
+
+        if (import.meta.env.DEV) {
+          console.log('[auth] verifyAuth identity/userKey', { userKey, identity });
+        }
+
         setAuthState({
           isAuthenticated: true,
           isLoading: false,
           error: null,
-          identity: identity,
+          identity,
+          userKey,
         });
         // Store legacy flags for backward compatibility
-        setLegacyAuthFlags(identity);
+        setLegacyAuthFlags(userKey);
         return true;
       } else {
         clearLegacyAuthFlags();
@@ -101,6 +121,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           isLoading: false,
           error: 'Network access required',
           identity: null,
+          userKey: null,
         });
         return false;
       }
@@ -112,6 +133,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         isLoading: false,
         error: error instanceof Error ? error.message : 'Failed to verify access',
         identity: null,
+        userKey: null,
       });
       return false;
     }
@@ -126,6 +148,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       isLoading: false,
       error: null,
       identity: null,
+      userKey: null,
     });
   }, []);
 
@@ -149,7 +172,12 @@ export const useAuth = (): AuthContextType => {
  * Get the current user's identity from the auth context
  * This should be used instead of hard-coded user IDs
  */
+export function useUserKey(): string | null {
+  const { userKey, isAuthenticated } = useAuth();
+  return isAuthenticated ? userKey : null;
+}
+
+/** @deprecated Use useUserKey() - this app uses user_key (TEXT) not UUID user_id. */
 export function useUserId(): string | null {
-  const { identity, isAuthenticated } = useAuth();
-  return isAuthenticated ? identity?.user ?? null : null;
+  return useUserKey();
 }
