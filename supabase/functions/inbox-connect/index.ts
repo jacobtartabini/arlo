@@ -1,10 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { verifyArloJWT, handleCorsOptions, jsonResponse, unauthorizedResponse, errorResponse } from '../_shared/arloAuth.ts';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
 
 type InboxProvider = 'gmail' | 'outlook' | 'teams' | 'whatsapp' | 'telegram' | 'instagram' | 'linkedin';
 
@@ -68,13 +62,23 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Verify JWT
+    // Verify JWT using shared Arlo auth (same as calendar functions)
     const authResult = await verifyArloJWT(req);
-    if (!authResult.authenticated || !authResult.userKey) {
-      return unauthorizedResponse(req, 'Authentication required');
+    
+    // Return specific error messages for auth failures
+    if (!authResult.authenticated) {
+      const errorMessage = authResult.error || 'Authentication required';
+      console.error(`[inbox-connect] Auth failed: ${errorMessage}`);
+      return unauthorizedResponse(req, errorMessage);
+    }
+    
+    // userId is derived from JWT.sub (user's email/identity)
+    if (!authResult.userId) {
+      console.error('[inbox-connect] Auth succeeded but no userId in JWT sub claim');
+      return unauthorizedResponse(req, 'Invalid token: missing user identity');
     }
 
-    const userKey = authResult.userKey;
+    const userKey = authResult.userId;
     const { provider }: ConnectRequest = await req.json();
 
     if (!provider) {
