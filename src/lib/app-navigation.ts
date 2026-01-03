@@ -177,6 +177,14 @@ export const APP_PAGES: NavigationItem[] = [
     keywords: ["overview", "home", "widgets"]
   },
   {
+    id: "inbox",
+    title: "Inbox",
+    description: "Unified messages from all providers",
+    route: "/inbox",
+    icon: MessageCircle,
+    keywords: ["email", "messages", "gmail", "outlook", "teams"]
+  },
+  {
     id: "chat",
     title: "Chat",
     description: "Conversations with the Arlo assistant",
