@@ -12,7 +12,8 @@ import {
   Users,
   Send,
   Instagram,
-  Linkedin
+  Linkedin,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,7 +36,20 @@ import { PROVIDER_META, type InboxProvider, type InboxAccount } from '@/types/in
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { getAuthHeadersWithContentType } from '@/lib/arloAuth';
+import { getAuthHeaders } from '@/lib/arloAuth';
+import { supabase } from '@/integrations/supabase/client';
+
+// Helper to invoke edge functions with auth (matches CalendarIntegrations pattern)
+async function invokeWithAuth(functionName: string, body: Record<string, unknown>) {
+  const headers = await getAuthHeaders();
+  if (!headers) {
+    throw new Error('Authentication required');
+  }
+  return supabase.functions.invoke(functionName, {
+    body,
+    headers: headers as Record<string, string>,
+  });
+}
 
 // Providers that have full OAuth implementation
 const IMPLEMENTED_PROVIDERS: InboxProvider[] = ['gmail', 'outlook', 'teams'];
@@ -97,21 +111,16 @@ function ProviderCard({
             </div>
           </div>
           <Button
-            variant="outline"
             size="sm"
             onClick={() => onConnect(provider)}
             disabled={isConnecting || !isImplemented}
           >
             {isConnecting ? (
-              <RefreshCw className="h-4 w-4 animate-spin" />
-            ) : !isImplemented ? (
-              'Coming soon'
-            ) : (
-              <>
-                <Plus className="h-4 w-4 mr-1" />
-                Add
-              </>
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : !isImplemented ? null : (
+              <ExternalLink className="h-4 w-4 mr-2" />
             )}
+            {isConnecting ? 'Connecting...' : !isImplemented ? 'Coming soon' : 'Connect'}
           </Button>
         </div>
       </CardHeader>
@@ -272,64 +281,35 @@ export default function InboxSettings() {
     setConnectingProvider(provider);
     
     try {
-      // Get auth headers from the centralized auth module
-      const headers = await getAuthHeadersWithContentType();
-      if (!headers) {
-        throw new Error('Authentication required');
-      }
+      // Use invokeWithAuth like CalendarIntegrations does
+      const { data, error } = await invokeWithAuth('inbox-connect', { provider });
 
-      // Call edge function to get OAuth URL
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/inbox-connect`,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ provider }),
-        }
-      );
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
       
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Failed to get OAuth URL');
-      }
-      
-      const data = await response.json();
-      
-      if (data.oauth_url) {
-        // Open OAuth flow in new window
-        window.open(data.oauth_url, '_blank', 'width=600,height=700');
-        toast.info('Complete the sign-in in the popup window');
-      } else if (data.instructions) {
+      if (data?.oauth_url) {
+        // Redirect to OAuth flow (same tab like calendar integrations)
+        window.location.href = data.oauth_url;
+      } else if (data?.instructions) {
         // Show instructions for non-OAuth providers
         toast.info(data.instructions);
+        setConnectingProvider(null);
       }
     } catch (err) {
       console.error('Connect error:', err);
       toast.error(err instanceof Error ? err.message : `Failed to connect ${PROVIDER_META[provider].name}`);
-    } finally {
       setConnectingProvider(null);
     }
   };
 
   const handleSync = async (accountId: string) => {
-    const headers = await getAuthHeadersWithContentType();
-    if (!headers) {
-      throw new Error('Authentication required');
-    }
-
-    const response = await fetch(
-      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/inbox-sync`,
-      {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ account_id: accountId, sync_type: 'incremental' }),
-      }
-    );
+    const { data, error } = await invokeWithAuth('inbox-sync', { 
+      account_id: accountId, 
+      sync_type: 'incremental' 
+    });
     
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || 'Failed to start sync');
-    }
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
   };
 
   const handleDisconnect = async (accountId: string) => {
