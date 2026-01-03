@@ -87,11 +87,14 @@ export function useCalendarDatabase(): [
   const [events, setEventsState] = React.useState<CalendarEvent[]>([]);
   const [bookings, setBookingsState] = React.useState<BookingSlot[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
-  const { isAuthenticated, identity } = useAuth();
+  const { isAuthenticated, identity, isLoading: authLoading } = useAuth();
   const pendingUpdatesRef = React.useRef<Set<string>>(new Set());
 
   // Get user_key from auth context (the primary identifier)
   const userKey = identity?.user ?? null;
+  
+  // Track if auth has finished loading
+  const authReady = !authLoading && isAuthenticated;
 
   // Sync external calendars (Google, Outlook)
   const syncExternalCalendars = React.useCallback(async () => {
@@ -130,9 +133,12 @@ export function useCalendarDatabase(): [
 
   // Fetch events from database via data-api (uses user_key)
   const fetchEvents = React.useCallback(async (silent = false) => {
-    if (!userKey) {
-      console.log('[calendar-hooks] No userKey, skipping fetch');
-      setIsLoading(false);
+    // Wait for auth to be ready before fetching
+    if (!authReady || !userKey) {
+      console.log('[calendar-hooks] Auth not ready or no userKey, skipping fetch', { authReady, userKey });
+      if (!authLoading) {
+        setIsLoading(false);
+      }
       return;
     }
     
@@ -222,15 +228,19 @@ export function useCalendarDatabase(): [
         setIsLoading(false);
       }
     }
-  }, [userKey]);
+  }, [authReady, authLoading, userKey]);
 
-  // Initial fetch
+  // Initial fetch - only run when auth is ready
   React.useEffect(() => {
-    fetchEvents();
-  }, [fetchEvents]);
+    if (authReady) {
+      fetchEvents();
+    }
+  }, [authReady, fetchEvents]);
 
-  // Auto-sync external calendars every 60 seconds
+  // Auto-sync external calendars every 60 seconds - only when auth is ready
   React.useEffect(() => {
+    if (!authReady) return;
+    
     // Initial sync when component mounts
     const initialSync = async () => {
       await syncExternalCalendars();
@@ -250,7 +260,7 @@ export function useCalendarDatabase(): [
     }, AUTO_SYNC_INTERVAL);
 
     return () => clearInterval(intervalId);
-  }, [syncExternalCalendars, fetchEvents]);
+  }, [authReady, syncExternalCalendars, fetchEvents]);
 
   // Create wrapped setEvents that syncs to database via data-api
   const setEvents: React.Dispatch<React.SetStateAction<CalendarEvent[]>> = React.useCallback(
