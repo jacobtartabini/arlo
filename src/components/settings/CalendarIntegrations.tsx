@@ -112,13 +112,15 @@ export default function CalendarIntegrations() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
-      // Get saved selections from database
-      const { data: savedSelections } = await supabase
-        .from('google_calendar_selections')
-        .select('*')
-        .eq('integration_id', integrationId);
+      // Get saved selections from database using data-api (passes user_key header for RLS)
+      const { data: selectionsData } = await invokeWithAuth('data-api', {
+        action: 'select',
+        table: 'google_calendar_selections',
+        filters: { integration_id: integrationId },
+      });
 
-      const savedMap = new Map((savedSelections || []).map((s: any) => [s.calendar_id, s.enabled]));
+      const savedSelections = selectionsData?.data || [];
+      const savedMap = new Map(savedSelections.map((s: any) => [s.calendar_id, s.enabled]));
 
       // Merge available calendars with saved selections
       const calendars: GoogleCalendar[] = (data?.calendars || []).map((cal: any) => ({
