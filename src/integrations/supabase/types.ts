@@ -524,6 +524,344 @@ export type Database = {
           },
         ]
       }
+      inbox_accounts: {
+        Row: {
+          access_token: string | null
+          account_email: string | null
+          account_id: string
+          account_name: string
+          created_at: string
+          enabled: boolean
+          id: string
+          last_sync_at: string | null
+          last_sync_error: string | null
+          provider: Database["public"]["Enums"]["inbox_provider"]
+          refresh_token: string | null
+          scopes: string[] | null
+          sync_cursor: string | null
+          token_expires_at: string | null
+          updated_at: string
+          user_key: string
+          webhook_id: string | null
+        }
+        Insert: {
+          access_token?: string | null
+          account_email?: string | null
+          account_id: string
+          account_name: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          last_sync_at?: string | null
+          last_sync_error?: string | null
+          provider: Database["public"]["Enums"]["inbox_provider"]
+          refresh_token?: string | null
+          scopes?: string[] | null
+          sync_cursor?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_key: string
+          webhook_id?: string | null
+        }
+        Update: {
+          access_token?: string | null
+          account_email?: string | null
+          account_id?: string
+          account_name?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          last_sync_at?: string | null
+          last_sync_error?: string | null
+          provider?: Database["public"]["Enums"]["inbox_provider"]
+          refresh_token?: string | null
+          scopes?: string[] | null
+          sync_cursor?: string | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_key?: string
+          webhook_id?: string | null
+        }
+        Relationships: []
+      }
+      inbox_drafts: {
+        Row: {
+          account_id: string
+          ai_generated: boolean
+          content: string
+          created_at: string
+          id: string
+          sent: boolean
+          sent_at: string | null
+          thread_id: string
+          updated_at: string
+          user_key: string
+        }
+        Insert: {
+          account_id: string
+          ai_generated?: boolean
+          content: string
+          created_at?: string
+          id?: string
+          sent?: boolean
+          sent_at?: string | null
+          thread_id: string
+          updated_at?: string
+          user_key: string
+        }
+        Update: {
+          account_id?: string
+          ai_generated?: boolean
+          content?: string
+          created_at?: string
+          id?: string
+          sent?: boolean
+          sent_at?: string | null
+          thread_id?: string
+          updated_at?: string
+          user_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbox_drafts_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_drafts_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_accounts_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_drafts_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inbox_messages: {
+        Row: {
+          account_id: string
+          attachments: Json | null
+          body_html: string | null
+          body_text: string | null
+          created_at: string
+          external_message_id: string
+          id: string
+          in_reply_to: string | null
+          is_outgoing: boolean
+          is_read: boolean
+          provider: Database["public"]["Enums"]["inbox_provider"]
+          received_at: string
+          recipients: Json | null
+          sender: Json
+          sent_at: string
+          subject: string | null
+          thread_id: string
+          user_key: string
+        }
+        Insert: {
+          account_id: string
+          attachments?: Json | null
+          body_html?: string | null
+          body_text?: string | null
+          created_at?: string
+          external_message_id: string
+          id?: string
+          in_reply_to?: string | null
+          is_outgoing?: boolean
+          is_read?: boolean
+          provider: Database["public"]["Enums"]["inbox_provider"]
+          received_at?: string
+          recipients?: Json | null
+          sender: Json
+          sent_at: string
+          subject?: string | null
+          thread_id: string
+          user_key: string
+        }
+        Update: {
+          account_id?: string
+          attachments?: Json | null
+          body_html?: string | null
+          body_text?: string | null
+          created_at?: string
+          external_message_id?: string
+          id?: string
+          in_reply_to?: string | null
+          is_outgoing?: boolean
+          is_read?: boolean
+          provider?: Database["public"]["Enums"]["inbox_provider"]
+          received_at?: string
+          recipients?: Json | null
+          sender?: Json
+          sent_at?: string
+          subject?: string | null
+          thread_id?: string
+          user_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbox_messages_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_messages_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_accounts_safe"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inbox_sync_state: {
+        Row: {
+          account_id: string
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          messages_synced: number | null
+          started_at: string | null
+          status: string
+          sync_type: string
+          threads_synced: number | null
+          user_key: string
+        }
+        Insert: {
+          account_id: string
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          messages_synced?: number | null
+          started_at?: string | null
+          status?: string
+          sync_type?: string
+          threads_synced?: number | null
+          user_key: string
+        }
+        Update: {
+          account_id?: string
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          messages_synced?: number | null
+          started_at?: string | null
+          status?: string
+          sync_type?: string
+          threads_synced?: number | null
+          user_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbox_sync_state_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_sync_state_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_accounts_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inbox_threads: {
+        Row: {
+          account_id: string
+          created_at: string
+          external_thread_id: string
+          id: string
+          is_archived: boolean
+          is_pinned: boolean
+          is_starred: boolean
+          labels: string[] | null
+          last_message_at: string | null
+          message_count: number
+          participants: Json | null
+          provider: Database["public"]["Enums"]["inbox_provider"]
+          snippet: string | null
+          subject: string | null
+          unread_count: number
+          updated_at: string
+          user_key: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          external_thread_id: string
+          id?: string
+          is_archived?: boolean
+          is_pinned?: boolean
+          is_starred?: boolean
+          labels?: string[] | null
+          last_message_at?: string | null
+          message_count?: number
+          participants?: Json | null
+          provider: Database["public"]["Enums"]["inbox_provider"]
+          snippet?: string | null
+          subject?: string | null
+          unread_count?: number
+          updated_at?: string
+          user_key: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          external_thread_id?: string
+          id?: string
+          is_archived?: boolean
+          is_pinned?: boolean
+          is_starred?: boolean
+          labels?: string[] | null
+          last_message_at?: string | null
+          message_count?: number
+          participants?: Json | null
+          provider?: Database["public"]["Enums"]["inbox_provider"]
+          snippet?: string | null
+          subject?: string | null
+          unread_count?: number
+          updated_at?: string
+          user_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inbox_threads_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inbox_threads_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "inbox_accounts_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       note_folders: {
         Row: {
           color: string
@@ -1040,12 +1378,67 @@ export type Database = {
         }
         Relationships: []
       }
+      inbox_accounts_safe: {
+        Row: {
+          account_email: string | null
+          account_id: string | null
+          account_name: string | null
+          created_at: string | null
+          enabled: boolean | null
+          id: string | null
+          last_sync_at: string | null
+          last_sync_error: string | null
+          provider: Database["public"]["Enums"]["inbox_provider"] | null
+          scopes: string[] | null
+          token_expires_at: string | null
+          updated_at: string | null
+          user_key: string | null
+        }
+        Insert: {
+          account_email?: string | null
+          account_id?: string | null
+          account_name?: string | null
+          created_at?: string | null
+          enabled?: boolean | null
+          id?: string | null
+          last_sync_at?: string | null
+          last_sync_error?: string | null
+          provider?: Database["public"]["Enums"]["inbox_provider"] | null
+          scopes?: string[] | null
+          token_expires_at?: string | null
+          updated_at?: string | null
+          user_key?: string | null
+        }
+        Update: {
+          account_email?: string | null
+          account_id?: string | null
+          account_name?: string | null
+          created_at?: string | null
+          enabled?: boolean | null
+          id?: string | null
+          last_sync_at?: string | null
+          last_sync_error?: string | null
+          provider?: Database["public"]["Enums"]["inbox_provider"] | null
+          scopes?: string[] | null
+          token_expires_at?: string | null
+          updated_at?: string | null
+          user_key?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      inbox_provider:
+        | "gmail"
+        | "outlook"
+        | "teams"
+        | "whatsapp"
+        | "telegram"
+        | "instagram"
+        | "linkedin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1172,6 +1565,16 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      inbox_provider: [
+        "gmail",
+        "outlook",
+        "teams",
+        "whatsapp",
+        "telegram",
+        "instagram",
+        "linkedin",
+      ],
+    },
   },
 } as const

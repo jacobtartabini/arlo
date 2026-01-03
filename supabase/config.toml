@@ -32,3 +32,15 @@ verify_jwt = false
 
 [functions.places-autocomplete]
 verify_jwt = false
+
+[functions.inbox-connect]
+verify_jwt = false
+
+[functions.inbox-oauth-callback]
+verify_jwt = false
+
+[functions.inbox-sync]
+verify_jwt = false
+
+[functions.inbox-send]
+verify_jwt = false
