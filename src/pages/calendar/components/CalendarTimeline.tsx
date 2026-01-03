@@ -68,9 +68,9 @@ type DragPreviewState = {
   endMinutes: number;
 };
 
-const DAY_HEADER_HEIGHT = 80;
+const DAY_HEADER_HEIGHT = 48;
+const ALL_DAY_ROW_HEIGHT = 32;
 const TIMELINE_HEIGHT = (HOURS_PER_DAY / 60) * HOUR_HEIGHT;
-const TOTAL_TIMELINE_HEIGHT = TIMELINE_HEIGHT + DAY_HEADER_HEIGHT;
 
 export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
   view,
@@ -90,14 +90,13 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
     blockPreviewRef.current = blockPreview;
   }, [blockPreview]);
 
+  const blockContainerRefs = React.useRef(new Map<string, HTMLDivElement | null>());
+  const dayColumnRefs = React.useRef(new Map<string, HTMLDivElement | null>());
+
   const dayLookup = React.useMemo(
     () => new Map(focusBlocks.map(({ day }) => [format(day, "yyyy-MM-dd"), day])),
     [focusBlocks]
   );
-
-  const blockContainerRefs = React.useRef(new Map<string, HTMLDivElement | null>());
-  const dayColumnRefs = React.useRef(new Map<string, HTMLDivElement | null>());
-
   const setBlockContainerRef = React.useCallback((dayKey: string, node: HTMLDivElement | null) => {
     const map = blockContainerRefs.current;
     if (node) {
@@ -115,6 +114,37 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
       map.delete(dayKey);
     }
   }, []);
+
+  // Separate all-day blocks from timed blocks
+  const { allDayBlocksByDay, timedBlocksByDay, maxAllDayCount } = React.useMemo(() => {
+    const allDayMap = new Map<string, CalendarBlock[]>();
+    const timedMap = new Map<string, CalendarBlock[]>();
+    let maxCount = 0;
+
+    focusBlocks.forEach(({ day, blocks }) => {
+      const dayKey = format(day, "yyyy-MM-dd");
+      const allDay: CalendarBlock[] = [];
+      const timed: CalendarBlock[] = [];
+
+      blocks.forEach(block => {
+        if (block.allDay) {
+          allDay.push(block);
+        } else {
+          timed.push(block);
+        }
+      });
+
+      allDayMap.set(dayKey, allDay);
+      timedMap.set(dayKey, timed);
+      maxCount = Math.max(maxCount, allDay.length);
+    });
+
+    return { allDayBlocksByDay: allDayMap, timedBlocksByDay: timedMap, maxAllDayCount: maxCount };
+  }, [focusBlocks]);
+
+  const allDayRowHeight = maxAllDayCount > 0 ? Math.max(ALL_DAY_ROW_HEIGHT, maxAllDayCount * 28 + 8) : 0;
+  const totalHeaderHeight = DAY_HEADER_HEIGHT + allDayRowHeight;
+  const totalTimelineHeight = TIMELINE_HEIGHT + totalHeaderHeight;
 
   const handlePointerDown = (
     event: React.PointerEvent<HTMLDivElement>,
@@ -359,7 +389,7 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
       <div className="flex min-h-full">
         <div
           className="sticky left-0 z-10 flex w-20 flex-col border-r bg-card text-right text-[11px] text-muted-foreground"
-          style={{ height: `${TOTAL_TIMELINE_HEIGHT}px` }}
+          style={{ height: `${totalTimelineHeight}px` }}
         >
           <div
             className="h-20 border-b border-border/60 bg-card"
@@ -399,7 +429,9 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
         >
           {focusBlocks.map(({ day, blocks }) => {
             const dayKey = format(day, "yyyy-MM-dd");
-            const layout = computeBlockLayout(blocks);
+            const timedBlocks = timedBlocksByDay.get(dayKey) || [];
+            const allDayBlocks = allDayBlocksByDay.get(dayKey) || [];
+            const layout = computeBlockLayout(timedBlocks);
             const selectionForDay = selection && selection.dayKey === dayKey ? selection : null;
 
             return (
@@ -408,15 +440,49 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                 className="relative border-r last:border-r-0"
                 ref={node => setDayColumnRef(dayKey, node)}
               >
-                <div className="sticky top-0 z-10 flex h-20 flex-col justify-center border-b bg-card/95 px-4 py-3 backdrop-blur">
-                  <div className="flex items-center justify-start">
+                {/* Day header */}
+                <div className="sticky top-0 z-10 flex flex-col border-b bg-card/95 backdrop-blur">
+                  <div className="flex items-center justify-start px-3 py-2">
                     <div>
-                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{format(day, "EEE")}</p>
-                      <p className={cn("text-xl font-semibold", isToday(day) && "text-primary")}>
-                        {format(day, "d MMM")}
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{format(day, "EEE")}</p>
+                      <p className={cn("text-lg font-semibold", isToday(day) && "text-primary")}>
+                        {format(day, "d")}
                       </p>
                     </div>
                   </div>
+                  {/* All-day events row */}
+                  {allDayRowHeight > 0 && (
+                    <div 
+                      className="flex flex-col gap-1 border-t border-border/40 bg-muted/30 px-1 py-1 overflow-hidden"
+                      style={{ minHeight: `${allDayRowHeight}px` }}
+                    >
+                      {allDayBlocks.map(block => (
+                        <button
+                          key={block.id}
+                          type="button"
+                          onClick={(e) => onBlockSelect(block, e.currentTarget)}
+                          className={cn(
+                            "w-full truncate rounded px-2 py-1 text-left text-[11px] font-medium transition-colors",
+                            "hover:opacity-80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                          )}
+                          style={{ 
+                            backgroundColor: block.color,
+                            color: getContrastTextColor(block.color),
+                          }}
+                          title={block.title}
+                        >
+                          <span className="flex items-center gap-1">
+                            {block.title}
+                            {block.eventSource && block.eventSource !== "arlo" && (
+                              <span className="opacity-70 text-[9px]">
+                                {block.eventSource === "google" ? "G" : "O"}
+                              </span>
+                            )}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div
                   className="relative cursor-crosshair"
@@ -458,7 +524,7 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                         </div>
                       );
                     })()}
-                    {blocks.map(block => {
+                    {timedBlocks.filter(b => !b.allDay).map(block => {
                       const layoutInfo = layout.get(block.id);
                       const top = minutesToPx(block.startMinutes);
                       const height = Math.max(36, minutesToPx(block.endMinutes) - top);
