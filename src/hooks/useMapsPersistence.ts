@@ -110,11 +110,12 @@ export function useMapsPersistence() {
         })));
       }
 
-      // Fetch settings
+      // Fetch settings (use maybeSingle to handle 0 rows)
       const settingsRes = await supabase
         .from('map_user_settings')
         .select('*')
-        .single()
+        .eq('user_key', userKey)
+        .maybeSingle()
         .setHeader('x-user-key', userKey);
 
       if (settingsRes.data) {
@@ -124,6 +125,18 @@ export function useMapsPersistence() {
           showTraffic: settingsRes.data.show_traffic,
           defaultMapType: settingsRes.data.default_map_type as MapSettings['defaultMapType'],
         });
+      } else if (!settingsRes.error) {
+        // No settings exist yet - create default settings for this user
+        await supabase
+          .from('map_user_settings')
+          .insert({
+            user_key: userKey,
+            pattern_learning_enabled: DEFAULT_SETTINGS.patternLearningEnabled,
+            show_incidents: DEFAULT_SETTINGS.showIncidents,
+            show_traffic: DEFAULT_SETTINGS.showTraffic,
+            default_map_type: DEFAULT_SETTINGS.defaultMapType,
+          })
+          .setHeader('x-user-key', userKey);
       }
     } catch (error) {
       console.error('[useMapsPersistence] Error fetching data:', error);
