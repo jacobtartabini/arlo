@@ -79,12 +79,14 @@ function ProviderCard({
   provider, 
   onConnect,
   isConnecting,
-  existingAccounts
+  existingAccounts,
+  isAuthReady
 }: { 
   provider: InboxProvider;
   onConnect: (provider: InboxProvider) => void;
   isConnecting: boolean;
   existingAccounts: InboxAccount[];
+  isAuthReady: boolean;
 }) {
   const meta = PROVIDER_META[provider];
   const accountsForProvider = existingAccounts.filter(a => a.provider === provider);
@@ -113,7 +115,8 @@ function ProviderCard({
           <Button
             size="sm"
             onClick={() => onConnect(provider)}
-            disabled={isConnecting || !isImplemented}
+            disabled={isConnecting || !isImplemented || !isAuthReady}
+            title={!isAuthReady ? 'Authentication required' : undefined}
           >
             {isConnecting ? (
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -262,13 +265,14 @@ function ConnectedAccountRow({
 }
 
 export default function InboxSettings() {
-  const { userKey } = useAuth();
+  const { userKey, isAuthenticated, isLoading: authLoading } = useAuth();
   const { accounts, loading, refetch, disconnectAccount } = useInboxAccounts();
   const [connectingProvider, setConnectingProvider] = useState<InboxProvider | null>(null);
 
   const handleConnect = async (provider: InboxProvider) => {
-    if (!userKey) {
-      toast.error('Please log in to connect accounts');
+    // Ensure authentication is ready
+    if (!isAuthenticated || !userKey) {
+      toast.error('Authentication required. Please verify your Tailscale connection.');
       return;
     }
     
@@ -284,7 +288,10 @@ export default function InboxSettings() {
       // Use invokeWithAuth like CalendarIntegrations does
       const { data, error } = await invokeWithAuth('inbox-connect', { provider });
 
-      if (error) throw error;
+      if (error) {
+        console.error('inbox-connect error:', error);
+        throw new Error(error.message || 'Failed to initialize connection');
+      }
       if (data?.error) throw new Error(data.error);
       
       if (data?.oauth_url) {
@@ -326,8 +333,36 @@ export default function InboxSettings() {
     'linkedin',
   ];
 
+  // Show loading state while auth initializes
+  if (authLoading) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-72 mt-2" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {/* Show auth warning if not authenticated */}
+      {!isAuthenticated && (
+        <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900/30">
+          <CardContent className="pt-6">
+            <p className="text-sm text-amber-900 dark:text-amber-200">
+              Authentication required. Please verify your Tailscale connection to connect inbox accounts.
+            </p>
+          </CardContent>
+        </Card>
+      )}
       {/* Connected Accounts */}
       <Card>
         <CardHeader>
@@ -385,6 +420,7 @@ export default function InboxSettings() {
                 onConnect={handleConnect}
                 isConnecting={connectingProvider === provider}
                 existingAccounts={accounts}
+                isAuthReady={isAuthenticated && !!userKey}
               />
             ))}
           </div>
