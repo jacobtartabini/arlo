@@ -862,6 +862,194 @@ export type Database = {
           },
         ]
       }
+      map_destination_patterns: {
+        Row: {
+          created_at: string
+          day_of_week: number
+          id: string
+          last_visited_at: string
+          latitude: number
+          longitude: number
+          place_address: string | null
+          place_id: string | null
+          place_name: string
+          time_bucket: string
+          user_key: string
+          visit_count: number
+        }
+        Insert: {
+          created_at?: string
+          day_of_week: number
+          id?: string
+          last_visited_at?: string
+          latitude: number
+          longitude: number
+          place_address?: string | null
+          place_id?: string | null
+          place_name: string
+          time_bucket: string
+          user_key: string
+          visit_count?: number
+        }
+        Update: {
+          created_at?: string
+          day_of_week?: number
+          id?: string
+          last_visited_at?: string
+          latitude?: number
+          longitude?: number
+          place_address?: string | null
+          place_id?: string | null
+          place_name?: string
+          time_bucket?: string
+          user_key?: string
+          visit_count?: number
+        }
+        Relationships: []
+      }
+      map_incident_votes: {
+        Row: {
+          created_at: string
+          id: string
+          incident_id: string
+          user_key: string
+          vote_type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          incident_id: string
+          user_key: string
+          vote_type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          incident_id?: string
+          user_key?: string
+          vote_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "map_incident_votes_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "map_incidents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      map_incidents: {
+        Row: {
+          created_at: string
+          description: string | null
+          downvotes: number
+          expires_at: string
+          id: string
+          incident_type: string
+          is_active: boolean
+          latitude: number
+          longitude: number
+          upvotes: number
+          user_key: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          downvotes?: number
+          expires_at: string
+          id?: string
+          incident_type: string
+          is_active?: boolean
+          latitude: number
+          longitude: number
+          upvotes?: number
+          user_key: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          downvotes?: number
+          expires_at?: string
+          id?: string
+          incident_type?: string
+          is_active?: boolean
+          latitude?: number
+          longitude?: number
+          upvotes?: number
+          user_key?: string
+        }
+        Relationships: []
+      }
+      map_recent_searches: {
+        Row: {
+          id: string
+          latitude: number | null
+          longitude: number | null
+          place_address: string | null
+          place_id: string | null
+          place_name: string | null
+          query: string
+          searched_at: string
+          user_key: string
+        }
+        Insert: {
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          place_address?: string | null
+          place_id?: string | null
+          place_name?: string | null
+          query: string
+          searched_at?: string
+          user_key: string
+        }
+        Update: {
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          place_address?: string | null
+          place_id?: string | null
+          place_name?: string | null
+          query?: string
+          searched_at?: string
+          user_key?: string
+        }
+        Relationships: []
+      }
+      map_user_settings: {
+        Row: {
+          created_at: string
+          default_map_type: string
+          id: string
+          pattern_learning_enabled: boolean
+          show_incidents: boolean
+          show_traffic: boolean
+          updated_at: string
+          user_key: string
+        }
+        Insert: {
+          created_at?: string
+          default_map_type?: string
+          id?: string
+          pattern_learning_enabled?: boolean
+          show_incidents?: boolean
+          show_traffic?: boolean
+          updated_at?: string
+          user_key: string
+        }
+        Update: {
+          created_at?: string
+          default_map_type?: string
+          id?: string
+          pattern_learning_enabled?: boolean
+          show_incidents?: boolean
+          show_traffic?: boolean
+          updated_at?: string
+          user_key?: string
+        }
+        Relationships: []
+      }
       note_folders: {
         Row: {
           color: string
@@ -1238,6 +1426,45 @@ export type Database = {
           updated_at?: string
           user_id?: string | null
           user_key?: string | null
+        }
+        Relationships: []
+      }
+      user_saved_places: {
+        Row: {
+          address: string
+          created_at: string
+          id: string
+          latitude: number
+          longitude: number
+          name: string
+          place_id: string | null
+          place_type: string
+          updated_at: string
+          user_key: string
+        }
+        Insert: {
+          address: string
+          created_at?: string
+          id?: string
+          latitude: number
+          longitude: number
+          name: string
+          place_id?: string | null
+          place_type: string
+          updated_at?: string
+          user_key: string
+        }
+        Update: {
+          address?: string
+          created_at?: string
+          id?: string
+          latitude?: number
+          longitude?: number
+          name?: string
+          place_id?: string | null
+          place_type?: string
+          updated_at?: string
+          user_key?: string
         }
         Relationships: []
       }

@@ -37,6 +37,7 @@ import Notes from "./pages/Notes";
 import NotesDashboard from "./pages/modules/NotesDashboard";
 import Habits from "./pages/modules/Habits";
 import Inbox from "./pages/Inbox";
+import ArloMaps from "./pages/ArloMaps";
 import { NotificationMonitor } from "./components/NotificationMonitor";
 
 const queryClient = new QueryClient();
@@ -164,6 +165,11 @@ const App = () => (
                   <Route path="/habits" element={
                     <ProtectedRoute>
                       <Habits />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/maps" element={
+                    <ProtectedRoute>
+                      <ArloMaps />
                     </ProtectedRoute>
                   } />
 
