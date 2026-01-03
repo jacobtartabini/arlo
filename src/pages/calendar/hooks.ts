@@ -73,8 +73,69 @@ const eventToDb = (event: Partial<CalendarEvent>) => {
     category: event.category ?? 'personal',
     color: event.color ?? null,
     location: event.location ?? null,
+    source: event.source ?? 'arlo',
+    external_id: event.externalId ?? null,
   };
 };
+
+// Push event changes to Google Calendar for 2-way sync
+async function pushToGoogleCalendar(
+  event: CalendarEvent,
+  action: "create" | "update" | "delete"
+): Promise<{ success: boolean; externalId?: string; error?: string }> {
+  try {
+    const headers = await getAuthHeaders();
+    if (!headers) {
+      console.log('[calendar-hooks] Not authenticated, skipping Google sync');
+      return { success: false, error: "Not authenticated" };
+    }
+
+    const dbEvent = {
+      id: event.id,
+      title: event.title,
+      description: event.description ?? null,
+      location: event.location ?? null,
+      start_time: event.allDay 
+        ? `${event.date}T00:00:00`
+        : `${event.date}T${event.startTime || '00:00'}:00`,
+      end_time: event.allDay
+        ? `${event.endDate || event.date}T23:59:59`
+        : `${event.endDate || event.date}T${event.endTime || '23:59'}:00`,
+      is_all_day: event.allDay ?? false,
+      external_id: event.externalId ?? null,
+    };
+
+    console.log(`[calendar-hooks] Pushing ${action} to Google Calendar:`, dbEvent.title);
+
+    const { data, error } = await supabase.functions.invoke('calendar-sync', {
+      body: { 
+        action: 'push_event',
+        event: dbEvent,
+        eventAction: action,
+      },
+      headers: headers as Record<string, string>,
+    });
+
+    if (error) {
+      console.error('[calendar-hooks] Google sync error:', error);
+      return { success: false, error: error.message };
+    }
+
+    if (data?.error) {
+      console.error('[calendar-hooks] Google API error:', data.error);
+      return { success: false, error: data.error };
+    }
+
+    console.log('[calendar-hooks] Google sync success:', data);
+    return { 
+      success: true, 
+      externalId: data?.externalId,
+    };
+  } catch (err) {
+    console.error('[calendar-hooks] Push to Google failed:', err);
+    return { success: false, error: err instanceof Error ? err.message : "Unknown error" };
+  }
+}
 
 export function useCalendarDatabase(): [
   CalendarEvent[],
@@ -266,7 +327,7 @@ export function useCalendarDatabase(): [
     return () => clearInterval(intervalId);
   }, [authReady, syncExternalCalendars, fetchEvents]);
 
-  // Create wrapped setEvents that syncs to database via data-api
+  // Create wrapped setEvents that syncs to database via data-api AND pushes to Google Calendar
   const setEvents: React.Dispatch<React.SetStateAction<CalendarEvent[]>> = React.useCallback(
     (updater) => {
       setEventsState((prev) => {
@@ -296,12 +357,26 @@ export function useCalendarDatabase(): [
                 if (error) {
                   console.error('[calendar-hooks] Error creating event:', error);
                 } else if (data?.data) {
-                  // Update local state with DB ID
-                  setEventsState((current) =>
-                    current.map((e) =>
-                      e.id === event.id ? dbToEvent(data.data) : e
-                    )
-                  );
+                  const createdEvent = dbToEvent(data.data);
+                  
+                  // Push to Google Calendar for 2-way sync
+                  const syncResult = await pushToGoogleCalendar(createdEvent, 'create');
+                  
+                  if (syncResult.success && syncResult.externalId) {
+                    // Update local state with DB ID and external ID
+                    setEventsState((current) =>
+                      current.map((e) =>
+                        e.id === event.id ? { ...createdEvent, externalId: syncResult.externalId, source: 'google' as const } : e
+                      )
+                    );
+                  } else {
+                    // Just update with DB ID
+                    setEventsState((current) =>
+                      current.map((e) =>
+                        e.id === event.id ? createdEvent : e
+                      )
+                    );
+                  }
                 }
               } catch (err) {
                 console.error('[calendar-hooks] Error creating event:', err);
@@ -332,6 +407,14 @@ export function useCalendarDatabase(): [
                   
                   if (error) {
                     console.error('[calendar-hooks] Error updating event:', error);
+                  } else {
+                    // Push update to Google Calendar if event has external ID or is from Arlo
+                    if (event.source === 'arlo' || event.source === 'google' || event.externalId) {
+                      const syncResult = await pushToGoogleCalendar(event, 'update');
+                      if (!syncResult.success) {
+                        console.warn('[calendar-hooks] Google update failed:', syncResult.error);
+                      }
+                    }
                   }
                 } catch (err) {
                   console.error('[calendar-hooks] Error updating event:', err);
@@ -350,6 +433,7 @@ export function useCalendarDatabase(): [
               const headers = await getAuthHeaders();
               if (!headers) return;
               
+              // Delete from local database
               const { error } = await supabase.functions.invoke('data-api', {
                 body: { 
                   action: 'delete', 
@@ -361,6 +445,14 @@ export function useCalendarDatabase(): [
               
               if (error) {
                 console.error('[calendar-hooks] Error deleting event:', error);
+              } else {
+                // Delete from Google Calendar if it was synced
+                if (event.externalId || event.source === 'google') {
+                  const syncResult = await pushToGoogleCalendar(event, 'delete');
+                  if (!syncResult.success) {
+                    console.warn('[calendar-hooks] Google delete failed:', syncResult.error);
+                  }
+                }
               }
             } catch (err) {
               console.error('[calendar-hooks] Error deleting event:', err);

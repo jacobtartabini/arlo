@@ -49,6 +49,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
+import { LocationAutocomplete } from "@/components/LocationAutocomplete";
 import { formatSlotLabel } from "@/lib/calendar-data";
 import type { BookingSlot, CalendarEvent, EventRecurrence, Task } from "@/lib/calendar-data";
 
@@ -847,28 +848,64 @@ const CalendarPage: React.FC = () => {
   return (
     <div className="flex h-full w-full flex-col">
       <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur">
-        <div className="flex w-full flex-wrap items-center justify-between gap-4 px-4 py-5 sm:px-6 lg:px-10">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-              <CalendarIcon className="h-5 w-5" />
+        <div className="flex w-full flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-10">
+          {/* Left: Navigation controls */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center rounded-full border bg-background px-1 py-0.5">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-full"
+                onClick={() => handleNavigate("prev")}
+                aria-label="Previous period"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 rounded-full"
+                onClick={() => handleNavigate("next")}
+                aria-label="Next period"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight">Calendar</h1>
-              <p className="text-sm text-muted-foreground">Plan your time with clarity and keep every view aligned.</p>
-            </div>
+            <Button variant="outline" size="sm" className="h-8" onClick={() => handleNavigate("today")}>
+              Today
+            </Button>
+            <span className="hidden sm:block text-lg font-semibold text-foreground">{rangeLabel}</span>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button onClick={() => openCreateDialog()} className="gap-2">
+
+          {/* Right: View selector and Create button */}
+          <div className="flex items-center gap-2">
+            <Select value={view} onValueChange={value => value && setView(value as CalendarView)}>
+              <SelectTrigger className="h-8 w-[100px] text-sm">
+                <SelectValue placeholder="View" />
+              </SelectTrigger>
+              <SelectContent>
+                {VIEW_OPTIONS.map(option => (
+                  <SelectItem key={option.id} value={option.id}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button onClick={() => openCreateDialog()} size="sm" className="h-8 gap-1.5">
               <Plus className="h-4 w-4" />
-              Create
+              <span className="hidden sm:inline">Create</span>
             </Button>
           </div>
         </div>
+        {/* Mobile range label */}
+        <div className="sm:hidden px-4 pb-2">
+          <span className="text-base font-semibold text-foreground">{rangeLabel}</span>
+        </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-6 px-4 pb-6 pt-4 sm:px-6 lg:px-10 lg:pt-6">
-        <div className="grid min-h-0 flex-1 gap-6 lg:grid-cols-[260px,minmax(0,1fr)] 2xl:grid-cols-[260px,minmax(0,1fr),320px]">
-          <aside className="hidden min-h-0 flex-col gap-6 lg:flex">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 pb-4 pt-3 sm:px-6 lg:px-10">
+        <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[240px,minmax(0,1fr)] 2xl:grid-cols-[240px,minmax(0,1fr),280px]">
+          <aside className="hidden min-h-0 flex-col gap-4 lg:flex">
             <CalendarMiniMonth
               selectedDate={selectedDate}
               days={miniMonthDays}
@@ -882,56 +919,8 @@ const CalendarPage: React.FC = () => {
             />
           </aside>
 
-          <div className="flex min-w-0 flex-1 flex-col gap-4">
-            <div className="rounded-2xl border bg-card px-4 py-4 shadow-sm sm:px-6">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="flex items-center rounded-full border bg-background px-1 py-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="rounded-full"
-                      onClick={() => handleNavigate("prev")}
-                      aria-label="Previous period"
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="rounded-full"
-                      onClick={() => handleNavigate("next")}
-                      aria-label="Next period"
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <Button variant="outline" size="sm" onClick={() => handleNavigate("today")}>
-                    Today
-                  </Button>
-                  <div className="flex flex-col">
-                    <span className="text-xs uppercase tracking-wide text-muted-foreground">Selected range</span>
-                    <span className="text-lg font-semibold text-foreground">{rangeLabel}</span>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Select value={view} onValueChange={value => value && setView(value as CalendarView)}>
-                    <SelectTrigger className="w-[120px] justify-between">
-                      <SelectValue placeholder="View" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {VIEW_OPTIONS.map(option => (
-                        <SelectItem key={option.id} value={option.id}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            <main className="flex-1 min-w-0 overflow-hidden rounded-3xl border bg-card shadow-sm">
+          <div className="flex min-w-0 flex-1 flex-col">
+            <main className="flex-1 min-w-0 overflow-hidden rounded-2xl border bg-card shadow-sm">
               {view === "month" ? (
                 <CalendarMonthGrid
                   days={days}
@@ -1325,11 +1314,11 @@ const CalendarPage: React.FC = () => {
                         <MapPin className="mt-1 h-4 w-4 text-muted-foreground" />
                         <div className="flex-1 space-y-1">
                           <p className="text-sm font-medium text-foreground">Location</p>
-                          <Input
+                          <LocationAutocomplete
                             value={draft.location}
-                            onChange={event => handleDraftChange("location", event.target.value)}
+                            onChange={value => handleDraftChange("location", value)}
                             placeholder="Add location"
-                            className="h-9 border border-transparent bg-muted/50 px-3 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20"
+                            className="h-9 border border-transparent bg-muted/50 text-sm shadow-none focus-visible:border-ring/80 focus-visible:ring-2 focus-visible:ring-ring/20"
                           />
                         </div>
                       </div>
