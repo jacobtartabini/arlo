@@ -7,17 +7,17 @@ const themeItems = [
   { 
     value: "light", 
     label: "Light", 
-    image: "https://originui.com/ui-light.png" 
+    image: "/LightTheme.png"
   },
   { 
     value: "dark", 
     label: "Dark", 
-    image: "https://originui.com/ui-dark.png" 
+    image: "/DarkTheme.png"
   },
   { 
     value: "system", 
     label: "System", 
-    image: "https://originui.com/ui-system.png" 
+    image: "/SystemTheme.png"
   },
 ];
 
