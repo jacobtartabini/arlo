@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Home, MessageCircle, Calendar as CalendarIcon, Settings as SettingsIcon, Mail, LucideIcon } from "lucide-react";
+import { Home, MessageCircle, Calendar as CalendarIcon, Settings as SettingsIcon, Mail, Map, LucideIcon } from "lucide-react";
 import { ExpandableTabs, TabItem } from "@/components/ui/expandable-tabs";
 
 interface NavTabWithPath {
@@ -24,6 +24,7 @@ const navTabs: NavTab[] = [
   { title: "Inbox", icon: Mail, path: "/inbox" },
   { title: "Chat", icon: MessageCircle, path: "/chat" },
   { title: "Calendar", icon: CalendarIcon, path: "/calendar" },
+  { title: "Maps", icon: Map, path: "/maps" },
   { type: "separator" },
   { title: "Settings", icon: SettingsIcon, path: "/settings" },
 ];
