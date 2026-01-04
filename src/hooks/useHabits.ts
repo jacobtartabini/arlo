@@ -222,6 +222,7 @@ export interface HabitsState {
   routines: RoutineWithHabits[];
   progress: UserProgress | null;
   rewards: Reward[];
+  logs: HabitLog[];
   loading: boolean;
 }
 
@@ -237,6 +238,7 @@ export function useHabits() {
     routines: [],
     progress: null,
     rewards: [],
+    logs: [],
     loading: true,
   });
 
@@ -315,6 +317,7 @@ export function useHabits() {
         routines: routinesWithHabits,
         progress,
         rewards,
+        logs,
         loading: false,
       });
     } catch (error) {

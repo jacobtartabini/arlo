@@ -38,6 +38,7 @@ export default function Habits() {
     routines,
     progress,
     rewards,
+    logs,
     loading,
     loadData,
     completeHabit,
@@ -417,7 +418,7 @@ export default function Habits() {
                   </TabsList>
 
                   <TabsContent value="insights" className="mt-4">
-                    <HabitInsights habits={habits} progress={progress} />
+                    <HabitInsights habits={habits} progress={progress} logs={logs} />
                   </TabsContent>
 
                   <TabsContent value="rewards" className="mt-4">

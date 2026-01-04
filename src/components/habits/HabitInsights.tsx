@@ -3,14 +3,16 @@ import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { TrendingUp, Flame, Calendar, Star, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { HabitWithStreak, UserProgress } from "@/types/habits";
+import type { HabitWithStreak, UserProgress, HabitLog } from "@/types/habits";
+import { MonthlyHeatmap } from "./MonthlyHeatmap";
 
 interface HabitInsightsProps {
   habits: HabitWithStreak[];
   progress: UserProgress | null;
+  logs?: HabitLog[];
 }
 
-export function HabitInsights({ habits, progress }: HabitInsightsProps) {
+export function HabitInsights({ habits, progress, logs = [] }: HabitInsightsProps) {
   const insights = useMemo(() => {
     if (habits.length === 0) return null;
 
@@ -150,6 +152,11 @@ export function HabitInsights({ habits, progress }: HabitInsightsProps) {
             );
           })}
         </div>
+      </Card>
+
+      {/* Monthly Heatmap */}
+      <Card className="p-5">
+        <MonthlyHeatmap habits={habits} logs={logs} />
       </Card>
 
       {/* Tips Section */}
