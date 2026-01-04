@@ -7,8 +7,8 @@ import type { HabitWithStreak } from "@/types/habits";
 
 interface QuickHabitItemProps {
   habit: HabitWithStreak;
-  onComplete: () => Promise<void>;
-  onSkip: () => Promise<void>;
+  onComplete: () => Promise<void> | Promise<any>;
+  onSkip: () => Promise<void> | Promise<any>;
 }
 
 export function QuickHabitItem({ habit, onComplete, onSkip }: QuickHabitItemProps) {

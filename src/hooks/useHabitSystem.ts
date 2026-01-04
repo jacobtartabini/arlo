@@ -10,8 +10,9 @@ import type {
   Reward,
   RewardRedemption,
   XpEvent,
+  Difficulty,
 } from "@/types/habits";
-import { XP_VALUES, calculateLevel } from "@/types/habits";
+import { XP_VALUES, calculateLevel, getXpForDifficulty } from "@/types/habits";
 
 // Check legacy auth flags for backward compatibility
 function checkAuthFromSession(): boolean {
@@ -60,6 +61,11 @@ interface DbRoutine {
   routine_type: string;
   anchor_cue: string | null;
   reward_description: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  schedule_days: number[] | null;
+  repeat_interval: number | null;
+  repeat_unit: string | null;
   enabled: boolean;
   created_at: string;
   updated_at: string;
@@ -135,6 +141,11 @@ const dbToRoutine = (db: DbRoutine): Routine => ({
   routineType: db.routine_type as Routine["routineType"],
   anchorCue: db.anchor_cue ?? undefined,
   rewardDescription: db.reward_description ?? undefined,
+  startTime: db.start_time ?? undefined,
+  endTime: db.end_time ?? undefined,
+  scheduleDays: db.schedule_days ?? [0, 1, 2, 3, 4, 5, 6],
+  repeatInterval: db.repeat_interval ?? 1,
+  repeatUnit: (db.repeat_unit ?? 'day') as Routine["repeatUnit"],
   enabled: db.enabled,
   createdAt: new Date(db.created_at),
   updatedAt: new Date(db.updated_at),
@@ -416,7 +427,7 @@ export function useHabitSystem() {
     const xpEvents: Array<{ type: string; amount: number; desc: string; ref?: string }> = [];
 
     // 1. Base XP for habit completion
-    const baseXp = habit.difficulty === 'hard' ? XP_VALUES.HABIT_HARD : XP_VALUES.HABIT_NORMAL;
+    const baseXp = getXpForDifficulty(habit.difficulty as Difficulty);
     xpEarned += baseXp;
     xpEvents.push({ type: 'habit_complete', amount: baseXp, desc: `Completed: ${habit.title}`, ref: habitId });
 

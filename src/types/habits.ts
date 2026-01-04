@@ -1,7 +1,8 @@
 export type HabitType = 'check' | 'count' | 'duration';
 export type ScheduleType = 'daily' | 'weekdays' | 'weekends' | 'custom' | 'weekly';
-export type Difficulty = 'normal' | 'hard';
+export type Difficulty = 'trivial' | 'easy' | 'medium' | 'hard';
 export type RoutineType = 'morning' | 'night' | 'custom';
+export type RepeatUnit = 'day' | 'week' | 'month';
 
 export interface Habit {
   id: string;
@@ -11,6 +12,7 @@ export interface Habit {
   category: 'routine' | 'experiment' | 'reflection';
   habitType: HabitType;
   targetValue: number;
+  durationMinutes?: number; // Timer duration for this habit
   scheduleType: ScheduleType;
   scheduleDays: number[];
   weeklyFrequency: number;
@@ -45,6 +47,11 @@ export interface Routine {
   routineType: RoutineType;
   anchorCue?: string;
   rewardDescription?: string;
+  startTime?: string; // HH:mm format
+  endTime?: string; // HH:mm format
+  scheduleDays: number[]; // 0-6 for Sun-Sat
+  repeatInterval: number; // e.g., every 2 weeks
+  repeatUnit: RepeatUnit;
   enabled: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -92,10 +99,12 @@ export interface XpEvent {
   createdAt: Date;
 }
 
-// XP Constants
+// XP Constants - updated for difficulty levels
 export const XP_VALUES = {
-  HABIT_NORMAL: 10,
-  HABIT_HARD: 15,
+  HABIT_TRIVIAL: 5,
+  HABIT_EASY: 10,
+  HABIT_MEDIUM: 15,
+  HABIT_HARD: 25,
   ROUTINE_COMPLETE: 25,
   DOUBLE_ROUTINE_BONUS: 40,
   STREAK_CONTINUE: 3,
@@ -105,6 +114,17 @@ export const XP_VALUES = {
   DAILY_WIN: 30,
   COMEBACK: 10,
 } as const;
+
+// Helper to get XP for difficulty
+export function getXpForDifficulty(difficulty: Difficulty): number {
+  switch (difficulty) {
+    case 'trivial': return XP_VALUES.HABIT_TRIVIAL;
+    case 'easy': return XP_VALUES.HABIT_EASY;
+    case 'medium': return XP_VALUES.HABIT_MEDIUM;
+    case 'hard': return XP_VALUES.HABIT_HARD;
+    default: return XP_VALUES.HABIT_EASY;
+  }
+}
 
 // Level thresholds
 export const LEVEL_THRESHOLDS = [
@@ -127,3 +147,7 @@ export function xpToNextLevel(totalXp: number): { current: number; next: number;
   const progress = Math.round(((totalXp - current) / (next - current)) * 100);
   return { current, next, progress };
 }
+
+// Day names for schedule display
+export const DAY_NAMES = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+export const DAY_FULL_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

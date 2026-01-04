@@ -8,8 +8,9 @@ import type {
   RoutineWithHabits,
   UserProgress,
   Reward,
+  Difficulty,
 } from "@/types/habits";
-import { XP_VALUES, calculateLevel } from "@/types/habits";
+import { XP_VALUES, calculateLevel, getXpForDifficulty } from "@/types/habits";
 
 // Database interfaces
 interface DbHabit {
@@ -50,6 +51,11 @@ interface DbRoutine {
   routine_type: string;
   anchor_cue: string | null;
   reward_description: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  schedule_days: number[] | null;
+  repeat_interval: number | null;
+  repeat_unit: string | null;
   enabled: boolean;
   created_at: string;
   updated_at: string;
@@ -88,10 +94,11 @@ const dbToHabit = (db: DbHabit): Habit => ({
   category: (db.category ?? 'routine') as Habit["category"],
   habitType: (db.habit_type ?? 'check') as Habit["habitType"],
   targetValue: db.target_value ?? 1,
+  durationMinutes: (db as any).duration_minutes ?? undefined,
   scheduleType: (db.schedule_type ?? 'daily') as Habit["scheduleType"],
   scheduleDays: db.schedule_days ?? [0, 1, 2, 3, 4, 5, 6],
   weeklyFrequency: db.weekly_frequency ?? 7,
-  difficulty: (db.difficulty ?? 'normal') as Habit["difficulty"],
+  difficulty: (db.difficulty ?? 'medium') as Difficulty,
   routineId: db.routine_id ?? undefined,
   routineOrder: db.routine_order ?? 0,
   enabled: db.enabled,
@@ -115,6 +122,11 @@ const dbToRoutine = (db: DbRoutine): Routine => ({
   routineType: (db.routine_type ?? 'custom') as Routine["routineType"],
   anchorCue: db.anchor_cue ?? undefined,
   rewardDescription: db.reward_description ?? undefined,
+  startTime: db.start_time ?? undefined,
+  endTime: db.end_time ?? undefined,
+  scheduleDays: db.schedule_days ?? [0, 1, 2, 3, 4, 5, 6],
+  repeatInterval: db.repeat_interval ?? 1,
+  repeatUnit: (db.repeat_unit ?? 'day') as Routine["repeatUnit"],
   enabled: db.enabled,
   createdAt: new Date(db.created_at),
   updatedAt: new Date(db.updated_at),
@@ -373,7 +385,7 @@ export function useHabits() {
       const bonuses: string[] = [];
 
       // Base XP
-      const baseXp = habit.difficulty === 'hard' ? XP_VALUES.HABIT_HARD : XP_VALUES.HABIT_NORMAL;
+      const baseXp = getXpForDifficulty(habit.difficulty);
       xpEarned += baseXp;
 
       // Streak bonus (if had yesterday)
@@ -506,10 +518,11 @@ export function useHabits() {
         category: habit.category ?? 'routine',
         habit_type: habit.habitType ?? 'check',
         target_value: habit.targetValue ?? 1,
+        duration_minutes: habit.durationMinutes ?? null,
         schedule_type: habit.scheduleType ?? 'daily',
         schedule_days: habit.scheduleDays ?? [0, 1, 2, 3, 4, 5, 6],
         weekly_frequency: habit.weeklyFrequency ?? 7,
-        difficulty: habit.difficulty ?? 'normal',
+        difficulty: habit.difficulty ?? 'medium',
         routine_id: habit.routineId ?? null,
         routine_order: habit.routineOrder ?? 0,
       });
@@ -536,6 +549,11 @@ export function useHabits() {
         routine_type: routine.routineType ?? 'custom',
         anchor_cue: routine.anchorCue ?? null,
         reward_description: routine.rewardDescription ?? null,
+        start_time: routine.startTime ?? null,
+        end_time: routine.endTime ?? null,
+        schedule_days: routine.scheduleDays ?? [0, 1, 2, 3, 4, 5, 6],
+        repeat_interval: routine.repeatInterval ?? 1,
+        repeat_unit: routine.repeatUnit ?? 'day',
       });
 
       if (error || !data) {
