@@ -16,6 +16,11 @@ interface DbRoutine {
   id: string;
   name: string;
   routine_type: string;
+  start_time: string | null;
+  trigger_type: string | null;
+  reminder_enabled: boolean | null;
+  reminder_type: string | null;
+  reminder_minutes_before: number | null;
   enabled: boolean;
 }
 
@@ -118,44 +123,49 @@ export function useHabitsNotifications() {
     const todayStart = new Date(now);
     todayStart.setHours(0, 0, 0, 0);
 
-    // 1. Morning routine reminder (7-8 AM)
-    if (hour >= 7 && hour < 8) {
-      const morningKey = `morning-routine-${today}`;
-      if (!firedNotificationsRef.current.has(morningKey)) {
-        const morningRoutine = routines.find(r => r.routine_type === 'morning');
-        if (morningRoutine) {
-          const routineHabits = habits.filter(h => h.routine_id === morningRoutine.id);
+    // 1. Check each routine for reminder timing
+    for (const routine of routines) {
+      if (!routine.reminder_enabled) continue;
+      
+      // Skip if no start time (location/sunrise routines handled differently)
+      const triggerType = routine.trigger_type ?? 'time';
+      if (triggerType === 'location') continue; // Location triggers handled separately
+      if (triggerType === 'sunrise' || triggerType === 'sunset') continue; // Sun-based handled separately
+      
+      if (!routine.start_time) continue;
+      
+      // Parse start time
+      const [startHour, startMinute] = routine.start_time.split(':').map(Number);
+      const reminderMinutesBefore = routine.reminder_minutes_before ?? 0;
+      
+      // Calculate reminder time
+      const routineTime = new Date(now);
+      routineTime.setHours(startHour, startMinute, 0, 0);
+      const reminderTime = new Date(routineTime.getTime() - reminderMinutesBefore * 60 * 1000);
+      
+      // Check if we're in the reminder window (within 5 minutes)
+      const timeDiff = Math.abs(now.getTime() - reminderTime.getTime());
+      const isInReminderWindow = timeDiff < 5 * 60 * 1000;
+      
+      if (isInReminderWindow) {
+        const reminderKey = `routine-reminder-${routine.id}-${today}`;
+        if (!firedNotificationsRef.current.has(reminderKey)) {
+          const routineHabits = habits.filter(h => h.routine_id === routine.id);
           if (routineHabits.length > 0) {
-            firedNotificationsRef.current.add(morningKey);
+            firedNotificationsRef.current.add(reminderKey);
             
-            showToast('habits', 'Good morning! ☀️', `Time for your ${morningRoutine.name}`);
+            const emoji = routine.routine_type === 'morning' ? '☀️' : 
+                         routine.routine_type === 'night' ? '🌙' : '✨';
+            const timing = reminderMinutesBefore > 0 
+              ? `in ${reminderMinutesBefore} minutes` 
+              : 'now';
+            
+            showToast('habits', `${emoji} ${routine.name}`, `Starting ${timing}`);
             await notify(userId, {
               type: 'habits',
-              title: 'Good morning! ☀️',
-              body: `Time for your ${morningRoutine.name} (${routineHabits.length} habits)`,
-              data: { routineId: morningRoutine.id, routineType: 'morning' },
-            });
-          }
-        }
-      }
-    }
-
-    // 2. Evening routine reminder (8-9 PM)
-    if (hour >= 20 && hour < 21) {
-      const eveningKey = `night-routine-${today}`;
-      if (!firedNotificationsRef.current.has(eveningKey)) {
-        const nightRoutine = routines.find(r => r.routine_type === 'night');
-        if (nightRoutine) {
-          const routineHabits = habits.filter(h => h.routine_id === nightRoutine.id);
-          if (routineHabits.length > 0) {
-            firedNotificationsRef.current.add(eveningKey);
-            
-            showToast('habits', 'Wind down time 🌙', `Don't forget your ${nightRoutine.name}`);
-            await notify(userId, {
-              type: 'habits',
-              title: 'Wind down time 🌙',
-              body: `Don't forget your ${nightRoutine.name} (${routineHabits.length} habits)`,
-              data: { routineId: nightRoutine.id, routineType: 'night' },
+              title: `${emoji} ${routine.name}`,
+              body: `Your routine starts ${timing} (${routineHabits.length} habits)`,
+              data: { routineId: routine.id, routineType: routine.routine_type },
             });
           }
         }

@@ -3,6 +3,8 @@ export type ScheduleType = 'daily' | 'weekdays' | 'weekends' | 'custom' | 'weekl
 export type Difficulty = 'trivial' | 'easy' | 'medium' | 'hard';
 export type RoutineType = 'morning' | 'night' | 'custom';
 export type RepeatUnit = 'day' | 'week' | 'month';
+export type TriggerType = 'time' | 'sunrise' | 'sunset' | 'location';
+export type ReminderType = 'push' | 'alarm';
 
 export interface Habit {
   id: string;
@@ -52,6 +54,16 @@ export interface Routine {
   scheduleDays: number[]; // 0-6 for Sun-Sat
   repeatInterval: number; // e.g., every 2 weeks
   repeatUnit: RepeatUnit;
+  // Trigger settings
+  triggerType: TriggerType;
+  triggerLocationId?: string; // Reference to user_saved_places
+  sunriseOffsetMinutes: number; // Offset from sunrise/sunset
+  // Reminder settings
+  reminderEnabled: boolean;
+  reminderType: ReminderType;
+  reminderMinutesBefore: number;
+  reminderSound: string;
+  reminderVibrate: boolean;
   enabled: boolean;
   createdAt: Date;
   updatedAt: Date;

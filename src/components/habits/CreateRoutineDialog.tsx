@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { format, addWeeks } from "date-fns";
+import { format } from "date-fns";
 import {
   Dialog,
   DialogContent,
@@ -12,11 +12,8 @@ import {
   FormControl,
   FormField,
   FormItem,
-  FormMessage,
 } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -30,11 +27,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { X, Clock, Sunrise, MapPin, ChevronRight, Settings } from "lucide-react";
+import { X, Clock, Sunrise, MapPin, ChevronRight } from "lucide-react";
 import { useHabits } from "@/hooks/useHabits";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import type { RoutineType, RepeatUnit } from "@/types/habits";
+import { ReminderSettings, type ReminderSettingsData } from "./ReminderSettings";
+import { SunriseSunsetPicker } from "./SunriseSunsetPicker";
+import { LocationTriggerPicker } from "./LocationTriggerPicker";
+import type { RoutineType, RepeatUnit, TriggerType } from "@/types/habits";
 
 const DAYS = [
   { value: 0, label: "su" },
@@ -64,8 +64,17 @@ const formSchema = z.object({
   scheduleDays: z.array(z.number()),
   repeatInterval: z.number().min(1).max(12),
   repeatUnit: z.enum(["day", "week", "month"]),
+  // Trigger
+  triggerType: z.enum(["time", "sunrise", "sunset", "location"]),
+  sunriseType: z.enum(["sunrise", "sunset"]),
+  sunriseOffsetMinutes: z.number(),
+  triggerLocationId: z.string().nullable(),
+  // Reminder
   reminderEnabled: z.boolean(),
   reminderType: z.enum(["push", "alarm"]),
+  reminderMinutesBefore: z.number(),
+  reminderSound: z.string(),
+  reminderVibrate: z.boolean(),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -79,7 +88,6 @@ interface CreateRoutineDialogProps {
 export function CreateRoutineDialog({ open, onOpenChange, onCreated }: CreateRoutineDialogProps) {
   const { createRoutine } = useHabits();
   const [loading, setLoading] = useState(false);
-  const [startTrigger, setStartTrigger] = useState<"time" | "sunrise" | "location">("time");
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -91,14 +99,28 @@ export function CreateRoutineDialog({ open, onOpenChange, onCreated }: CreateRou
       scheduleDays: [1, 2, 3, 4, 5],
       repeatInterval: 1,
       repeatUnit: "week",
+      triggerType: "time",
+      sunriseType: "sunrise",
+      sunriseOffsetMinutes: 0,
+      triggerLocationId: null,
       reminderEnabled: true,
       reminderType: "push",
+      reminderMinutesBefore: 0,
+      reminderSound: "default",
+      reminderVibrate: true,
     },
   });
 
   const scheduleDays = form.watch("scheduleDays");
   const startDate = form.watch("startDate");
-  const reminderEnabled = form.watch("reminderEnabled");
+  const triggerType = form.watch("triggerType");
+  const reminderSettings: ReminderSettingsData = {
+    enabled: form.watch("reminderEnabled"),
+    type: form.watch("reminderType"),
+    minutesBefore: form.watch("reminderMinutesBefore"),
+    sound: form.watch("reminderSound"),
+    vibrate: form.watch("reminderVibrate"),
+  };
 
   const onSubmit = async (data: FormData) => {
     setLoading(true);
@@ -116,10 +138,20 @@ export function CreateRoutineDialog({ open, onOpenChange, onCreated }: CreateRou
     const routine = await createRoutine({
       name: data.name,
       routineType: data.routineType as RoutineType,
-      startTime: convert12to24(data.startTime || ""),
+      startTime: data.triggerType === "time" ? convert12to24(data.startTime || "") : undefined,
       scheduleDays: data.scheduleDays,
       repeatInterval: data.repeatInterval,
       repeatUnit: data.repeatUnit as RepeatUnit,
+      triggerType: (data.triggerType === "sunrise" || data.triggerType === "sunset") 
+        ? data.sunriseType 
+        : data.triggerType as TriggerType,
+      triggerLocationId: data.triggerLocationId ?? undefined,
+      sunriseOffsetMinutes: data.sunriseOffsetMinutes,
+      reminderEnabled: data.reminderEnabled,
+      reminderType: data.reminderType,
+      reminderMinutesBefore: data.reminderMinutesBefore,
+      reminderSound: data.reminderSound,
+      reminderVibrate: data.reminderVibrate,
     });
 
     setLoading(false);
@@ -144,7 +176,7 @@ export function CreateRoutineDialog({ open, onOpenChange, onCreated }: CreateRou
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md p-0 gap-0 overflow-hidden">
+      <DialogContent className="sm:max-w-md p-0 gap-0 overflow-hidden max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="relative pt-4 pb-2 px-6">
           <button
@@ -167,7 +199,6 @@ export function CreateRoutineDialog({ open, onOpenChange, onCreated }: CreateRou
                     className="w-full text-center text-xl font-semibold bg-transparent border-0 border-b-2 border-border focus:border-primary focus:outline-none py-3 placeholder:text-muted-foreground/50 transition-colors"
                   />
                 </FormControl>
-                <FormMessage className="text-center pt-1" />
               </FormItem>
             )}
           />
@@ -271,32 +302,34 @@ export function CreateRoutineDialog({ open, onOpenChange, onCreated }: CreateRou
               {/* Trigger Type Tabs */}
               <div className="bg-background rounded-xl p-1 flex mb-4">
                 {[
-                  { value: "time", icon: Clock },
-                  { value: "sunrise", icon: Sunrise },
-                  { value: "location", icon: MapPin },
+                  { value: "time", icon: Clock, label: "Time" },
+                  { value: "sunrise", icon: Sunrise, label: "Sun" },
+                  { value: "location", icon: MapPin, label: "Location" },
                 ].map((trigger) => {
                   const Icon = trigger.icon;
-                  const isActive = startTrigger === trigger.value;
+                  const isActive = triggerType === trigger.value || 
+                    (triggerType === "sunset" && trigger.value === "sunrise");
                   return (
                     <button
                       key={trigger.value}
                       type="button"
                       className={cn(
-                        "flex-1 py-2.5 rounded-lg flex items-center justify-center transition-all",
+                        "flex-1 py-2.5 rounded-lg flex items-center justify-center gap-1.5 transition-all",
                         isActive 
                           ? "bg-foreground text-background shadow-sm" 
                           : "text-muted-foreground hover:text-foreground"
                       )}
-                      onClick={() => setStartTrigger(trigger.value as typeof startTrigger)}
+                      onClick={() => form.setValue("triggerType", trigger.value as TriggerType)}
                     >
                       <Icon className="h-4 w-4" />
+                      <span className="text-xs font-medium">{trigger.label}</span>
                     </button>
                   );
                 })}
               </div>
 
               {/* Time Picker */}
-              {startTrigger === "time" && (
+              {triggerType === "time" && (
                 <FormField
                   control={form.control}
                   name="startTime"
@@ -321,77 +354,40 @@ export function CreateRoutineDialog({ open, onOpenChange, onCreated }: CreateRou
                 />
               )}
 
-              {startTrigger === "sunrise" && (
-                <div className="bg-background rounded-xl p-4 text-center text-muted-foreground text-sm">
-                  <Sunrise className="h-8 w-8 mx-auto mb-2 text-amber-500" />
-                  Starts at sunrise based on your location
-                </div>
+              {/* Sunrise/Sunset Picker */}
+              {(triggerType === "sunrise" || triggerType === "sunset") && (
+                <SunriseSunsetPicker
+                  type={form.watch("sunriseType")}
+                  offsetMinutes={form.watch("sunriseOffsetMinutes")}
+                  onTypeChange={(type) => {
+                    form.setValue("sunriseType", type);
+                    form.setValue("triggerType", type);
+                  }}
+                  onOffsetChange={(offset) => form.setValue("sunriseOffsetMinutes", offset)}
+                />
               )}
 
-              {startTrigger === "location" && (
-                <div className="bg-background rounded-xl p-4 text-center text-muted-foreground text-sm">
-                  <MapPin className="h-8 w-8 mx-auto mb-2 text-primary" />
-                  Trigger when arriving at a location
-                </div>
+              {/* Location Trigger Picker */}
+              {triggerType === "location" && (
+                <LocationTriggerPicker
+                  selectedLocationId={form.watch("triggerLocationId")}
+                  onLocationSelect={(id) => form.setValue("triggerLocationId", id)}
+                />
               )}
             </div>
 
             {/* Reminder Section */}
             <div className="bg-muted/50 rounded-2xl p-4 mt-3">
-              <div className="flex items-center justify-between mb-3">
-                <span className="font-semibold">Reminder</span>
-                <FormField
-                  control={form.control}
-                  name="reminderEnabled"
-                  render={({ field }) => (
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
-                  )}
-                />
-              </div>
-
-              {reminderEnabled && (
-                <>
-                  <FormField
-                    control={form.control}
-                    name="reminderType"
-                    render={({ field }) => (
-                      <div className="bg-background rounded-xl p-1 flex mb-3">
-                        {[
-                          { value: "push", label: "Push" },
-                          { value: "alarm", label: "Alarm" },
-                        ].map((type) => {
-                          const isActive = field.value === type.value;
-                          return (
-                            <button
-                              key={type.value}
-                              type="button"
-                              className={cn(
-                                "flex-1 py-2.5 rounded-lg text-sm font-medium transition-all",
-                                isActive 
-                                  ? "bg-foreground text-background shadow-sm" 
-                                  : "text-muted-foreground hover:text-foreground"
-                              )}
-                              onClick={() => field.onChange(type.value)}
-                            >
-                              {type.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  />
-                  <button
-                    type="button"
-                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors ml-auto"
-                  >
-                    Customize
-                    <Settings className="h-4 w-4" />
-                  </button>
-                </>
-              )}
+              <ReminderSettings
+                value={reminderSettings}
+                onChange={(settings) => {
+                  form.setValue("reminderEnabled", settings.enabled);
+                  form.setValue("reminderType", settings.type);
+                  form.setValue("reminderMinutesBefore", settings.minutesBefore);
+                  form.setValue("reminderSound", settings.sound);
+                  form.setValue("reminderVibrate", settings.vibrate);
+                }}
+              />
             </div>
 
             {/* Done Button */}

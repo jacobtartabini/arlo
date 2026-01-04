@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Play, Check, Sun, Moon, Flame, MoreHorizontal, Clock } from "lucide-react";
+import { Play, Check, Sun, Moon, Flame, MoreHorizontal, Clock, Sunrise, Sunset, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -51,13 +51,36 @@ export function RoutineCard({ routine, onStart, onEdit, onDelete }: RoutineCardP
     }
   };
 
-  // Format time window
+  // Format time window based on trigger type
   const formatTimeWindow = () => {
+    const triggerType = routine.triggerType ?? 'time';
+    
+    if (triggerType === 'sunrise') {
+      const offset = routine.sunriseOffsetMinutes ?? 0;
+      if (offset === 0) return { icon: Sunrise, text: 'At sunrise' };
+      const label = offset > 0 ? `${offset}m after sunrise` : `${Math.abs(offset)}m before sunrise`;
+      return { icon: Sunrise, text: label };
+    }
+    
+    if (triggerType === 'sunset') {
+      const offset = routine.sunriseOffsetMinutes ?? 0;
+      if (offset === 0) return { icon: Sunset, text: 'At sunset' };
+      const label = offset > 0 ? `${offset}m after sunset` : `${Math.abs(offset)}m before sunset`;
+      return { icon: Sunset, text: label };
+    }
+    
+    if (triggerType === 'location') {
+      return { icon: MapPin, text: 'When arriving' };
+    }
+    
+    // Default time trigger
     if (!routine.startTime) return null;
     const parts = [routine.startTime];
     if (routine.endTime) parts.push(routine.endTime);
-    return parts.join(' - ');
+    return { icon: Clock, text: parts.join(' - ') };
   };
+
+  const timeInfo = formatTimeWindow();
 
   // Format repeat pattern
   const formatRepeat = () => {
@@ -120,10 +143,10 @@ export function RoutineCard({ routine, onStart, onEdit, onDelete }: RoutineCardP
 
           {/* Time Window */}
           <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-            {formatTimeWindow() && (
+            {timeInfo && (
               <span className="flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {formatTimeWindow()}
+                <timeInfo.icon className="h-3 w-3" />
+                {timeInfo.text}
               </span>
             )}
             {formatRepeat() && (
