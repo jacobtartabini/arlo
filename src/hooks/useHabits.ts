@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef } from "react";
 import { dataApiHelpers } from "@/lib/data-api";
-import { isAuthenticated } from "@/lib/arloAuth";
 import type {
   Habit,
   HabitLog,
@@ -240,11 +239,6 @@ export function useHabits() {
 
   // Load all data
   const loadData = useCallback(async () => {
-    if (!isAuthenticated()) {
-      setState(s => ({ ...s, loading: false }));
-      return;
-    }
-
     setState(s => ({ ...s, loading: true }));
 
     try {
@@ -502,69 +496,87 @@ export function useHabits() {
     }
   }, [state.habits, state.routines, state.progress, loadData]);
 
-  // Create habit
+// Create habit
   const createHabit = useCallback(async (habit: Partial<Habit>): Promise<Habit | null> => {
-    if (!isAuthenticated()) return null;
+    try {
+      const { data, error } = await dataApiHelpers.insert<DbHabit>('habits', {
+        title: habit.title,
+        description: habit.description ?? null,
+        icon: habit.icon ?? 'check',
+        category: habit.category ?? 'routine',
+        habit_type: habit.habitType ?? 'check',
+        target_value: habit.targetValue ?? 1,
+        schedule_type: habit.scheduleType ?? 'daily',
+        schedule_days: habit.scheduleDays ?? [0, 1, 2, 3, 4, 5, 6],
+        weekly_frequency: habit.weeklyFrequency ?? 7,
+        difficulty: habit.difficulty ?? 'normal',
+        routine_id: habit.routineId ?? null,
+        routine_order: habit.routineOrder ?? 0,
+      });
 
-    const { data, error } = await dataApiHelpers.insert<DbHabit>('habits', {
-      title: habit.title,
-      description: habit.description ?? null,
-      icon: habit.icon ?? 'check',
-      category: habit.category ?? 'routine',
-      habit_type: habit.habitType ?? 'check',
-      target_value: habit.targetValue ?? 1,
-      schedule_type: habit.scheduleType ?? 'daily',
-      schedule_days: habit.scheduleDays ?? [0, 1, 2, 3, 4, 5, 6],
-      weekly_frequency: habit.weeklyFrequency ?? 7,
-      difficulty: habit.difficulty ?? 'normal',
-      routine_id: habit.routineId ?? null,
-      routine_order: habit.routineOrder ?? 0,
-    });
-
-    if (error || !data) return null;
-    
-    await loadData();
-    return dbToHabit(data);
+      if (error || !data) {
+        console.error('[useHabits] Failed to create habit:', error);
+        return null;
+      }
+      
+      await loadData();
+      return dbToHabit(data);
+    } catch (err) {
+      console.error('[useHabits] Create habit error:', err);
+      return null;
+    }
   }, [loadData]);
 
   // Create routine
   const createRoutine = useCallback(async (routine: Partial<Routine>): Promise<Routine | null> => {
-    if (!isAuthenticated()) return null;
+    try {
+      const { data, error } = await dataApiHelpers.insert<DbRoutine>('routines', {
+        name: routine.name,
+        icon: routine.icon ?? 'sun',
+        routine_type: routine.routineType ?? 'custom',
+        anchor_cue: routine.anchorCue ?? null,
+        reward_description: routine.rewardDescription ?? null,
+      });
 
-    const { data, error } = await dataApiHelpers.insert<DbRoutine>('routines', {
-      name: routine.name,
-      icon: routine.icon ?? 'sun',
-      routine_type: routine.routineType ?? 'custom',
-      anchor_cue: routine.anchorCue ?? null,
-      reward_description: routine.rewardDescription ?? null,
-    });
-
-    if (error || !data) return null;
-    
-    await loadData();
-    return dbToRoutine(data);
+      if (error || !data) {
+        console.error('[useHabits] Failed to create routine:', error);
+        return null;
+      }
+      
+      await loadData();
+      return dbToRoutine(data);
+    } catch (err) {
+      console.error('[useHabits] Create routine error:', err);
+      return null;
+    }
   }, [loadData]);
 
   // Create reward
   const createReward = useCallback(async (reward: Partial<Reward>): Promise<Reward | null> => {
-    if (!isAuthenticated()) return null;
+    try {
+      const { data, error } = await dataApiHelpers.insert<DbReward>('rewards', {
+        name: reward.name,
+        description: reward.description ?? null,
+        xp_cost: reward.xpCost ?? 100,
+        icon: reward.icon ?? 'gift',
+      });
 
-    const { data, error } = await dataApiHelpers.insert<DbReward>('rewards', {
-      name: reward.name,
-      description: reward.description ?? null,
-      xp_cost: reward.xpCost ?? 100,
-      icon: reward.icon ?? 'gift',
-    });
-
-    if (error || !data) return null;
-    
-    await loadData();
-    return dbToReward(data);
+      if (error || !data) {
+        console.error('[useHabits] Failed to create reward:', error);
+        return null;
+      }
+      
+      await loadData();
+      return dbToReward(data);
+    } catch (err) {
+      console.error('[useHabits] Create reward error:', err);
+      return null;
+    }
   }, [loadData]);
 
   // Redeem reward
   const redeemReward = useCallback(async (rewardId: string): Promise<boolean> => {
-    if (!isAuthenticated() || !state.progress) return false;
+    if (!state.progress) return false;
 
     const reward = state.rewards.find(r => r.id === rewardId);
     if (!reward || state.progress.availableXp < reward.xpCost) return false;
