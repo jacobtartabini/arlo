@@ -12,7 +12,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { useHabitSystem } from "@/hooks/useHabitSystem";
+import { useHabits } from "@/hooks/useHabits";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { Reward } from "@/types/habits";
@@ -32,7 +32,7 @@ interface RewardsStoreProps {
 }
 
 export function RewardsStore({ rewards, availableXp, onRefresh }: RewardsStoreProps) {
-  const { createReward, redeemReward } = useHabitSystem();
+  const { createReward, redeemReward } = useHabits();
   const [createOpen, setCreateOpen] = useState(false);
   const [newRewardName, setNewRewardName] = useState("");
   const [newRewardCost, setNewRewardCost] = useState(100);

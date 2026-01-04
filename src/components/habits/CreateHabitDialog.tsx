@@ -23,7 +23,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useHabitSystem } from "@/hooks/useHabitSystem";
+import { useHabits } from "@/hooks/useHabits";
 import { toast } from "@/hooks/use-toast";
 import type { RoutineWithHabits, HabitType, ScheduleType, Difficulty } from "@/types/habits";
 
@@ -56,7 +56,7 @@ interface CreateHabitDialogProps {
 }
 
 export function CreateHabitDialog({ open, onOpenChange, routines, onCreated }: CreateHabitDialogProps) {
-  const { createHabit } = useHabitSystem();
+  const { createHabit } = useHabits();
   const [loading, setLoading] = useState(false);
 
   const form = useForm<FormData>({
