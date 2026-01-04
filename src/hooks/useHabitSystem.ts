@@ -66,6 +66,14 @@ interface DbRoutine {
   schedule_days: number[] | null;
   repeat_interval: number | null;
   repeat_unit: string | null;
+  trigger_type: string | null;
+  trigger_location_id: string | null;
+  sunrise_offset_minutes: number | null;
+  reminder_enabled: boolean | null;
+  reminder_type: string | null;
+  reminder_minutes_before: number | null;
+  reminder_sound: string | null;
+  reminder_vibrate: boolean | null;
   enabled: boolean;
   created_at: string;
   updated_at: string;
@@ -146,6 +154,14 @@ const dbToRoutine = (db: DbRoutine): Routine => ({
   scheduleDays: db.schedule_days ?? [0, 1, 2, 3, 4, 5, 6],
   repeatInterval: db.repeat_interval ?? 1,
   repeatUnit: (db.repeat_unit ?? 'day') as Routine["repeatUnit"],
+  triggerType: (db.trigger_type ?? 'time') as Routine["triggerType"],
+  triggerLocationId: db.trigger_location_id ?? undefined,
+  sunriseOffsetMinutes: db.sunrise_offset_minutes ?? 0,
+  reminderEnabled: db.reminder_enabled ?? true,
+  reminderType: (db.reminder_type ?? 'push') as Routine["reminderType"],
+  reminderMinutesBefore: db.reminder_minutes_before ?? 0,
+  reminderSound: db.reminder_sound ?? 'default',
+  reminderVibrate: db.reminder_vibrate ?? true,
   enabled: db.enabled,
   createdAt: new Date(db.created_at),
   updatedAt: new Date(db.updated_at),

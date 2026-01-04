@@ -1294,12 +1294,20 @@ export type Database = {
           icon: string | null
           id: string
           name: string
+          reminder_enabled: boolean | null
+          reminder_minutes_before: number | null
+          reminder_sound: string | null
+          reminder_type: string | null
+          reminder_vibrate: boolean | null
           repeat_interval: number | null
           repeat_unit: string | null
           reward_description: string | null
           routine_type: string | null
           schedule_days: number[] | null
           start_time: string | null
+          sunrise_offset_minutes: number | null
+          trigger_location_id: string | null
+          trigger_type: string | null
           updated_at: string
           user_id: string | null
           user_key: string | null
@@ -1312,12 +1320,20 @@ export type Database = {
           icon?: string | null
           id?: string
           name: string
+          reminder_enabled?: boolean | null
+          reminder_minutes_before?: number | null
+          reminder_sound?: string | null
+          reminder_type?: string | null
+          reminder_vibrate?: boolean | null
           repeat_interval?: number | null
           repeat_unit?: string | null
           reward_description?: string | null
           routine_type?: string | null
           schedule_days?: number[] | null
           start_time?: string | null
+          sunrise_offset_minutes?: number | null
+          trigger_location_id?: string | null
+          trigger_type?: string | null
           updated_at?: string
           user_id?: string | null
           user_key?: string | null
@@ -1330,17 +1346,33 @@ export type Database = {
           icon?: string | null
           id?: string
           name?: string
+          reminder_enabled?: boolean | null
+          reminder_minutes_before?: number | null
+          reminder_sound?: string | null
+          reminder_type?: string | null
+          reminder_vibrate?: boolean | null
           repeat_interval?: number | null
           repeat_unit?: string | null
           reward_description?: string | null
           routine_type?: string | null
           schedule_days?: number[] | null
           start_time?: string | null
+          sunrise_offset_minutes?: number | null
+          trigger_location_id?: string | null
+          trigger_type?: string | null
           updated_at?: string
           user_id?: string | null
           user_key?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "routines_trigger_location_id_fkey"
+            columns: ["trigger_location_id"]
+            isOneToOne: false
+            referencedRelation: "user_saved_places"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tasks: {
         Row: {
