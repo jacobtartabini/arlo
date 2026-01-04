@@ -16,33 +16,43 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Sparkles } from "lucide-react";
 import { useHabits } from "@/hooks/useHabits";
 import { toast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import type { RoutineWithHabits, HabitType, ScheduleType, Difficulty } from "@/types/habits";
 
 const DAYS = [
-  { value: 0, label: "Sun" },
-  { value: 1, label: "Mon" },
-  { value: 2, label: "Tue" },
-  { value: 3, label: "Wed" },
-  { value: 4, label: "Thu" },
-  { value: 5, label: "Fri" },
-  { value: 6, label: "Sat" },
+  { value: 0, label: "S" },
+  { value: 1, label: "M" },
+  { value: 2, label: "T" },
+  { value: 3, label: "W" },
+  { value: 4, label: "T" },
+  { value: 5, label: "F" },
+  { value: 6, label: "S" },
+];
+
+const DIFFICULTIES: { value: Difficulty; label: string; xp: number }[] = [
+  { value: 'trivial', label: 'Trivial', xp: 5 },
+  { value: 'easy', label: 'Easy', xp: 10 },
+  { value: 'medium', label: 'Medium', xp: 15 },
+  { value: 'hard', label: 'Hard', xp: 25 },
 ];
 
 const formSchema = z.object({
   title: z.string().min(1, "Name is required").max(50),
   habitType: z.enum(["check", "count", "duration"]),
+  durationMinutes: z.number().min(1).max(120).optional(),
   scheduleType: z.enum(["daily", "weekdays", "weekends", "custom"]),
   scheduleDays: z.array(z.number()).optional(),
-  difficulty: z.enum(["normal", "hard"]),
+  difficulty: z.enum(["trivial", "easy", "medium", "hard"]),
   routineId: z.string().optional(),
 });
 
@@ -64,14 +74,17 @@ export function CreateHabitDialog({ open, onOpenChange, routines, onCreated }: C
     defaultValues: {
       title: "",
       habitType: "check",
+      durationMinutes: undefined,
       scheduleType: "daily",
       scheduleDays: [0, 1, 2, 3, 4, 5, 6],
-      difficulty: "normal",
+      difficulty: "medium",
       routineId: undefined,
     },
   });
 
   const scheduleType = form.watch("scheduleType");
+  const habitType = form.watch("habitType");
+  const difficulty = form.watch("difficulty");
 
   const onSubmit = async (data: FormData) => {
     setLoading(true);
@@ -88,6 +101,7 @@ export function CreateHabitDialog({ open, onOpenChange, routines, onCreated }: C
     const habit = await createHabit({
       title: data.title,
       habitType: data.habitType as HabitType,
+      durationMinutes: data.habitType === 'duration' ? data.durationMinutes : undefined,
       scheduleType: data.scheduleType as ScheduleType,
       scheduleDays,
       difficulty: data.difficulty as Difficulty,
@@ -108,22 +122,22 @@ export function CreateHabitDialog({ open, onOpenChange, routines, onCreated }: C
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Create Habit</DialogTitle>
+          <DialogTitle>New Habit</DialogTitle>
           <DialogDescription>
-            Add a new habit to track. Keep it simple and actionable.
+            Add a habit to track. Keep it simple and actionable.
           </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
             <FormField
               control={form.control}
               name="title"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Habit name</FormLabel>
+                  <FormLabel>Title</FormLabel>
                   <FormControl>
                     <Input placeholder="e.g., Drink water, Meditate, Read" {...field} />
                   </FormControl>
@@ -138,26 +152,82 @@ export function CreateHabitDialog({ open, onOpenChange, routines, onCreated }: C
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Type</FormLabel>
-                  <FormControl>
-                    <RadioGroup
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                      className="flex gap-4"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="check" id="check" />
-                        <Label htmlFor="check">Check-off</Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="count" id="count" />
-                        <Label htmlFor="count">Count</Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="duration" id="duration" />
-                        <Label htmlFor="duration">Duration</Label>
-                      </div>
-                    </RadioGroup>
-                  </FormControl>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="check">Check-off</SelectItem>
+                      <SelectItem value="count">Count</SelectItem>
+                      <SelectItem value="duration">Timed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {habitType === "duration" && (
+              <FormField
+                control={form.control}
+                name="durationMinutes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Duration (minutes)</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="number" 
+                        min={1} 
+                        max={120}
+                        placeholder="e.g., 5, 10, 30"
+                        {...field}
+                        onChange={(e) => field.onChange(e.target.value ? parseInt(e.target.value) : undefined)}
+                      />
+                    </FormControl>
+                    <FormDescription>Timer will count down during focus mode</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            <FormField
+              control={form.control}
+              name="difficulty"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Difficulty</FormLabel>
+                  <div className="grid grid-cols-4 gap-2">
+                    {DIFFICULTIES.map((diff) => (
+                      <Label
+                        key={diff.value}
+                        htmlFor={diff.value}
+                        className={cn(
+                          "flex flex-col items-center gap-1 p-3 rounded-xl border cursor-pointer transition-all text-center",
+                          difficulty === diff.value 
+                            ? "border-primary bg-primary/5" 
+                            : "hover:border-border/80"
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          id={diff.value}
+                          value={diff.value}
+                          checked={field.value === diff.value}
+                          onChange={() => field.onChange(diff.value)}
+                          className="sr-only"
+                        />
+                        <Sparkles className={cn(
+                          "h-4 w-4",
+                          difficulty === diff.value ? "text-primary" : "text-muted-foreground"
+                        )} />
+                        <span className="text-xs font-medium">{diff.label}</span>
+                        <span className="text-[10px] text-muted-foreground">+{diff.xp} XP</span>
+                      </Label>
+                    ))}
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}
@@ -172,7 +242,7 @@ export function CreateHabitDialog({ open, onOpenChange, routines, onCreated }: C
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select schedule" />
+                        <SelectValue />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -193,60 +263,38 @@ export function CreateHabitDialog({ open, onOpenChange, routines, onCreated }: C
                 name="scheduleDays"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Select days</FormLabel>
-                    <div className="flex gap-2 flex-wrap">
-                      {DAYS.map((day) => (
-                        <label
-                          key={day.value}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border cursor-pointer hover:bg-muted transition-colors"
-                        >
-                          <Checkbox
-                            checked={field.value?.includes(day.value)}
-                            onCheckedChange={(checked) => {
+                    <div className="flex gap-2 justify-center">
+                      {DAYS.map((day) => {
+                        const isActive = field.value?.includes(day.value);
+                        return (
+                          <button
+                            key={day.value}
+                            type="button"
+                            className={cn(
+                              "w-9 h-9 rounded-full text-sm font-medium transition-all",
+                              isActive 
+                                ? "bg-primary text-primary-foreground" 
+                                : "bg-muted hover:bg-muted/80"
+                            )}
+                            onClick={() => {
                               const current = field.value || [];
-                              if (checked) {
-                                field.onChange([...current, day.value]);
-                              } else {
+                              if (isActive) {
                                 field.onChange(current.filter((v) => v !== day.value));
+                              } else {
+                                field.onChange([...current, day.value]);
                               }
                             }}
-                          />
-                          <span className="text-sm">{day.label}</span>
-                        </label>
-                      ))}
+                          >
+                            {day.label}
+                          </button>
+                        );
+                      })}
                     </div>
                     <FormMessage />
                   </FormItem>
                 )}
               />
             )}
-
-            <FormField
-              control={form.control}
-              name="difficulty"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Difficulty</FormLabel>
-                  <FormControl>
-                    <RadioGroup
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                      className="flex gap-4"
-                    >
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="normal" id="normal" />
-                        <Label htmlFor="normal">Normal (+10 XP)</Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="hard" id="hard" />
-                        <Label htmlFor="hard">Hard (+15 XP)</Label>
-                      </div>
-                    </RadioGroup>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
 
             {routines.length > 0 && (
               <FormField
@@ -276,12 +324,12 @@ export function CreateHabitDialog({ open, onOpenChange, routines, onCreated }: C
               />
             )}
 
-            <div className="flex gap-3 justify-end">
+            <div className="flex gap-3 justify-end pt-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={loading}>
-                {loading ? "Creating..." : "Create Habit"}
+                {loading ? "Creating..." : "Create"}
               </Button>
             </div>
           </form>

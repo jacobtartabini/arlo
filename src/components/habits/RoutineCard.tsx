@@ -1,28 +1,34 @@
-import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, ChevronUp, Sun, Moon, Flame, Check, SkipForward, TrendingUp } from "lucide-react";
+import { motion } from "framer-motion";
+import { Play, Check, Sun, Moon, Flame, MoreHorizontal, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import type { RoutineWithHabits } from "@/types/habits";
-import { HabitCard } from "./HabitCard";
+import { DAY_NAMES } from "@/types/habits";
 
 interface RoutineCardProps {
   routine: RoutineWithHabits;
-  onCompleteHabit: (habitId: string, skipped?: boolean) => void;
+  onStart: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }
 
-export function RoutineCard({ routine, onCompleteHabit }: RoutineCardProps) {
-  const [isOpen, setIsOpen] = useState(true);
-  
+export function RoutineCard({ routine, onStart, onEdit, onDelete }: RoutineCardProps) {
   const progressPercent = routine.totalCount > 0 
     ? Math.round((routine.completedCount / routine.totalCount) * 100) 
     : 0;
   const isComplete = routine.completedCount === routine.totalCount && routine.totalCount > 0;
+  const today = new Date().getDay();
+  const isScheduledToday = routine.scheduleDays?.includes(today) ?? true;
 
   const getIcon = () => {
+    if (isComplete) return <Check className="h-5 w-5" />;
     switch (routine.routineType) {
       case 'morning':
         return <Sun className="h-5 w-5" />;
@@ -33,90 +39,154 @@ export function RoutineCard({ routine, onCompleteHabit }: RoutineCardProps) {
     }
   };
 
-  const getIconBg = () => {
+  const getColors = () => {
+    if (isComplete) return "bg-emerald-500 text-white";
     switch (routine.routineType) {
       case 'morning':
-        return "bg-amber-500/10 text-amber-500";
+        return "bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400";
       case 'night':
-        return "bg-indigo-500/10 text-indigo-500";
+        return "bg-indigo-100 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400";
       default:
         return "bg-primary/10 text-primary";
     }
   };
 
+  // Format time window
+  const formatTimeWindow = () => {
+    if (!routine.startTime) return null;
+    const parts = [routine.startTime];
+    if (routine.endTime) parts.push(routine.endTime);
+    return parts.join(' - ');
+  };
+
+  // Format repeat pattern
+  const formatRepeat = () => {
+    if (routine.repeatInterval === 1 && routine.repeatUnit === 'day') {
+      return null; // Daily is default, don't show
+    }
+    if (routine.repeatInterval === 1) {
+      return `Weekly`;
+    }
+    return `Every ${routine.repeatInterval} ${routine.repeatUnit}s`;
+  };
+
   return (
-    <Card className={cn(
-      "overflow-hidden transition-all",
-      isComplete && "bg-emerald-500/5 border-emerald-500/20"
-    )}>
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger asChild>
-          <Button
-            variant="ghost"
-            className="w-full p-4 h-auto flex items-center gap-3 justify-start hover:bg-transparent"
-          >
-            <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl shrink-0", getIconBg())}>
-              {isComplete ? <Check className="h-5 w-5" /> : getIcon()}
-            </div>
-            
-            <div className="flex-1 text-left">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold">{routine.name}</span>
-                {isComplete && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-500">
-                    +25 XP
-                  </span>
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={cn(
+        "rounded-2xl border bg-card p-4 transition-all",
+        isComplete && "border-emerald-500/30 bg-emerald-500/5",
+        !isScheduledToday && "opacity-60"
+      )}
+    >
+      {/* Header Row */}
+      <div className="flex items-start gap-3">
+        {/* Icon */}
+        <motion.div 
+          className={cn(
+            "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl transition-all",
+            getColors()
+          )}
+          animate={isComplete ? { scale: [1, 1.1, 1] } : {}}
+          transition={{ duration: 0.3 }}
+        >
+          {getIcon()}
+        </motion.div>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold truncate">{routine.name}</h3>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {onEdit && (
+                  <DropdownMenuItem onClick={onEdit}>Edit</DropdownMenuItem>
                 )}
-              </div>
-              <div className="flex items-center gap-3 mt-1">
-                <Progress value={progressPercent} className="h-1.5 w-24" />
-                <span className="text-xs text-muted-foreground">
-                  {routine.completedCount}/{routine.totalCount}
-                </span>
-              </div>
-            </div>
+                {onDelete && (
+                  <DropdownMenuItem onClick={onDelete} className="text-destructive">
+                    Delete
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
 
-            <div className="shrink-0">
-              {isOpen ? (
-                <ChevronUp className="h-4 w-4 text-muted-foreground" />
-              ) : (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              )}
-            </div>
-          </Button>
-        </CollapsibleTrigger>
-
-        <CollapsibleContent>
-          <div className="px-4 pb-4 space-y-2">
-            {routine.habits.map((habit, index) => (
-              <motion.div
-                key={habit.id}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.05 }}
-                className="relative pl-4"
-              >
-                {/* Connecting line */}
-                <div className="absolute left-0 top-0 bottom-0 w-px bg-border" />
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-2 h-px bg-border" />
-                
-                <HabitCard
-                  habit={habit}
-                  onComplete={() => onCompleteHabit(habit.id)}
-                  onSkip={() => onCompleteHabit(habit.id, true)}
-                  compact
-                />
-              </motion.div>
-            ))}
-
-            {routine.habits.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                No habits in this routine yet
-              </p>
+          {/* Time Window */}
+          <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+            {formatTimeWindow() && (
+              <span className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {formatTimeWindow()}
+              </span>
+            )}
+            {formatRepeat() && (
+              <span className="px-2 py-0.5 rounded-full bg-muted text-xs">
+                {formatRepeat()}
+              </span>
             )}
           </div>
-        </CollapsibleContent>
-      </Collapsible>
-    </Card>
+
+          {/* Schedule Days */}
+          <div className="flex items-center gap-1 mt-2">
+            {DAY_NAMES.map((day, i) => {
+              const isActive = routine.scheduleDays?.includes(i) ?? true;
+              const isTodayActive = i === today;
+              return (
+                <span
+                  key={i}
+                  className={cn(
+                    "w-6 h-6 flex items-center justify-center rounded-full text-xs font-medium transition-colors",
+                    isActive && isTodayActive && "bg-primary text-primary-foreground",
+                    isActive && !isTodayActive && "bg-primary/10 text-primary",
+                    !isActive && "text-muted-foreground/50"
+                  )}
+                >
+                  {day}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Progress & Action */}
+      <div className="flex items-center gap-3 mt-4">
+        <Progress 
+          value={progressPercent} 
+          className={cn(
+            "flex-1 h-2",
+            isComplete && "[&>div]:bg-emerald-500"
+          )} 
+        />
+        <span className="text-sm text-muted-foreground tabular-nums shrink-0">
+          {routine.completedCount}/{routine.totalCount}
+        </span>
+        
+        {!isComplete && isScheduledToday && routine.habits.length > 0 && (
+          <Button 
+            size="sm"
+            className="gap-1.5 shrink-0"
+            onClick={onStart}
+          >
+            <Play className="h-4 w-4" />
+            Start
+          </Button>
+        )}
+        
+        {isComplete && (
+          <span className="flex items-center gap-1 text-sm text-emerald-500 font-medium shrink-0">
+            <Check className="h-4 w-4" />
+            Done
+          </span>
+        )}
+      </div>
+    </motion.div>
   );
 }

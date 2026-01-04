@@ -459,6 +459,7 @@ export type Database = {
           created_at: string
           description: string | null
           difficulty: string | null
+          duration_minutes: number | null
           enabled: boolean
           habit_type: string | null
           icon: string | null
@@ -479,6 +480,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           difficulty?: string | null
+          duration_minutes?: number | null
           enabled?: boolean
           habit_type?: string | null
           icon?: string | null
@@ -499,6 +501,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           difficulty?: string | null
+          duration_minutes?: number | null
           enabled?: boolean
           habit_type?: string | null
           icon?: string | null
@@ -1287,11 +1290,16 @@ export type Database = {
           anchor_cue: string | null
           created_at: string
           enabled: boolean
+          end_time: string | null
           icon: string | null
           id: string
           name: string
+          repeat_interval: number | null
+          repeat_unit: string | null
           reward_description: string | null
           routine_type: string | null
+          schedule_days: number[] | null
+          start_time: string | null
           updated_at: string
           user_id: string | null
           user_key: string | null
@@ -1300,11 +1308,16 @@ export type Database = {
           anchor_cue?: string | null
           created_at?: string
           enabled?: boolean
+          end_time?: string | null
           icon?: string | null
           id?: string
           name: string
+          repeat_interval?: number | null
+          repeat_unit?: string | null
           reward_description?: string | null
           routine_type?: string | null
+          schedule_days?: number[] | null
+          start_time?: string | null
           updated_at?: string
           user_id?: string | null
           user_key?: string | null
@@ -1313,11 +1326,16 @@ export type Database = {
           anchor_cue?: string | null
           created_at?: string
           enabled?: boolean
+          end_time?: string | null
           icon?: string | null
           id?: string
           name?: string
+          repeat_interval?: number | null
+          repeat_unit?: string | null
           reward_description?: string | null
           routine_type?: string | null
+          schedule_days?: number[] | null
+          start_time?: string | null
           updated_at?: string
           user_id?: string | null
           user_key?: string | null
