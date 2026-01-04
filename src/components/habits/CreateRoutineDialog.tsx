@@ -24,7 +24,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Sun, Moon, Flame } from "lucide-react";
-import { useHabitSystem } from "@/hooks/useHabitSystem";
+import { useHabits } from "@/hooks/useHabits";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { RoutineType } from "@/types/habits";
@@ -45,7 +45,7 @@ interface CreateRoutineDialogProps {
 }
 
 export function CreateRoutineDialog({ open, onOpenChange, onCreated }: CreateRoutineDialogProps) {
-  const { createRoutine } = useHabitSystem();
+  const { createRoutine } = useHabits();
   const [loading, setLoading] = useState(false);
 
   const form = useForm<FormData>({
