@@ -2,53 +2,70 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { format, addWeeks } from "date-fns";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Form,
   FormControl,
   FormField,
   FormItem,
-  FormLabel,
   FormMessage,
-  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sun, Moon, Flame } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { X, Clock, Sunrise, MapPin, ChevronRight, Settings } from "lucide-react";
 import { useHabits } from "@/hooks/useHabits";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import type { RoutineType, RepeatUnit } from "@/types/habits";
 
 const DAYS = [
-  { value: 0, label: "S" },
-  { value: 1, label: "M" },
-  { value: 2, label: "T" },
-  { value: 3, label: "W" },
-  { value: 4, label: "T" },
-  { value: 5, label: "F" },
-  { value: 6, label: "S" },
+  { value: 0, label: "su" },
+  { value: 1, label: "mo" },
+  { value: 2, label: "tu" },
+  { value: 3, label: "we" },
+  { value: 4, label: "th" },
+  { value: 5, label: "fr" },
+  { value: 6, label: "sa" },
+];
+
+const TIME_OPTIONS = [
+  "5:00am", "5:30am", "6:00am", "6:30am", "7:00am", "7:30am",
+  "8:00am", "8:30am", "9:00am", "9:30am", "10:00am", "10:30am",
+  "11:00am", "11:30am", "12:00pm", "12:30pm", "1:00pm", "1:30pm",
+  "2:00pm", "2:30pm", "3:00pm", "3:30pm", "4:00pm", "4:30pm",
+  "5:00pm", "5:30pm", "6:00pm", "6:30pm", "7:00pm", "7:30pm",
+  "8:00pm", "8:30pm", "9:00pm", "9:30pm", "10:00pm", "10:30pm",
+  "11:00pm", "11:30pm",
 ];
 
 const formSchema = z.object({
   name: z.string().min(1, "Name is required").max(50),
   routineType: z.enum(["morning", "night", "custom"]),
   startTime: z.string().optional(),
-  endTime: z.string().optional(),
+  startDate: z.date().optional(),
   scheduleDays: z.array(z.number()),
   repeatInterval: z.number().min(1).max(12),
   repeatUnit: z.enum(["day", "week", "month"]),
-  anchorCue: z.string().max(100).optional(),
-  rewardDescription: z.string().max(200).optional(),
+  reminderEnabled: z.boolean(),
+  reminderType: z.enum(["push", "alarm"]),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -62,38 +79,47 @@ interface CreateRoutineDialogProps {
 export function CreateRoutineDialog({ open, onOpenChange, onCreated }: CreateRoutineDialogProps) {
   const { createRoutine } = useHabits();
   const [loading, setLoading] = useState(false);
+  const [startTrigger, setStartTrigger] = useState<"time" | "sunrise" | "location">("time");
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
       routineType: "morning",
-      startTime: "",
-      endTime: "",
-      scheduleDays: [0, 1, 2, 3, 4, 5, 6],
+      startTime: "9:00am",
+      startDate: new Date(),
+      scheduleDays: [1, 2, 3, 4, 5],
       repeatInterval: 1,
-      repeatUnit: "day",
-      anchorCue: "",
-      rewardDescription: "",
+      repeatUnit: "week",
+      reminderEnabled: true,
+      reminderType: "push",
     },
   });
 
-  const routineType = form.watch("routineType");
   const scheduleDays = form.watch("scheduleDays");
+  const startDate = form.watch("startDate");
+  const reminderEnabled = form.watch("reminderEnabled");
 
   const onSubmit = async (data: FormData) => {
     setLoading(true);
     
+    // Convert 12h time to 24h
+    const convert12to24 = (time12: string) => {
+      if (!time12) return undefined;
+      const [time, modifier] = time12.split(/(am|pm)/i);
+      let [hours, minutes] = time.split(":").map(Number);
+      if (modifier?.toLowerCase() === "pm" && hours !== 12) hours += 12;
+      if (modifier?.toLowerCase() === "am" && hours === 12) hours = 0;
+      return `${hours.toString().padStart(2, "0")}:${(minutes || 0).toString().padStart(2, "0")}`;
+    };
+
     const routine = await createRoutine({
       name: data.name,
       routineType: data.routineType as RoutineType,
-      startTime: data.startTime || undefined,
-      endTime: data.endTime || undefined,
+      startTime: convert12to24(data.startTime || ""),
       scheduleDays: data.scheduleDays,
       repeatInterval: data.repeatInterval,
       repeatUnit: data.repeatUnit as RepeatUnit,
-      anchorCue: data.anchorCue || undefined,
-      rewardDescription: data.rewardDescription || undefined,
     });
 
     setLoading(false);
@@ -108,243 +134,275 @@ export function CreateRoutineDialog({ open, onOpenChange, onCreated }: CreateRou
     }
   };
 
+  const formatRepeatLabel = () => {
+    const unit = form.watch("repeatUnit");
+    const date = startDate ? format(startDate, "yy.MM.dd") : "";
+    if (unit === "week") return `Every week (${date}~)`;
+    if (unit === "month") return `Every month (${date}~)`;
+    return `Every day (${date}~)`;
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Create Routine</DialogTitle>
-          <DialogDescription>
-            A routine is an ordered sequence of habits you perform together.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="sm:max-w-md p-0 gap-0 overflow-hidden">
+        {/* Header */}
+        <div className="relative pt-4 pb-2 px-6">
+          <button
+            onClick={() => onOpenChange(false)}
+            className="absolute right-4 top-4 p-2 rounded-full hover:bg-muted transition-colors"
+          >
+            <X className="h-5 w-5 text-muted-foreground" />
+          </button>
+
+          {/* Name Input */}
+          <FormField
+            control={form.control}
+            name="name"
+            render={({ field }) => (
+              <FormItem className="space-y-0">
+                <FormControl>
+                  <input
+                    {...field}
+                    placeholder="ex) Morning Routine"
+                    className="w-full text-center text-xl font-semibold bg-transparent border-0 border-b-2 border-border focus:border-primary focus:outline-none py-3 placeholder:text-muted-foreground/50 transition-colors"
+                  />
+                </FormControl>
+                <FormMessage className="text-center pt-1" />
+              </FormItem>
+            )}
+          />
+        </div>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Routine name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g., Morning Ritual, Wind Down" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-0 px-4 pb-4">
+            {/* Repeat Section */}
+            <div className="bg-muted/50 rounded-2xl p-4 mt-4">
+              <div className="flex items-center justify-between mb-4">
+                <span className="font-semibold">Repeat</span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button 
+                      type="button"
+                      className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {formatRepeatLabel()}
+                      <ChevronRight className="h-4 w-4" />
+                      <span className="w-2 h-2 rounded-full bg-rose-500" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-4" align="end">
+                    <div className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="repeatUnit"
+                        render={({ field }) => (
+                          <Select onValueChange={field.onChange} value={field.value}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="day">Every day</SelectItem>
+                              <SelectItem value="week">Every week</SelectItem>
+                              <SelectItem value="month">Every month</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="startDate"
+                        render={({ field }) => (
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            initialFocus
+                            className="p-3 pointer-events-auto rounded-lg border"
+                          />
+                        )}
+                      />
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
 
-            <FormField
-              control={form.control}
-              name="routineType"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Type</FormLabel>
-                  <FormControl>
-                    <div className="grid grid-cols-3 gap-3">
-                      {[
-                        { value: 'morning', icon: Sun, label: 'Morning', color: 'amber' },
-                        { value: 'night', icon: Moon, label: 'Night', color: 'indigo' },
-                        { value: 'custom', icon: Flame, label: 'Custom', color: 'primary' },
-                      ].map((type) => {
-                        const Icon = type.icon;
-                        const isSelected = routineType === type.value;
+              {/* Day Selector */}
+              <FormField
+                control={form.control}
+                name="scheduleDays"
+                render={({ field }) => (
+                  <FormItem>
+                    <div className="flex gap-2 justify-center">
+                      {DAYS.map((day) => {
+                        const isActive = field.value?.includes(day.value);
                         return (
-                          <Label
-                            key={type.value}
-                            htmlFor={type.value}
+                          <button
+                            key={day.value}
+                            type="button"
                             className={cn(
-                              "flex flex-col items-center gap-2 p-4 rounded-xl border cursor-pointer transition-all",
-                              isSelected && type.color === 'amber' && "border-amber-500 bg-amber-500/5",
-                              isSelected && type.color === 'indigo' && "border-indigo-500 bg-indigo-500/5",
-                              isSelected && type.color === 'primary' && "border-primary bg-primary/5",
-                              !isSelected && "hover:border-border/80"
+                              "w-10 h-10 rounded-full text-sm font-medium transition-all",
+                              isActive 
+                                ? "bg-foreground text-background" 
+                                : "bg-background border border-border text-muted-foreground hover:border-foreground/30"
                             )}
+                            onClick={() => {
+                              const current = field.value || [];
+                              if (isActive) {
+                                field.onChange(current.filter((v) => v !== day.value));
+                              } else {
+                                field.onChange([...current, day.value]);
+                              }
+                            }}
                           >
-                            <input
-                              type="radio"
-                              id={type.value}
-                              value={type.value}
-                              checked={isSelected}
-                              onChange={() => field.onChange(type.value)}
-                              className="sr-only"
-                            />
-                            <Icon className={cn(
-                              "h-6 w-6",
-                              isSelected && type.color === 'amber' && "text-amber-500",
-                              isSelected && type.color === 'indigo' && "text-indigo-500",
-                              isSelected && type.color === 'primary' && "text-primary",
-                              !isSelected && "text-muted-foreground"
-                            )} />
-                            <span className="text-sm font-medium">{type.label}</span>
-                          </Label>
+                            {day.label}
+                          </button>
                         );
                       })}
                     </div>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Time Window */}
-            <div className="grid grid-cols-2 gap-3">
-              <FormField
-                control={form.control}
-                name="startTime"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Start time</FormLabel>
-                    <FormControl>
-                      <Input type="time" {...field} />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="endTime"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>End time</FormLabel>
-                    <FormControl>
-                      <Input type="time" {...field} />
-                    </FormControl>
                   </FormItem>
                 )}
               />
             </div>
 
-            {/* Schedule Days */}
-            <FormField
-              control={form.control}
-              name="scheduleDays"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Active days</FormLabel>
-                  <div className="flex gap-2 justify-center">
-                    {DAYS.map((day) => {
-                      const isActive = field.value?.includes(day.value);
-                      return (
-                        <button
-                          key={day.value}
-                          type="button"
-                          className={cn(
-                            "w-9 h-9 rounded-full text-sm font-medium transition-all",
-                            isActive 
-                              ? "bg-primary text-primary-foreground" 
-                              : "bg-muted hover:bg-muted/80"
-                          )}
-                          onClick={() => {
-                            const current = field.value || [];
-                            if (isActive) {
-                              field.onChange(current.filter((v) => v !== day.value));
-                            } else {
-                              field.onChange([...current, day.value]);
-                            }
-                          }}
-                        >
-                          {day.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </FormItem>
-              )}
-            />
+            {/* Starts at Section */}
+            <div className="bg-muted/50 rounded-2xl p-4 mt-3">
+              <span className="font-semibold block mb-3">Starts at</span>
+              
+              {/* Trigger Type Tabs */}
+              <div className="bg-background rounded-xl p-1 flex mb-4">
+                {[
+                  { value: "time", icon: Clock },
+                  { value: "sunrise", icon: Sunrise },
+                  { value: "location", icon: MapPin },
+                ].map((trigger) => {
+                  const Icon = trigger.icon;
+                  const isActive = startTrigger === trigger.value;
+                  return (
+                    <button
+                      key={trigger.value}
+                      type="button"
+                      className={cn(
+                        "flex-1 py-2.5 rounded-lg flex items-center justify-center transition-all",
+                        isActive 
+                          ? "bg-foreground text-background shadow-sm" 
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                      onClick={() => setStartTrigger(trigger.value as typeof startTrigger)}
+                    >
+                      <Icon className="h-4 w-4" />
+                    </button>
+                  );
+                })}
+              </div>
 
-            {/* Repeat Pattern */}
-            <div className="grid grid-cols-2 gap-3">
-              <FormField
-                control={form.control}
-                name="repeatInterval"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Repeat every</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="number" 
-                        min={1} 
-                        max={12}
-                        {...field}
-                        onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="repeatUnit"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>&nbsp;</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="day">Day(s)</SelectItem>
-                        <SelectItem value="week">Week(s)</SelectItem>
-                        <SelectItem value="month">Month(s)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </FormItem>
-                )}
-              />
+              {/* Time Picker */}
+              {startTrigger === "time" && (
+                <FormField
+                  control={form.control}
+                  name="startTime"
+                  render={({ field }) => (
+                    <FormItem>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="bg-background border-0 h-12 text-lg">
+                            <SelectValue placeholder="Select time" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent className="max-h-[200px]">
+                          {TIME_OPTIONS.map((time) => (
+                            <SelectItem key={time} value={time}>
+                              {time}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {startTrigger === "sunrise" && (
+                <div className="bg-background rounded-xl p-4 text-center text-muted-foreground text-sm">
+                  <Sunrise className="h-8 w-8 mx-auto mb-2 text-amber-500" />
+                  Starts at sunrise based on your location
+                </div>
+              )}
+
+              {startTrigger === "location" && (
+                <div className="bg-background rounded-xl p-4 text-center text-muted-foreground text-sm">
+                  <MapPin className="h-8 w-8 mx-auto mb-2 text-primary" />
+                  Trigger when arriving at a location
+                </div>
+              )}
             </div>
 
-            <FormField
-              control={form.control}
-              name="anchorCue"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Anchor cue (optional)</FormLabel>
-                  <FormControl>
-                    <Input 
-                      placeholder="e.g., After waking up, After brushing teeth" 
-                      {...field} 
+            {/* Reminder Section */}
+            <div className="bg-muted/50 rounded-2xl p-4 mt-3">
+              <div className="flex items-center justify-between mb-3">
+                <span className="font-semibold">Reminder</span>
+                <FormField
+                  control={form.control}
+                  name="reminderEnabled"
+                  render={({ field }) => (
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
                     />
-                  </FormControl>
-                  <FormDescription>
-                    The trigger that starts this routine
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                  )}
+                />
+              </div>
 
-            <FormField
-              control={form.control}
-              name="rewardDescription"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Reward (optional)</FormLabel>
-                  <FormControl>
-                    <Textarea 
-                      placeholder="e.g., Enjoy my morning coffee, Cozy reading time" 
-                      className="min-h-[60px]"
-                      {...field} 
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Something to look forward to after completing
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
+              {reminderEnabled && (
+                <>
+                  <FormField
+                    control={form.control}
+                    name="reminderType"
+                    render={({ field }) => (
+                      <div className="bg-background rounded-xl p-1 flex mb-3">
+                        {[
+                          { value: "push", label: "Push" },
+                          { value: "alarm", label: "Alarm" },
+                        ].map((type) => {
+                          const isActive = field.value === type.value;
+                          return (
+                            <button
+                              key={type.value}
+                              type="button"
+                              className={cn(
+                                "flex-1 py-2.5 rounded-lg text-sm font-medium transition-all",
+                                isActive 
+                                  ? "bg-foreground text-background shadow-sm" 
+                                  : "text-muted-foreground hover:text-foreground"
+                              )}
+                              onClick={() => field.onChange(type.value)}
+                            >
+                              {type.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  />
+                  <button
+                    type="button"
+                    className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors ml-auto"
+                  >
+                    Customize
+                    <Settings className="h-4 w-4" />
+                  </button>
+                </>
               )}
-            />
-
-            <div className="flex gap-3 justify-end pt-2">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={loading}>
-                {loading ? "Creating..." : "Create Routine"}
-              </Button>
             </div>
+
+            {/* Done Button */}
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full h-14 rounded-2xl text-lg font-semibold mt-6"
+              size="lg"
+            >
+              {loading ? "Creating..." : "Done"}
+            </Button>
           </form>
         </Form>
       </DialogContent>
