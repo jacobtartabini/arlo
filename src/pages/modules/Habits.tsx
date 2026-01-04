@@ -10,6 +10,7 @@ import {
   Flame,
   Settings,
   ChevronLeft,
+  CalendarDays,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -25,6 +26,8 @@ import { CreateRoutineDialog } from "@/components/habits/CreateRoutineDialog";
 import { HabitInsights } from "@/components/habits/HabitInsights";
 import { RewardsStore } from "@/components/habits/RewardsStore";
 import { FocusMode } from "@/components/habits/FocusMode";
+import { WeeklyCalendar } from "@/components/habits/WeeklyCalendar";
+import { RoutineEditSheet } from "@/components/habits/RoutineEditSheet";
 import { toast } from "@/hooks/use-toast";
 import type { RoutineWithHabits } from "@/types/habits";
 
@@ -39,6 +42,8 @@ export default function Habits() {
     loadData,
     completeHabit,
     redeemReward,
+    reorderHabits,
+    deleteRoutine,
   } = useHabits();
 
   const [createHabitOpen, setCreateHabitOpen] = useState(false);
@@ -47,6 +52,8 @@ export default function Habits() {
   const [manageTab, setManageTab] = useState<"insights" | "rewards">("insights");
   const [xpPopup, setXpPopup] = useState({ amount: 0, visible: false });
   const [focusRoutine, setFocusRoutine] = useState<RoutineWithHabits | null>(null);
+  const [editRoutine, setEditRoutine] = useState<RoutineWithHabits | null>(null);
+  const [showWeeklyView, setShowWeeklyView] = useState(false);
 
   useEffect(() => {
     document.title = "Habits | Arlo";
@@ -86,10 +93,28 @@ export default function Habits() {
     setFocusRoutine(routine);
   }, []);
 
+  const handleEditRoutine = useCallback((routine: RoutineWithHabits) => {
+    setEditRoutine(routine);
+  }, []);
+
   const handleCloseFocus = useCallback(() => {
     setFocusRoutine(null);
     loadData(); // Refresh data after focus mode
   }, [loadData]);
+
+  const handleReorderHabits = useCallback(async (routineId: string, habitIds: string[]) => {
+    await reorderHabits(routineId, habitIds);
+    // Update the editRoutine state with reordered habits
+    setEditRoutine(prev => {
+      if (!prev || prev.id !== routineId) return prev;
+      const updatedRoutine = routines.find(r => r.id === routineId);
+      return updatedRoutine ?? prev;
+    });
+  }, [reorderHabits, routines]);
+
+  const handleDeleteRoutine = useCallback(async (routineId: string) => {
+    await deleteRoutine(routineId);
+  }, [deleteRoutine]);
 
   // Filter today's data
   const todaysHabits = habits.filter(h => h.enabled && isScheduledForToday(h));
@@ -166,13 +191,22 @@ export default function Habits() {
 
           {/* Main Content - Unified Flow */}
           <div className="space-y-6">
-            {/* Today's Routines */}
-            {todaysRoutines.length > 0 && (
-              <section>
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                    Routines
-                  </h2>
+            {/* Weekly Calendar Toggle */}
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                  {showWeeklyView ? "Weekly Schedule" : "Today's Routines"}
+                </h2>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={showWeeklyView ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => setShowWeeklyView(!showWeeklyView)}
+                  >
+                    <CalendarDays className="h-3 w-3 mr-1" />
+                    {showWeeklyView ? "Today" : "Week"}
+                  </Button>
                   <Button 
                     variant="ghost" 
                     size="sm" 
@@ -183,17 +217,56 @@ export default function Habits() {
                     New
                   </Button>
                 </div>
-                <div className="space-y-3">
-                  {todaysRoutines.map(routine => (
-                    <RoutineCard
-                      key={routine.id}
-                      routine={routine}
-                      onStart={() => handleStartRoutine(routine)}
+              </div>
+
+              <AnimatePresence mode="wait">
+                {showWeeklyView ? (
+                  <motion.div
+                    key="weekly"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <WeeklyCalendar
+                      routines={routines}
+                      onSelectRoutine={handleEditRoutine}
                     />
-                  ))}
-                </div>
-              </section>
-            )}
+                  </motion.div>
+                ) : todaysRoutines.length > 0 ? (
+                  <motion.div
+                    key="today"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                    className="space-y-3"
+                  >
+                    {todaysRoutines.map(routine => (
+                      <RoutineCard
+                        key={routine.id}
+                        routine={routine}
+                        onStart={() => handleStartRoutine(routine)}
+                        onEdit={() => handleEditRoutine(routine)}
+                      />
+                    ))}
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="empty"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="p-6 rounded-2xl border border-dashed bg-muted/30 text-center"
+                  >
+                    <p className="text-sm text-muted-foreground mb-3">No routines scheduled for today</p>
+                    <Button variant="outline" size="sm" onClick={() => setCreateRoutineOpen(true)}>
+                      <Plus className="h-4 w-4 mr-1" />
+                      Create Routine
+                    </Button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </section>
 
             {/* Standalone Habits */}
             <section>
@@ -315,6 +388,15 @@ export default function Habits() {
           open={createRoutineOpen}
           onOpenChange={setCreateRoutineOpen}
           onCreated={loadData}
+        />
+
+        {/* Routine Edit Sheet */}
+        <RoutineEditSheet
+          routine={editRoutine}
+          open={!!editRoutine}
+          onOpenChange={(open) => !open && setEditRoutine(null)}
+          onReorderHabits={handleReorderHabits}
+          onDeleteRoutine={handleDeleteRoutine}
         />
 
         {/* Insights & Rewards Sheet */}

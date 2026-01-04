@@ -622,6 +622,73 @@ export function useHabits() {
     return true;
   }, [state.progress, state.rewards]);
 
+  // Reorder habits within a routine
+  const reorderHabits = useCallback(async (routineId: string, habitIds: string[]): Promise<void> => {
+    // Optimistic update
+    setState(s => {
+      const updatedRoutines = s.routines.map(r => {
+        if (r.id !== routineId) return r;
+        
+        const reorderedHabits = habitIds.map((id, index) => {
+          const habit = r.habits.find(h => h.id === id);
+          return habit ? { ...habit, routineOrder: index } : null;
+        }).filter(Boolean) as typeof r.habits;
+        
+        return { ...r, habits: reorderedHabits };
+      });
+
+      const updatedHabits = s.habits.map(h => {
+        const newIndex = habitIds.indexOf(h.id);
+        if (newIndex !== -1) {
+          return { ...h, routineOrder: newIndex };
+        }
+        return h;
+      });
+
+      return { ...s, routines: updatedRoutines, habits: updatedHabits };
+    });
+
+    // Background DB updates
+    try {
+      await Promise.all(
+        habitIds.map((id, index) => 
+          dataApiHelpers.update('habits', id, { routine_order: index })
+        )
+      );
+    } catch (err) {
+      console.error('[useHabits] Failed to reorder habits:', err);
+      await loadData(); // Revert on error
+    }
+  }, [loadData]);
+
+  // Delete routine
+  const deleteRoutine = useCallback(async (routineId: string): Promise<void> => {
+    // Optimistic update
+    setState(s => ({
+      ...s,
+      routines: s.routines.filter(r => r.id !== routineId),
+      habits: s.habits.map(h => 
+        h.routineId === routineId ? { ...h, routineId: undefined } : h
+      ),
+    }));
+
+    try {
+      // First unlink all habits from this routine
+      const routineHabits = state.habits.filter(h => h.routineId === routineId);
+      await Promise.all(
+        routineHabits.map(h => 
+          dataApiHelpers.update('habits', h.id, { routine_id: null, routine_order: 0 })
+        )
+      );
+
+      // Then delete the routine
+      await dataApiHelpers.delete('routines', routineId);
+    } catch (err) {
+      console.error('[useHabits] Failed to delete routine:', err);
+      await loadData(); // Revert on error
+    }
+  }, [loadData, state.habits]);
+
   return {
     ...state,
     loadData,
@@ -630,6 +697,8 @@ export function useHabits() {
     createRoutine,
     createReward,
     redeemReward,
+    reorderHabits,
+    deleteRoutine,
     isScheduledForToday,
   };
 }
