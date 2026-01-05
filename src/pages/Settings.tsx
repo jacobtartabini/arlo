@@ -4,6 +4,7 @@ import { useUserSettings } from '@/providers/UserSettingsProvider';
 import EnhancedThemeToggle from '@/components/EnhancedThemeToggle';
 import CalendarIntegrations from '@/components/settings/CalendarIntegrations';
 import InboxSettings from '@/components/settings/InboxSettings';
+import MorningWakeupSettings from '@/components/settings/MorningWakeupSettings';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -388,6 +389,13 @@ export default function Settings() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Morning Wake-Up Settings */}
+              <div className="pb-6 border-b border-border/20">
+                <h3 className="text-sm font-medium mb-4">Morning Wake-Up</h3>
+                <MorningWakeupSettings />
+              </div>
+
+              {/* General Notification Settings */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
                   <div className="space-y-1">

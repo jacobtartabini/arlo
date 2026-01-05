@@ -20,6 +20,10 @@ export interface UserSettings {
   email_notifications_enabled: boolean;
   sound_enabled: boolean;
   
+  // Morning wake-up settings
+  morning_wakeup_enabled: boolean;
+  morning_wakeup_time: string; // HH:MM format
+  
   // Connection settings
   api_endpoint: string | null;
   api_token: string | null;
@@ -42,6 +46,8 @@ export const DEFAULT_USER_SETTINGS: Omit<UserSettings, 'id' | 'user_id' | 'creat
   push_notifications_enabled: true,
   email_notifications_enabled: false,
   sound_enabled: true,
+  morning_wakeup_enabled: true,
+  morning_wakeup_time: '07:00',
   api_endpoint: null,
   api_token: null,
 };

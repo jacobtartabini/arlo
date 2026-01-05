@@ -1529,6 +1529,8 @@ export type Database = {
           encryption_enabled: boolean
           id: string
           learning_mode_enabled: boolean
+          morning_wakeup_enabled: boolean | null
+          morning_wakeup_time: string | null
           proactive_suggestions_enabled: boolean
           push_notifications_enabled: boolean
           sound_enabled: boolean
@@ -1548,6 +1550,8 @@ export type Database = {
           encryption_enabled?: boolean
           id?: string
           learning_mode_enabled?: boolean
+          morning_wakeup_enabled?: boolean | null
+          morning_wakeup_time?: string | null
           proactive_suggestions_enabled?: boolean
           push_notifications_enabled?: boolean
           sound_enabled?: boolean
@@ -1567,6 +1571,8 @@ export type Database = {
           encryption_enabled?: boolean
           id?: string
           learning_mode_enabled?: boolean
+          morning_wakeup_enabled?: boolean | null
+          morning_wakeup_time?: string | null
           proactive_suggestions_enabled?: boolean
           push_notifications_enabled?: boolean
           sound_enabled?: boolean
