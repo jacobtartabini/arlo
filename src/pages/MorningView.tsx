@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { format, isToday, parseISO, startOfDay, endOfDay } from 'date-fns';
-import { motion, AnimatePresence } from 'framer-motion';
+import { format } from 'date-fns';
+import { motion } from 'framer-motion';
 import { 
   Sun, 
   Calendar, 
@@ -21,7 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { useCalendarPersistence } from '@/hooks/useCalendarPersistence';
 import { useNotificationsPersistence } from '@/hooks/useNotificationsPersistence';
 import { useHabits } from '@/hooks/useHabits';
-import type { CalendarEvent } from '@/lib/calendar-data';
+import { MorningWeatherSummary } from '@/components/MorningWeatherSummary';
 import type { Notification } from '@/types/notifications';
 
 export default function MorningView() {
@@ -126,6 +126,9 @@ export default function MorningView() {
               {format(new Date(), 'EEEE, MMMM d')}
             </p>
           </div>
+
+          {/* Weather Summary */}
+          <MorningWeatherSummary />
 
           {/* Today's Calendar */}
           <Card className="bg-background/60 backdrop-blur-md border-border/30">
