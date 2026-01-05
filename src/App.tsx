@@ -38,7 +38,9 @@ import NotesDashboard from "./pages/modules/NotesDashboard";
 import Habits from "./pages/modules/Habits";
 import Inbox from "./pages/Inbox";
 import ArloMaps from "./pages/ArloMaps";
+import MorningView from "./pages/MorningView";
 import { NotificationMonitor } from "./components/NotificationMonitor";
+import { MorningWakeupScheduler } from "./components/MorningWakeupScheduler";
 
 const queryClient = new QueryClient();
 
@@ -54,6 +56,7 @@ const App = () => (
                   <Toaster />
                   <Sonner />
                   <NotificationMonitor />
+                  <MorningWakeupScheduler />
                   <BrowserRouter>
                     <ArloCommandLauncher />
                 <ConditionalNavBar />
@@ -170,6 +173,11 @@ const App = () => (
                   <Route path="/maps" element={
                     <ProtectedRoute>
                       <ArloMaps />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/morning" element={
+                    <ProtectedRoute>
+                      <MorningView />
                     </ProtectedRoute>
                   } />
 

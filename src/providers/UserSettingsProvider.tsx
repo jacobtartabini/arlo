@@ -28,6 +28,8 @@ interface DbUserSettings {
   push_notifications_enabled: boolean;
   email_notifications_enabled: boolean;
   sound_enabled: boolean;
+  morning_wakeup_enabled: boolean;
+  morning_wakeup_time: string;
   api_endpoint: string | null;
   api_token: string | null;
   created_at: string;
