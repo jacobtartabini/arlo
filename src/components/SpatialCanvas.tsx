@@ -50,6 +50,7 @@ const moduleLayout: ModulePosition[] = [
   
   // Row 4: Bottom row
   { id: "habits", col: 5, row: 14, widthUnits: 4, heightUnits: 3 },
+  { id: "maps", col: 10, row: 14, widthUnits: 4, heightUnits: 3 },
 ];
 
 // Calculate grid bounds for centering
