@@ -10,6 +10,7 @@ import {
   FolderOpen,
   Home,
   Library,
+  Map,
   MessageCircle,
   NotebookPen,
   PenTool,
@@ -164,6 +165,16 @@ export const APP_MODULES: Module[] = [
     size: "medium",
     summary: "Daily alignment • Streaks & XP",
     keywords: ["habits", "routines", "streaks", "consistency", "morning", "night"]
+  },
+  {
+    id: "maps",
+    title: "Maps",
+    icon: Map,
+    route: "/maps",
+    color: "primary",
+    size: "medium",
+    summary: "Navigation • Traffic • Places",
+    keywords: ["maps", "navigation", "directions", "places", "traffic", "location"]
   }
 ];
 
