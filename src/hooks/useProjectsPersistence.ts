@@ -107,7 +107,7 @@ export function useProjectsPersistence() {
         targetDate?: Date;
       }
     ): Promise<Project | null> => {
-      if (!isAuthenticated()) return null;
+      // Note: dataApiHelpers.insert handles auth internally via getArloToken()
 
       const { data, error } = await dataApiHelpers.insert<DbProject>("projects", {
         name,
@@ -138,7 +138,7 @@ export function useProjectsPersistence() {
       id: string,
       updates: Partial<Omit<Project, "id" | "createdAt" | "updatedAt">>
     ): Promise<boolean> => {
-      if (!isAuthenticated()) return false;
+      // Note: dataApiHelpers.update handles auth internally via getArloToken()
 
       const dbUpdates: Record<string, unknown> = {};
       if (updates.name !== undefined) dbUpdates.name = updates.name;
@@ -166,7 +166,7 @@ export function useProjectsPersistence() {
   );
 
   const deleteProject = useCallback(async (id: string): Promise<boolean> => {
-    if (!isAuthenticated()) return false;
+    // Note: dataApiHelpers.delete handles auth internally via getArloToken()
 
     const { error } = await dataApiHelpers.delete("projects", id);
 
