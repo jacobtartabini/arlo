@@ -135,7 +135,7 @@ const ArloCommandLauncher = () => {
       description: "Begin a 25-minute focus session",
       category: "Actions",
       icon: Zap,
-      action: () => navigate("/productivity"),
+      action: () => navigate("/focus?duration=25"),
       shortcut: "⌘F",
       keywords: ["focus", "pomodoro", "timer", "25"],
     });

@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Clock, Play, Pause, CheckCircle2, Timer } from "lucide-react";
+import { Clock, Play, Pause, CheckCircle2, Timer, Maximize2 } from "lucide-react";
 import { format, differenceInMinutes, differenceInSeconds } from "date-fns";
 import type { TimeBlock, Task } from "@/types/productivity";
 
@@ -14,8 +15,18 @@ interface CurrentTimeBlockProps {
 }
 
 export function CurrentTimeBlock({ timeBlock, task, onComplete }: CurrentTimeBlockProps) {
+  const navigate = useNavigate();
   const [now, setNow] = useState(new Date());
   const [isPaused, setIsPaused] = useState(false);
+
+  const handleGoFullscreen = () => {
+    if (timeBlock) {
+      const params = new URLSearchParams();
+      params.set("blockId", timeBlock.id);
+      if (task) params.set("taskId", task.id);
+      navigate(`/focus?${params.toString()}`);
+    }
+  };
 
   useEffect(() => {
     if (!timeBlock || isPaused) return;
@@ -104,6 +115,16 @@ export function CurrentTimeBlock({ timeBlock, task, onComplete }: CurrentTimeBlo
             {elapsedMinutes} of {totalMinutes} minutes elapsed
           </p>
           <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleGoFullscreen}
+              className="h-8 gap-1.5"
+              title="Enter Focus Mode"
+            >
+              <Maximize2 className="h-3.5 w-3.5" />
+              Focus
+            </Button>
             <Button
               variant="ghost"
               size="sm"
