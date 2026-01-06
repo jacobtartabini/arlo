@@ -4,6 +4,7 @@ import { format, addDays } from "date-fns";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -87,6 +88,7 @@ export function CreateTripDialog({ open, onOpenChange, onCreateTrip }: CreateTri
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Plan a New Trip</DialogTitle>
+          <DialogDescription>Create a new trip to start planning your adventure.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
