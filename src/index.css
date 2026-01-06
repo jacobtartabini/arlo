@@ -356,6 +356,48 @@ All colors MUST be HSL.
   }
 }
 
+/* Print styles for PDF export - hide all UI */
+@media print {
+  /* Hide navigation, sidebars, headers, toolbars */
+  header,
+  nav,
+  aside,
+  footer,
+  .print-hidden,
+  [data-print-hidden="true"],
+  button,
+  .fixed,
+  .sticky {
+    display: none !important;
+  }
+
+  /* Reset page margins */
+  @page {
+    margin: 0.5in;
+    size: auto;
+  }
+
+  /* Make content fill page */
+  body {
+    background: white !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Notes specific - show only content */
+  [data-note-content="true"] {
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    padding: 0.5in !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: auto !important;
+  }
+}
+
 @layer base {
   * {
     @apply border-border;

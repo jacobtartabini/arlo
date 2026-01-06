@@ -837,6 +837,7 @@ export function PageNoteEditor({ note, onSave }: PageNoteEditorProps) {
       <div className="flex-1 overflow-auto flex justify-center py-8 px-4 print:py-0 print:px-0">
         <div
           ref={pageContainerRef}
+          data-note-content="true"
           className={cn(
             "relative bg-white dark:bg-zinc-900 rounded-sm shadow-xl print:shadow-none print:rounded-none",
             "w-full max-w-[816px] min-h-[1056px]",
