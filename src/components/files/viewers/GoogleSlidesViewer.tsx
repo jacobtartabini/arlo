@@ -3,9 +3,11 @@ import { Loader2, Save, ExternalLink, AlertCircle, ChevronLeft, ChevronRight, Ed
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { getAuthHeaders } from "@/lib/arloAuth";
 import { cn } from "@/lib/utils";
 import type { DriveFile } from "@/types/files";
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 interface GoogleSlidesViewerProps {
   file: DriveFile;
@@ -104,15 +106,30 @@ export function GoogleSlidesViewer({ file, accountId, onOpenInDrive }: GoogleSli
     setError(null);
     
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('google-workspace-api', {
-        body: {
+      const headers = await getAuthHeaders();
+      if (!headers) {
+        throw new Error('Not authenticated');
+      }
+
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/google-workspace-api`, {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           action: 'get_slides',
           accountId,
           fileId: file.drive_file_id,
-        },
+        }),
       });
 
-      if (fnError) throw fnError;
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Request failed' }));
+        throw new Error(err.error || 'Failed to load presentation');
+      }
+
+      const data = await response.json();
       if (data?.presentation) {
         setPresentation(data.presentation);
       }
@@ -221,16 +238,29 @@ export function GoogleSlidesViewer({ file, accountId, onOpenInDrive }: GoogleSli
       }
 
       if (requests.length > 0) {
-        const { error: fnError } = await supabase.functions.invoke('google-workspace-api', {
-          body: {
+        const headers = await getAuthHeaders();
+        if (!headers) {
+          throw new Error('Not authenticated');
+        }
+
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/google-workspace-api`, {
+          method: 'POST',
+          headers: {
+            ...headers,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
             action: 'update_slides',
             accountId,
             fileId: file.drive_file_id,
             content: { requests },
-          },
+          }),
         });
 
-        if (fnError) throw fnError;
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({ error: 'Request failed' }));
+          throw new Error(err.error || 'Failed to save presentation');
+        }
       }
       
       toast.success('Presentation saved');
