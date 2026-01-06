@@ -1,37 +1,23 @@
 import { dataApiHelpers } from "@/lib/data-api";
 import { isAuthenticated } from "@/lib/arloAuth";
-import type { Task } from "@/types/tasks";
-
-interface DbTask {
-  id: string;
-  user_id: string;
-  title: string;
-  description: string | null;
-  done: boolean;
-  priority: number;
-  due_date: string | null;
-  category: string;
-  created_at: string;
-  updated_at: string;
-}
-
-const dbToTask = (db: DbTask): Task => ({
-  id: db.id,
-  title: db.title,
-  description: db.description ?? undefined,
-  done: db.done,
-  priority: db.priority,
-  dueDate: db.due_date ? new Date(db.due_date) : undefined,
-  category: db.category,
-  createdAt: new Date(db.created_at),
-  updatedAt: new Date(db.updated_at),
-});
+import type { Task, DbTask, EnergyLevel } from "@/types/productivity";
+import { dbToTask } from "@/types/productivity";
 
 export function useTasksPersistence() {
-  const fetchTasks = async (): Promise<Task[]> => {
+  const fetchTasks = async (options?: {
+    projectId?: string;
+    scheduledDate?: Date;
+    done?: boolean;
+  }): Promise<Task[]> => {
     if (!isAuthenticated()) return [];
 
+    const filters: Record<string, unknown> = {};
+    if (options?.projectId) filters.project_id = options.projectId;
+    if (options?.done !== undefined) filters.done = options.done;
+    // Note: scheduledDate filtering happens client-side for now
+
     const { data, error } = await dataApiHelpers.select<DbTask[]>('tasks', {
+      filters: Object.keys(filters).length > 0 ? filters : undefined,
       order: { column: 'priority', ascending: false },
     });
 
@@ -40,22 +26,52 @@ export function useTasksPersistence() {
       return [];
     }
 
-    return data.map(dbToTask);
+    let tasks = data.map(dbToTask);
+
+    // Client-side filter for scheduled date if provided
+    if (options?.scheduledDate) {
+      const dateStr = options.scheduledDate.toISOString().split('T')[0];
+      tasks = tasks.filter(t => 
+        t.scheduledDate?.toISOString().split('T')[0] === dateStr
+      );
+    }
+
+    return tasks;
+  };
+
+  const fetchTasksForProject = async (projectId: string): Promise<Task[]> => {
+    return fetchTasks({ projectId });
+  };
+
+  const fetchTodayTasks = async (): Promise<Task[]> => {
+    return fetchTasks({ scheduledDate: new Date() });
   };
 
   const createTask = async (
     title: string,
-    description?: string,
-    category?: string,
-    dueDate?: Date
+    options?: {
+      description?: string;
+      category?: string;
+      dueDate?: Date;
+      projectId?: string;
+      timeEstimateMinutes?: number;
+      energyLevel?: EnergyLevel;
+      scheduledDate?: Date;
+      priority?: number;
+    }
   ): Promise<Task | null> => {
     if (!isAuthenticated()) return null;
 
     const { data, error } = await dataApiHelpers.insert<DbTask>('tasks', {
       title,
-      description: description ?? null,
-      category: category ?? "general",
-      due_date: dueDate?.toISOString() ?? null,
+      description: options?.description ?? null,
+      category: options?.category ?? "general",
+      due_date: options?.dueDate?.toISOString() ?? null,
+      project_id: options?.projectId ?? null,
+      time_estimate_minutes: options?.timeEstimateMinutes ?? null,
+      energy_level: options?.energyLevel ?? 'medium',
+      scheduled_date: options?.scheduledDate?.toISOString().split('T')[0] ?? null,
+      priority: options?.priority ?? 0,
     });
 
     if (error || !data) {
@@ -79,6 +95,13 @@ export function useTasksPersistence() {
     if (updates.priority !== undefined) dbUpdates.priority = updates.priority;
     if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate?.toISOString() ?? null;
     if (updates.category !== undefined) dbUpdates.category = updates.category;
+    if (updates.projectId !== undefined) dbUpdates.project_id = updates.projectId ?? null;
+    if (updates.timeEstimateMinutes !== undefined) dbUpdates.time_estimate_minutes = updates.timeEstimateMinutes;
+    if (updates.energyLevel !== undefined) dbUpdates.energy_level = updates.energyLevel;
+    if (updates.scheduledDate !== undefined) {
+      dbUpdates.scheduled_date = updates.scheduledDate?.toISOString().split('T')[0] ?? null;
+    }
+    if (updates.orderIndex !== undefined) dbUpdates.order_index = updates.orderIndex;
 
     const { error } = await dataApiHelpers.update('tasks', id, dbUpdates);
 
@@ -107,11 +130,23 @@ export function useTasksPersistence() {
     return updateTask(id, { done });
   };
 
+  const scheduleTask = async (id: string, scheduledDate: Date | null): Promise<boolean> => {
+    return updateTask(id, { scheduledDate: scheduledDate ?? undefined });
+  };
+
+  const assignToProject = async (id: string, projectId: string | null): Promise<boolean> => {
+    return updateTask(id, { projectId: projectId ?? undefined });
+  };
+
   return {
     fetchTasks,
+    fetchTasksForProject,
+    fetchTodayTasks,
     createTask,
     updateTask,
     deleteTask,
     toggleTask,
+    scheduleTask,
+    assignToProject,
   };
 }
