@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { dataApiHelpers } from "@/lib/data-api";
 import { isAuthenticated } from "@/lib/arloAuth";
 import type { Notification } from "@/types/notifications";
@@ -26,11 +27,11 @@ const dbToNotification = (db: DbNotification): Notification => ({
 });
 
 export function useNotificationsPersistence() {
-  const fetchNotifications = async (): Promise<Notification[]> => {
+  const fetchNotifications = useCallback(async (): Promise<Notification[]> => {
     if (!isAuthenticated()) return [];
 
-    const { data, error } = await dataApiHelpers.select<DbNotification[]>('notifications', {
-      order: { column: 'created_at', ascending: false },
+    const { data, error } = await dataApiHelpers.select<DbNotification[]>("notifications", {
+      order: { column: "created_at", ascending: false },
       limit: 50,
     });
 
@@ -40,12 +41,12 @@ export function useNotificationsPersistence() {
     }
 
     return data.map(dbToNotification);
-  };
+  }, []);
 
-  const fetchUnreadCount = async (): Promise<number> => {
+  const fetchUnreadCount = useCallback(async (): Promise<number> => {
     if (!isAuthenticated()) return 0;
 
-    const { count, error } = await dataApiHelpers.count('notifications', { read: false });
+    const { count, error } = await dataApiHelpers.count("notifications", { read: false });
 
     if (error) {
       console.error("Error fetching unread count:", error);
@@ -53,37 +54,40 @@ export function useNotificationsPersistence() {
     }
 
     return count;
-  };
+  }, []);
 
-  const createNotification = async (
-    title: string,
-    content?: string,
-    source?: string,
-    actionType?: string,
-    actionData?: Record<string, unknown>
-  ): Promise<Notification | null> => {
-    if (!isAuthenticated()) return null;
+  const createNotification = useCallback(
+    async (
+      title: string,
+      content?: string,
+      source?: string,
+      actionType?: string,
+      actionData?: Record<string, unknown>
+    ): Promise<Notification | null> => {
+      if (!isAuthenticated()) return null;
 
-    const { data, error } = await dataApiHelpers.insert<DbNotification>('notifications', {
-      title,
-      content: content ?? null,
-      source: source ?? "system",
-      action_type: actionType ?? null,
-      action_data: actionData ?? null,
-    });
+      const { data, error } = await dataApiHelpers.insert<DbNotification>("notifications", {
+        title,
+        content: content ?? null,
+        source: source ?? "system",
+        action_type: actionType ?? null,
+        action_data: actionData ?? null,
+      });
 
-    if (error || !data) {
-      console.error("Error creating notification:", error);
-      return null;
-    }
+      if (error || !data) {
+        console.error("Error creating notification:", error);
+        return null;
+      }
 
-    return dbToNotification(data);
-  };
+      return dbToNotification(data);
+    },
+    []
+  );
 
-  const markAsRead = async (id: string): Promise<boolean> => {
+  const markAsRead = useCallback(async (id: string): Promise<boolean> => {
     if (!isAuthenticated()) return false;
 
-    const { error } = await dataApiHelpers.update('notifications', id, { read: true });
+    const { error } = await dataApiHelpers.update("notifications", id, { read: true });
 
     if (error) {
       console.error("Error marking notification as read:", error);
@@ -91,13 +95,13 @@ export function useNotificationsPersistence() {
     }
 
     return true;
-  };
+  }, []);
 
-  const markAllAsRead = async (): Promise<boolean> => {
+  const markAllAsRead = useCallback(async (): Promise<boolean> => {
     if (!isAuthenticated()) return false;
 
     const { error } = await dataApiHelpers.updateWhere(
-      'notifications',
+      "notifications",
       { read: false },
       { read: true }
     );
@@ -108,12 +112,12 @@ export function useNotificationsPersistence() {
     }
 
     return true;
-  };
+  }, []);
 
-  const deleteNotification = async (id: string): Promise<boolean> => {
+  const deleteNotification = useCallback(async (id: string): Promise<boolean> => {
     if (!isAuthenticated()) return false;
 
-    const { error } = await dataApiHelpers.delete('notifications', id);
+    const { error } = await dataApiHelpers.delete("notifications", id);
 
     if (error) {
       console.error("Error deleting notification:", error);
@@ -121,7 +125,7 @@ export function useNotificationsPersistence() {
     }
 
     return true;
-  };
+  }, []);
 
   return {
     fetchNotifications,
@@ -132,3 +136,4 @@ export function useNotificationsPersistence() {
     deleteNotification,
   };
 }
+
