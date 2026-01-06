@@ -48,22 +48,22 @@ export default function Productivity() {
   const loadTasks = useCallback(async () => {
     const fetchedTasks = await fetchTasks();
     setTasks(fetchedTasks);
-  }, [fetchTasks]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadProjects = useCallback(async () => {
     const fetchedProjects = await fetchProjects();
     setProjects(fetchedProjects);
-  }, [fetchProjects]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadHabits = useCallback(async () => {
     const fetchedHabits = await fetchHabitsWithStreaks();
     setHabits(fetchedHabits.filter(h => h.category === "routine" && h.enabled));
-  }, [fetchHabitsWithStreaks]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadNotifications = useCallback(async () => {
     const fetchedNotifications = await fetchNotifications();
     setNotifications(fetchedNotifications.filter(n => !n.read).slice(0, 3));
-  }, [fetchNotifications]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadProjectTasks = useCallback(async (projectId: string) => {
     const tasks = await fetchTasksForProject(projectId);

@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 
@@ -70,6 +70,18 @@ export function useProductivityRealtime({
   onNotificationChange?: () => void;
   enabled?: boolean;
 }) {
+  // Use refs to avoid re-subscribing when callbacks change
+  const onTaskChangeRef = useRef(onTaskChange);
+  const onHabitChangeRef = useRef(onHabitChange);
+  const onNotificationChangeRef = useRef(onNotificationChange);
+
+  // Update refs when callbacks change
+  useEffect(() => {
+    onTaskChangeRef.current = onTaskChange;
+    onHabitChangeRef.current = onHabitChange;
+    onNotificationChangeRef.current = onNotificationChange;
+  });
+
   useEffect(() => {
     if (!enabled) return;
 
@@ -78,27 +90,27 @@ export function useProductivityRealtime({
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "tasks" },
-        () => onTaskChange?.()
+        () => onTaskChangeRef.current?.()
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "habits" },
-        () => onHabitChange?.()
+        () => onHabitChangeRef.current?.()
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "habit_logs" },
-        () => onHabitChange?.()
+        () => onHabitChangeRef.current?.()
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "notifications" },
-        () => onNotificationChange?.()
+        () => onNotificationChangeRef.current?.()
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [enabled, onTaskChange, onHabitChange, onNotificationChange]);
+  }, [enabled]);
 }
