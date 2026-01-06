@@ -10,6 +10,7 @@ import {
   Paperclip,
   ChevronLeft,
   Folder,
+  FolderPlus,
   Menu,
   Mic,
   MicOff,
@@ -815,7 +816,7 @@ export default function Chat() {
                     className="p-1 hover:bg-muted rounded transition-colors"
                     title="New Folder"
                   >
-                    <Plus className="w-3 h-3 text-muted-foreground" />
+                    <FolderPlus className="w-3 h-3 text-muted-foreground" />
                   </button>
                 </div>
                 
@@ -1218,12 +1219,9 @@ export default function Chat() {
           {messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center max-w-md px-4">
-                <div className="text-3xl font-semibold text-foreground mb-2">
+                <div className="text-3xl font-semibold text-foreground">
                   Let's Get Started.
                 </div>
-                <p className="text-muted-foreground">
-                  Ask me anything or use the + menu for special actions like web search, image creation, and more.
-                </p>
               </div>
             </div>
           ) : (

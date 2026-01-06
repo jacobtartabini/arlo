@@ -41,6 +41,7 @@ import MorningView from "./pages/MorningView";
 import FocusSession from "./pages/FocusSession";
 import { NotificationMonitor } from "./components/NotificationMonitor";
 import { MorningWakeupScheduler } from "./components/MorningWakeupScheduler";
+import { GlobalVoiceButton } from "./components/voice";
 
 const queryClient = new QueryClient();
 
@@ -59,6 +60,7 @@ const App = () => (
                   <MorningWakeupScheduler />
                   <BrowserRouter>
                     <ArloCommandLauncher />
+                    <GlobalVoiceButton />
                 <ConditionalNavBar />
                 <Routes>
                   {/* Public routes */}

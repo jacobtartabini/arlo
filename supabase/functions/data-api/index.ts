@@ -47,7 +47,9 @@ const ALLOWED_TABLES = [
   // Finance system tables
   'finance_linked_accounts', 'finance_transactions', 'finance_budgets',
   'finance_subscriptions', 'finance_gift_cards', 'finance_gift_card_usage',
-  'finance_portfolio', 'finance_watchlist', 'finance_settings'
+  'finance_portfolio', 'finance_watchlist', 'finance_settings',
+  // Voice system tables
+  'voice_settings'
 ]
 
 // Fields that should be encrypted when stored
