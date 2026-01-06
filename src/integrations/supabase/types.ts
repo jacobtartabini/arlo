@@ -364,6 +364,188 @@ export type Database = {
           },
         ]
       }
+      drive_accounts: {
+        Row: {
+          access_token: string | null
+          account_email: string
+          account_name: string | null
+          created_at: string
+          enabled: boolean
+          id: string
+          last_sync_at: string | null
+          last_sync_error: string | null
+          refresh_token: string | null
+          root_folder_id: string | null
+          storage_quota_total: number | null
+          storage_quota_used: number | null
+          token_expires_at: string | null
+          updated_at: string
+          user_key: string
+        }
+        Insert: {
+          access_token?: string | null
+          account_email: string
+          account_name?: string | null
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          last_sync_at?: string | null
+          last_sync_error?: string | null
+          refresh_token?: string | null
+          root_folder_id?: string | null
+          storage_quota_total?: number | null
+          storage_quota_used?: number | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_key: string
+        }
+        Update: {
+          access_token?: string | null
+          account_email?: string
+          account_name?: string | null
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          last_sync_at?: string | null
+          last_sync_error?: string | null
+          refresh_token?: string | null
+          root_folder_id?: string | null
+          storage_quota_total?: number | null
+          storage_quota_used?: number | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_key?: string
+        }
+        Relationships: []
+      }
+      drive_file_links: {
+        Row: {
+          created_at: string
+          drive_file_id: string
+          id: string
+          link_type: string
+          linked_entity_id: string
+          notes: string | null
+          user_key: string
+        }
+        Insert: {
+          created_at?: string
+          drive_file_id: string
+          id?: string
+          link_type: string
+          linked_entity_id: string
+          notes?: string | null
+          user_key: string
+        }
+        Update: {
+          created_at?: string
+          drive_file_id?: string
+          id?: string
+          link_type?: string
+          linked_entity_id?: string
+          notes?: string | null
+          user_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "drive_file_links_drive_file_id_fkey"
+            columns: ["drive_file_id"]
+            isOneToOne: false
+            referencedRelation: "drive_files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      drive_files: {
+        Row: {
+          created_at: string
+          created_time: string | null
+          drive_account_id: string
+          drive_file_id: string
+          file_extension: string | null
+          icon_link: string | null
+          id: string
+          is_folder: boolean
+          last_synced_at: string
+          mime_type: string | null
+          modified_time: string | null
+          name: string
+          owner_email: string | null
+          owner_name: string | null
+          parent_folder_id: string | null
+          size_bytes: number | null
+          starred: boolean | null
+          thumbnail_url: string | null
+          trashed: boolean | null
+          user_key: string
+          web_content_link: string | null
+          web_view_link: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_time?: string | null
+          drive_account_id: string
+          drive_file_id: string
+          file_extension?: string | null
+          icon_link?: string | null
+          id?: string
+          is_folder?: boolean
+          last_synced_at?: string
+          mime_type?: string | null
+          modified_time?: string | null
+          name: string
+          owner_email?: string | null
+          owner_name?: string | null
+          parent_folder_id?: string | null
+          size_bytes?: number | null
+          starred?: boolean | null
+          thumbnail_url?: string | null
+          trashed?: boolean | null
+          user_key: string
+          web_content_link?: string | null
+          web_view_link?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_time?: string | null
+          drive_account_id?: string
+          drive_file_id?: string
+          file_extension?: string | null
+          icon_link?: string | null
+          id?: string
+          is_folder?: boolean
+          last_synced_at?: string
+          mime_type?: string | null
+          modified_time?: string | null
+          name?: string
+          owner_email?: string | null
+          owner_name?: string | null
+          parent_folder_id?: string | null
+          size_bytes?: number | null
+          starred?: boolean | null
+          thumbnail_url?: string | null
+          trashed?: boolean | null
+          user_key?: string
+          web_content_link?: string | null
+          web_view_link?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "drive_files_drive_account_id_fkey"
+            columns: ["drive_account_id"]
+            isOneToOne: false
+            referencedRelation: "drive_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "drive_files_drive_account_id_fkey"
+            columns: ["drive_account_id"]
+            isOneToOne: false
+            referencedRelation: "drive_accounts_safe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       google_calendar_selections: {
         Row: {
           calendar_color: string | null
@@ -2429,6 +2611,54 @@ export type Database = {
           token_expires_at?: string | null
           updated_at?: string | null
           user_id?: string | null
+          user_key?: string | null
+        }
+        Relationships: []
+      }
+      drive_accounts_safe: {
+        Row: {
+          account_email: string | null
+          account_name: string | null
+          created_at: string | null
+          enabled: boolean | null
+          id: string | null
+          is_connected: boolean | null
+          last_sync_at: string | null
+          last_sync_error: string | null
+          root_folder_id: string | null
+          storage_quota_total: number | null
+          storage_quota_used: number | null
+          updated_at: string | null
+          user_key: string | null
+        }
+        Insert: {
+          account_email?: string | null
+          account_name?: string | null
+          created_at?: string | null
+          enabled?: boolean | null
+          id?: string | null
+          is_connected?: never
+          last_sync_at?: string | null
+          last_sync_error?: string | null
+          root_folder_id?: string | null
+          storage_quota_total?: number | null
+          storage_quota_used?: number | null
+          updated_at?: string | null
+          user_key?: string | null
+        }
+        Update: {
+          account_email?: string | null
+          account_name?: string | null
+          created_at?: string | null
+          enabled?: boolean | null
+          id?: string | null
+          is_connected?: never
+          last_sync_at?: string | null
+          last_sync_error?: string | null
+          root_folder_id?: string | null
+          storage_quota_total?: number | null
+          storage_quota_used?: number | null
+          updated_at?: string | null
           user_key?: string | null
         }
         Relationships: []
