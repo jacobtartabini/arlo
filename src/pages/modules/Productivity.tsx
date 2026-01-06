@@ -1,8 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { 
+  ArrowLeft,
   CalendarCheck, 
   FolderKanban,
   ListTodo,
@@ -27,6 +29,7 @@ import type { HabitWithStreak } from "@/types/habits";
 import type { Notification } from "@/types/notifications";
 
 export default function Productivity() {
+  const navigate = useNavigate();
   const { fetchTasks, toggleTask, fetchTasksForProject, updateTask } = useTasksPersistence();
   const { fetchProjects, updateProject, archiveProject } = useProjectsPersistence();
   const { fetchSubtasksForTasks, toggleSubtask, createSubtask, deleteSubtask, updateSubtask } = useSubtasksPersistence();
@@ -302,6 +305,16 @@ export default function Productivity() {
 
           <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex flex-col gap-4">
+              <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                <button
+                  type="button"
+                  onClick={() => navigate("/dashboard")}
+                  className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/50 px-3 py-1 text-xs font-medium transition hover:border-border hover:bg-background/80"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" /> Back to dashboard
+                </button>
+              </div>
+
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-inner">
                   <CalendarCheck className="h-6 w-6" />
