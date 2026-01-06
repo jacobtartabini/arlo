@@ -93,14 +93,21 @@ Deno.serve(async (req) => {
     switch (action) {
       case 'create_link_token': {
         // Create a link token for Plaid Link
-        const data = await plaidRequest('/link/token/create', {
+        const webhookUrl = Deno.env.get('PLAID_WEBHOOK_URL');
+        const linkTokenPayload: Record<string, unknown> = {
           user: { client_user_id: userKey },
           client_name: 'Arlo Finance',
           products: ['transactions'],
           country_codes: ['US'],
           language: 'en',
-          webhook: Deno.env.get('PLAID_WEBHOOK_URL'),
-        });
+        };
+        
+        // Only include webhook if configured
+        if (webhookUrl && webhookUrl.startsWith('https://')) {
+          linkTokenPayload.webhook = webhookUrl;
+        }
+        
+        const data = await plaidRequest('/link/token/create', linkTokenPayload);
 
         return jsonResponse(req, { link_token: data.link_token });
       }
