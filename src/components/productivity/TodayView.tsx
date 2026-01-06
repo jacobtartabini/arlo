@@ -10,11 +10,15 @@ import {
   CalendarDays,
   Plus,
   RefreshCw,
+  Settings2,
+  Timer,
 } from "lucide-react";
 import { format } from "date-fns";
 import { CurrentTimeBlock } from "./CurrentTimeBlock";
 import { FocusSuggestion } from "./FocusSuggestion";
 import { PriorityTaskList } from "./PriorityTaskList";
+import { QuickScheduleDialog } from "./QuickScheduleDialog";
+import { EnergySettings, getEnergyForHour } from "./EnergySettings";
 import { useTasksPersistence } from "@/hooks/useTasksPersistence";
 import { useTimeBlocksPersistence } from "@/hooks/useTimeBlocksPersistence";
 import { useProjectsPersistence } from "@/hooks/useProjectsPersistence";
@@ -36,11 +40,7 @@ function getGreeting(): { text: string; icon: typeof Sun } {
 
 function getCurrentEnergyLevel(): EnergyLevel {
   const hour = new Date().getHours();
-  if (hour >= 6 && hour < 11) return 'high';
-  if (hour >= 11 && hour < 14) return 'medium';
-  if (hour >= 14 && hour < 17) return 'low';
-  if (hour >= 17 && hour < 21) return 'medium';
-  return 'low';
+  return getEnergyForHour(hour);
 }
 
 export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
@@ -53,6 +53,8 @@ export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [quickScheduleTask, setQuickScheduleTask] = useState<Task | null>(null);
+  const [energySettingsOpen, setEnergySettingsOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -110,11 +112,15 @@ export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
     ));
   }, [completeTimeBlock]);
 
+  // Handle quick schedule (tap to create time block)
+  const handleQuickSchedule = useCallback((task: Task) => {
+    setQuickScheduleTask(task);
+  }, []);
+
   // Handle starting a focus session
   const handleStartFocus = useCallback((task: Task) => {
-    // For now, just select the task - in future, could create a time block
-    onTaskClick?.(task);
-  }, [onTaskClick]);
+    setQuickScheduleTask(task);
+  }, []);
 
   const greeting = getGreeting();
   const GreetingIcon = greeting.icon;
@@ -178,6 +184,15 @@ export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
               <Button
                 variant="ghost"
                 size="icon"
+                onClick={() => setEnergySettingsOpen(true)}
+                className="h-9 w-9"
+                title="Energy Settings"
+              >
+                <Settings2 className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={loadData}
                 className="h-9 w-9"
               >
@@ -211,13 +226,13 @@ export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
         />
       </div>
 
-      {/* Priority Tasks */}
+      {/* Priority Tasks - with quick schedule on click */}
       <PriorityTaskList
         tasks={tasks}
         projects={projects}
         maxTasks={7}
         onToggle={handleToggle}
-        onTaskClick={onTaskClick}
+        onTaskClick={handleQuickSchedule}
         onViewAll={onViewAllTasks}
       />
 
@@ -252,6 +267,20 @@ export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
         }}
         projects={projects}
         defaultScheduledDate={new Date()}
+      />
+
+      {/* Quick Schedule Dialog */}
+      <QuickScheduleDialog
+        open={!!quickScheduleTask}
+        onOpenChange={(open) => !open && setQuickScheduleTask(null)}
+        task={quickScheduleTask}
+        onScheduled={loadData}
+      />
+
+      {/* Energy Settings Dialog */}
+      <EnergySettings
+        open={energySettingsOpen}
+        onOpenChange={setEnergySettingsOpen}
       />
     </div>
   );

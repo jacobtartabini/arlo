@@ -6,6 +6,8 @@ import {
   FolderKanban,
   ListTodo,
   Sparkles,
+  CalendarRange,
+  Timer,
 } from "lucide-react";
 import { useTasksPersistence } from "@/hooks/useTasksPersistence";
 import { useProjectsPersistence } from "@/hooks/useProjectsPersistence";
@@ -15,7 +17,7 @@ import { useNotificationsPersistence } from "@/hooks/useNotificationsPersistence
 import { useProductivityRealtime } from "@/hooks/useRealtimeSubscription";
 import { supabase } from "@/integrations/supabase/client";
 import { ProjectList, ProjectDetailView, TaskListView } from "@/components/projects";
-import { TodayView } from "@/components/productivity";
+import { TodayView, WeeklyPlanningView, TimelineDropZone } from "@/components/productivity";
 import type { Task, Subtask } from "@/types/productivity";
 import type { Project, ProjectStatus } from "@/types/productivity";
 import type { HabitWithStreak } from "@/types/habits";
@@ -37,7 +39,7 @@ export default function Productivity() {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [activeTab, setActiveTab] = useState<"today" | "projects" | "tasks">("today");
+  const [activeTab, setActiveTab] = useState<"today" | "week" | "schedule" | "projects" | "tasks">("today");
 
   useEffect(() => {
     document.title = "Productivity – Arlo";
@@ -299,12 +301,20 @@ export default function Productivity() {
           </div>
         </header>
 
-        {/* Tabs for Today / Projects / Tasks */}
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "today" | "projects" | "tasks")}>
-          <TabsList className="bg-muted/50">
+        {/* Tabs for Today / Week / Schedule / Projects / Tasks */}
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+          <TabsList className="bg-muted/50 flex-wrap h-auto gap-1">
             <TabsTrigger value="today" className="gap-2">
               <Sparkles className="h-4 w-4" />
               Today
+            </TabsTrigger>
+            <TabsTrigger value="week" className="gap-2">
+              <CalendarRange className="h-4 w-4" />
+              Week
+            </TabsTrigger>
+            <TabsTrigger value="schedule" className="gap-2">
+              <Timer className="h-4 w-4" />
+              Schedule
             </TabsTrigger>
             <TabsTrigger value="projects" className="gap-2">
               <FolderKanban className="h-4 w-4" />
@@ -320,6 +330,21 @@ export default function Productivity() {
             <TodayView 
               onTaskClick={() => setActiveTab("tasks")}
               onViewAllTasks={() => setActiveTab("tasks")}
+            />
+          </TabsContent>
+
+          <TabsContent value="week" className="mt-6">
+            <WeeklyPlanningView
+              onTaskClick={() => setActiveTab("tasks")}
+              onDayClick={() => setActiveTab("schedule")}
+            />
+          </TabsContent>
+
+          <TabsContent value="schedule" className="mt-6">
+            <TimelineDropZone
+              onBlockCreated={() => {
+                loadTasks();
+              }}
             />
           </TabsContent>
 
