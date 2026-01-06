@@ -1,26 +1,12 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Button } from "@/components/ui/button";
 import { 
   CalculatorModule, 
   WebSearchModule, 
   PDFViewerModule, 
   ArloAIModule 
 } from "./modules";
-import { 
-  Calculator, 
-  Globe, 
-  FileText, 
-  Sparkles,
-  Plus,
-} from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 export type ModuleType = "calculator" | "web-search" | "pdf-viewer" | "arlo-ai";
@@ -35,32 +21,10 @@ interface ModuleInstance {
 interface EmbeddedModulesProps {
   noteContent?: string;
   onInsertText: (text: string) => void;
+  onModuleAdd?: (callback: (type: ModuleType) => void) => void;
 }
 
-const MODULE_CONFIG = {
-  calculator: {
-    icon: Calculator,
-    label: "Calculator",
-    description: "Basic & scientific calculator",
-  },
-  "web-search": {
-    icon: Globe,
-    label: "Web Search",
-    description: "Search the web inline",
-  },
-  "pdf-viewer": {
-    icon: FileText,
-    label: "PDF Viewer",
-    description: "View and annotate PDFs",
-  },
-  "arlo-ai": {
-    icon: Sparkles,
-    label: "Arlo AI",
-    description: "AI assistant for your notes",
-  },
-};
-
-export function EmbeddedModules({ noteContent, onInsertText }: EmbeddedModulesProps) {
+export function EmbeddedModules({ noteContent, onInsertText, onModuleAdd }: EmbeddedModulesProps) {
   const [modules, setModules] = useState<ModuleInstance[]>([]);
   const [draggingModule, setDraggingModule] = useState<string | null>(null);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -118,6 +82,13 @@ export function EmbeddedModules({ noteContent, onInsertText }: EmbeddedModulesPr
     }
   }, [draggingModule, handleMouseMove, handleMouseUp]);
 
+  // Expose addModule to parent via callback
+  useEffect(() => {
+    if (onModuleAdd) {
+      onModuleAdd(addModule);
+    }
+  }, [onModuleAdd, addModule]);
+
   const handleInsertLink = useCallback((url: string, title: string) => {
     onInsertText(`[${title}](${url})`);
   }, [onInsertText]);
@@ -128,39 +99,6 @@ export function EmbeddedModules({ noteContent, onInsertText }: EmbeddedModulesPr
 
   return (
     <div ref={containerRef} className="absolute inset-0 pointer-events-none overflow-hidden">
-      {/* Add module button */}
-      <div className="absolute top-4 right-4 pointer-events-auto z-50">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="h-9 gap-2 bg-card/95 backdrop-blur-sm shadow-lg"
-            >
-              <Plus className="h-4 w-4" />
-              Add Module
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            {Object.entries(MODULE_CONFIG).map(([type, config]) => {
-              const Icon = config.icon;
-              return (
-                <DropdownMenuItem
-                  key={type}
-                  onClick={() => addModule(type as ModuleType)}
-                  className="flex items-center gap-3 py-2"
-                >
-                  <Icon className="h-4 w-4 text-primary" />
-                  <div>
-                    <p className="font-medium">{config.label}</p>
-                    <p className="text-xs text-muted-foreground">{config.description}</p>
-                  </div>
-                </DropdownMenuItem>
-              );
-            })}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
 
       {/* Rendered modules */}
       {modules.map((module) => (
