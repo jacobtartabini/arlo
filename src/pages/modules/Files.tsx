@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -17,11 +18,13 @@ import {
   Cloud,
   Mail,
   X,
+  Users,
+  Building2,
 } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import { useFilesPersistence } from "@/hooks/useFilesPersistence";
 import { useFilePreferences } from "@/hooks/useFilePreferences";
-import type { DriveAccount, DriveFile, BreadcrumbItem } from "@/types/files";
+import type { DriveAccount, DriveFile, BreadcrumbItem, DriveSection, SharedDrive } from "@/types/files";
 import { FILE_TYPE_LABELS, sortFilesWithFoldersFirst, canPreviewInApp } from "@/types/files";
 import { FileCard } from "@/components/files/FileCard";
 import { FileListItem } from "@/components/files/FileListItem";
@@ -38,6 +41,7 @@ export default function Files() {
     isLoading: filesLoading,
     listAccounts,
     listFiles,
+    listSharedDrives,
     searchAllFiles,
     syncFiles,
     getFileLinks,
@@ -62,6 +66,11 @@ export default function Files() {
   const [isSearching, setIsSearching] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   
+  // Section state (My Drive / Shared with me / Shared Drives)
+  const [driveSection, setDriveSection] = useState<DriveSection>('my_drive');
+  const [sharedDrives, setSharedDrives] = useState<SharedDrive[]>([]);
+  const [selectedSharedDriveId, setSelectedSharedDriveId] = useState<string | null>(null);
+  
   // Folder navigation state
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([]);
@@ -76,28 +85,39 @@ export default function Files() {
     loadAccounts();
   }, [authLoading, isAuthenticated]);
 
-  // Load files when account, folder, or filter changes
+  // Load files when account, folder, section, or filter changes
   useEffect(() => {
     if (authLoading || !isAuthenticated || accounts.length === 0) return;
     
     const accountId = selectedAccountId || accounts[0]?.id;
     if (accountId) {
       loadFiles(accountId, currentFolderId);
+      // Load shared drives when switching to an account
+      loadSharedDrivesForAccount(accountId);
     }
-  }, [authLoading, isAuthenticated, accounts, selectedAccountId, preferences.typeFilter, currentFolderId]);
+  }, [authLoading, isAuthenticated, accounts, selectedAccountId, preferences.typeFilter, currentFolderId, driveSection, selectedSharedDriveId]);
 
   const loadAccounts = async () => {
     const data = await listAccounts();
     setAccounts(data);
     if (data.length > 0 && !selectedAccountId) {
       setSelectedAccountId(data[0].id);
+      // Load shared drives for the first account
+      loadSharedDrivesForAccount(data[0].id);
     }
+  };
+
+  const loadSharedDrivesForAccount = async (accountId: string) => {
+    const drives = await listSharedDrives(accountId);
+    setSharedDrives(drives);
   };
 
   const loadFiles = async (accountId: string, folderId: string | null = null) => {
     const { files: data } = await listFiles(accountId, { 
       mimeType: preferences.typeFilter,
       folderId: folderId || undefined,
+      driveSection,
+      sharedDriveId: driveSection === 'shared_drive' ? selectedSharedDriveId || undefined : undefined,
     });
     // Sort with folders first
     const sortedFiles = sortFilesWithFoldersFirst(data, sortOption);
@@ -219,7 +239,31 @@ export default function Files() {
 
   const handleAccountChange = (accountId: string | null) => {
     setSelectedAccountId(accountId);
-    // Reset folder navigation when switching accounts
+    // Reset folder navigation and section when switching accounts
+    setCurrentFolderId(null);
+    setBreadcrumbs([]);
+    setSelectedFile(null);
+    setDriveSection('my_drive');
+    setSelectedSharedDriveId(null);
+    // Load shared drives for new account
+    if (accountId) {
+      loadSharedDrivesForAccount(accountId);
+    }
+  };
+
+  const handleSectionChange = (section: DriveSection) => {
+    setDriveSection(section);
+    setCurrentFolderId(null);
+    setBreadcrumbs([]);
+    setSelectedFile(null);
+    if (section !== 'shared_drive') {
+      setSelectedSharedDriveId(null);
+    }
+  };
+
+  const handleSharedDriveSelect = (driveId: string) => {
+    setSelectedSharedDriveId(driveId);
+    setDriveSection('shared_drive');
     setCurrentFolderId(null);
     setBreadcrumbs([]);
     setSelectedFile(null);
@@ -318,12 +362,59 @@ export default function Files() {
             )}
 
             <div className="space-y-4">
+              {/* Section Tabs (My Drive / Shared with me / Shared Drives) */}
+              {selectedAccountId && (
+                <div className="space-y-3">
+                  <Tabs value={driveSection} onValueChange={(v) => handleSectionChange(v as DriveSection)}>
+                    <TabsList className="grid w-full grid-cols-3">
+                      <TabsTrigger value="my_drive" className="flex items-center gap-2">
+                        <HardDrive className="h-4 w-4" />
+                        <span className="hidden sm:inline">My Drive</span>
+                      </TabsTrigger>
+                      <TabsTrigger value="shared_with_me" className="flex items-center gap-2">
+                        <Users className="h-4 w-4" />
+                        <span className="hidden sm:inline">Shared with me</span>
+                      </TabsTrigger>
+                      <TabsTrigger 
+                        value="shared_drive" 
+                        className="flex items-center gap-2"
+                        disabled={sharedDrives.length === 0}
+                      >
+                        <Building2 className="h-4 w-4" />
+                        <span className="hidden sm:inline">Shared Drives</span>
+                        {sharedDrives.length > 0 && (
+                          <span className="text-xs text-muted-foreground">({sharedDrives.length})</span>
+                        )}
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+
+                  {/* Shared Drives selector */}
+                  {driveSection === 'shared_drive' && sharedDrives.length > 0 && (
+                    <div className="flex gap-2 flex-wrap">
+                      {sharedDrives.map(drive => (
+                        <Button
+                          key={drive.id}
+                          variant={selectedSharedDriveId === drive.id ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => handleSharedDriveSelect(drive.id)}
+                          className="gap-2"
+                        >
+                          <Building2 className="h-3.5 w-3.5" />
+                          {drive.name}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Search & Filters */}
               <div className="flex flex-col gap-3 sm:flex-row">
                 <div className="relative flex-1">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    placeholder="Search files across all drives..."
+                    placeholder="Search files..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -366,13 +457,20 @@ export default function Files() {
                 </div>
               </div>
 
-              {/* Account indicator & counts */}
+              {/* Account & Section indicator & counts */}
               <div className="flex items-center justify-between text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
                   {selectedAccount && (
                     <>
                       <Mail className="h-4 w-4" />
-                      <span>Viewing files from</span>
+                      <span>
+                        {driveSection === 'my_drive' && 'My Drive'}
+                        {driveSection === 'shared_with_me' && 'Shared with me'}
+                        {driveSection === 'shared_drive' && selectedSharedDriveId && (
+                          <>Shared Drive: {sharedDrives.find(d => d.id === selectedSharedDriveId)?.name}</>
+                        )}
+                      </span>
+                      <span className="text-muted-foreground/60">•</span>
                       <span className="font-medium text-foreground">{selectedAccount.account_email}</span>
                     </>
                   )}

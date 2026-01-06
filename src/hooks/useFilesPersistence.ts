@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { getAuthHeaders } from '@/lib/arloAuth';
-import type { DriveAccount, DriveFile, DriveFileLink, FileTypeFilter } from '@/types/files';
+import type { DriveAccount, DriveFile, DriveFileLink, FileTypeFilter, DriveSection, SharedDrive } from '@/types/files';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -85,6 +85,8 @@ export function useFilesPersistence() {
       pageToken?: string;
       folderId?: string;
       mimeType?: FileTypeFilter;
+      driveSection?: DriveSection;
+      sharedDriveId?: string;
     }
   ): Promise<{ files: DriveFile[]; nextPageToken?: string }> => {
     setIsLoading(true);
@@ -97,6 +99,8 @@ export function useFilesPersistence() {
         pageToken: options?.pageToken,
         folderId: options?.folderId,
         mimeType: options?.mimeType === 'all' ? undefined : options?.mimeType,
+        driveSection: options?.driveSection,
+        sharedDriveId: options?.sharedDriveId,
       });
       return { files: data.files || [], nextPageToken: data.nextPageToken };
     } catch (err) {
@@ -104,6 +108,17 @@ export function useFilesPersistence() {
       return { files: [] };
     } finally {
       setIsLoading(false);
+    }
+  }, [callEdgeFunction]);
+
+  // List shared drives for an account
+  const listSharedDrives = useCallback(async (accountId: string): Promise<SharedDrive[]> => {
+    try {
+      const data = await callEdgeFunction('drive-api', { action: 'list_shared_drives', accountId });
+      return data.sharedDrives || [];
+    } catch (err) {
+      console.error('Failed to list shared drives:', err);
+      return [];
     }
   }, [callEdgeFunction]);
 
@@ -249,6 +264,7 @@ export function useFilesPersistence() {
     listAccounts,
     disconnectAccount,
     listFiles,
+    listSharedDrives,
     searchAllFiles,
     syncFiles,
     linkFile,
