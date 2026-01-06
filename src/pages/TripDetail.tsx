@@ -15,7 +15,7 @@ import { useTravelPersistence } from "@/hooks/useTravelPersistence";
 import { useAuth } from "@/providers/AuthProvider";
 import { 
   Trip, TripDestination, TripItineraryItem, TripSavedPlace, 
-  TripExpense 
+  TripExpense, TripSavedFlight, FlightSearchResult 
 } from "@/types/travel";
 import { TripItineraryTab } from "@/components/travel/TripItineraryTab";
 import { TripMapTab } from "@/components/travel/TripMapTab";
@@ -24,6 +24,7 @@ import { TripReservationsTab } from "@/components/travel/TripReservationsTab";
 import { TripWeatherWidget } from "@/components/travel/TripWeatherWidget";
 import { TripCurrencyWidget } from "@/components/travel/TripCurrencyWidget";
 import { TripPlanningAssistant } from "@/components/travel/TripPlanningAssistant";
+import { FlightExplorer } from "@/components/travel/FlightExplorer";
 import { AddDestinationDialog } from "@/components/travel/AddDestinationDialog";
 import { MapProvider } from "@/components/maps/MapProvider";
 import { cn } from "@/lib/utils";
@@ -55,6 +56,7 @@ export default function TripDetail() {
   const [itineraryItems, setItineraryItems] = useState<TripItineraryItem[]>([]);
   const [savedPlaces, setSavedPlaces] = useState<TripSavedPlace[]>([]);
   const [expenses, setExpenses] = useState<TripExpense[]>([]);
+  const [savedFlights, setSavedFlights] = useState<TripSavedFlight[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
   const [showAddDestination, setShowAddDestination] = useState(false);
@@ -451,8 +453,59 @@ export default function TripDetail() {
               />
             </TabsContent>
 
-            {/* Reservations Tab */}
-            <TabsContent value="reservations">
+            {/* Flights & Hotels Tab */}
+            <TabsContent value="reservations" className="space-y-6">
+              {/* Flight & Hotel Explorer */}
+              <FlightExplorer
+                tripId={tripId!}
+                homeAirport={trip.homeAirport}
+                destinationAirport={primaryDestination?.name?.slice(0, 3).toUpperCase()}
+                destinationCityCode={primaryDestination?.name?.slice(0, 3).toUpperCase()}
+                departureDate={trip.startDate}
+                returnDate={trip.endDate}
+                savedFlights={savedFlights}
+                onSaveFlight={async (flight: FlightSearchResult) => {
+                  // Save flight for comparison
+                  const saved: TripSavedFlight = {
+                    id: crypto.randomUUID(),
+                    tripId: tripId!,
+                    flightData: flight,
+                    isSelected: false,
+                    createdAt: new Date(),
+                  };
+                  setSavedFlights(prev => [...prev, saved]);
+                }}
+                onRemoveFlight={async (flightId: string) => {
+                  setSavedFlights(prev => prev.filter(f => f.id !== flightId));
+                }}
+                onSelectFlight={async (flight: FlightSearchResult) => {
+                  // Add flight to itinerary
+                  const item = await createItineraryItem(tripId!, 'flight', 
+                    `${flight.airline} ${flight.flightNumber}`, 
+                    new Date(flight.departureTime), 
+                    {
+                      endTime: new Date(flight.arrivalTime),
+                      cost: flight.price,
+                      costCurrency: flight.currency,
+                    }
+                  );
+                  if (item) {
+                    setItineraryItems(prev => [...prev, item].sort((a, b) => 
+                      a.startTime.getTime() - b.startTime.getTime()
+                    ));
+                    // Auto-add to budget
+                    await createExpense(tripId!, 'flights', `${flight.airline} ${flight.flightNumber}`, flight.price, {
+                      currency: flight.currency,
+                      isPlanned: true,
+                      itineraryItemId: item.id,
+                    });
+                  }
+                  // Remove from saved
+                  setSavedFlights(prev => prev.filter(f => f.flightData.id !== flight.id));
+                }}
+              />
+
+              {/* Reservations Section */}
               <TripReservationsTab
                 tripId={tripId!}
                 itineraryItems={itineraryItems}
