@@ -546,6 +546,506 @@ export type Database = {
           },
         ]
       }
+      finance_budgets: {
+        Row: {
+          amount: number
+          carryover_amount: number | null
+          carryover_enabled: boolean | null
+          category: string
+          created_at: string | null
+          id: string
+          month: number
+          notes: string | null
+          spent: number | null
+          updated_at: string | null
+          user_key: string
+          year: number
+        }
+        Insert: {
+          amount: number
+          carryover_amount?: number | null
+          carryover_enabled?: boolean | null
+          category: string
+          created_at?: string | null
+          id?: string
+          month: number
+          notes?: string | null
+          spent?: number | null
+          updated_at?: string | null
+          user_key: string
+          year: number
+        }
+        Update: {
+          amount?: number
+          carryover_amount?: number | null
+          carryover_enabled?: boolean | null
+          category?: string
+          created_at?: string | null
+          id?: string
+          month?: number
+          notes?: string | null
+          spent?: number | null
+          updated_at?: string | null
+          user_key?: string
+          year?: number
+        }
+        Relationships: []
+      }
+      finance_gift_card_usage: {
+        Row: {
+          amount: number
+          description: string | null
+          gift_card_id: string
+          id: string
+          used_at: string | null
+          user_key: string
+        }
+        Insert: {
+          amount: number
+          description?: string | null
+          gift_card_id: string
+          id?: string
+          used_at?: string | null
+          user_key: string
+        }
+        Update: {
+          amount?: number
+          description?: string | null
+          gift_card_id?: string
+          id?: string
+          used_at?: string | null
+          user_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_gift_card_usage_gift_card_id_fkey"
+            columns: ["gift_card_id"]
+            isOneToOne: false
+            referencedRelation: "finance_gift_cards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_gift_cards: {
+        Row: {
+          card_number_last4: string | null
+          created_at: string | null
+          currency: string | null
+          current_balance: number
+          expiry_date: string | null
+          id: string
+          initial_balance: number
+          is_depleted: boolean | null
+          merchant_name: string
+          notes: string | null
+          photo_file_id: string | null
+          purchase_date: string | null
+          updated_at: string | null
+          user_key: string
+        }
+        Insert: {
+          card_number_last4?: string | null
+          created_at?: string | null
+          currency?: string | null
+          current_balance: number
+          expiry_date?: string | null
+          id?: string
+          initial_balance: number
+          is_depleted?: boolean | null
+          merchant_name: string
+          notes?: string | null
+          photo_file_id?: string | null
+          purchase_date?: string | null
+          updated_at?: string | null
+          user_key: string
+        }
+        Update: {
+          card_number_last4?: string | null
+          created_at?: string | null
+          currency?: string | null
+          current_balance?: number
+          expiry_date?: string | null
+          id?: string
+          initial_balance?: number
+          is_depleted?: boolean | null
+          merchant_name?: string
+          notes?: string | null
+          photo_file_id?: string | null
+          purchase_date?: string | null
+          updated_at?: string | null
+          user_key?: string
+        }
+        Relationships: []
+      }
+      finance_linked_accounts: {
+        Row: {
+          account_mask: string | null
+          account_name: string | null
+          account_subtype: string | null
+          account_type: string | null
+          available_balance: number | null
+          created_at: string | null
+          currency: string | null
+          current_balance: number | null
+          error_code: string | null
+          error_message: string | null
+          id: string
+          institution_id: string | null
+          institution_logo: string | null
+          institution_name: string
+          is_active: boolean | null
+          last_synced_at: string | null
+          plaid_access_token: string
+          plaid_item_id: string
+          sync_cursor: string | null
+          updated_at: string | null
+          user_key: string
+        }
+        Insert: {
+          account_mask?: string | null
+          account_name?: string | null
+          account_subtype?: string | null
+          account_type?: string | null
+          available_balance?: number | null
+          created_at?: string | null
+          currency?: string | null
+          current_balance?: number | null
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          institution_id?: string | null
+          institution_logo?: string | null
+          institution_name: string
+          is_active?: boolean | null
+          last_synced_at?: string | null
+          plaid_access_token: string
+          plaid_item_id: string
+          sync_cursor?: string | null
+          updated_at?: string | null
+          user_key: string
+        }
+        Update: {
+          account_mask?: string | null
+          account_name?: string | null
+          account_subtype?: string | null
+          account_type?: string | null
+          available_balance?: number | null
+          created_at?: string | null
+          currency?: string | null
+          current_balance?: number | null
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          institution_id?: string | null
+          institution_logo?: string | null
+          institution_name?: string
+          is_active?: boolean | null
+          last_synced_at?: string | null
+          plaid_access_token?: string
+          plaid_item_id?: string
+          sync_cursor?: string | null
+          updated_at?: string | null
+          user_key?: string
+        }
+        Relationships: []
+      }
+      finance_portfolio: {
+        Row: {
+          average_cost: number | null
+          created_at: string | null
+          id: string
+          notes: string | null
+          purchase_date: string | null
+          shares: number
+          symbol: string
+          updated_at: string | null
+          user_key: string
+        }
+        Insert: {
+          average_cost?: number | null
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          purchase_date?: string | null
+          shares: number
+          symbol: string
+          updated_at?: string | null
+          user_key: string
+        }
+        Update: {
+          average_cost?: number | null
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          purchase_date?: string | null
+          shares?: number
+          symbol?: string
+          updated_at?: string | null
+          user_key?: string
+        }
+        Relationships: []
+      }
+      finance_settings: {
+        Row: {
+          created_at: string | null
+          default_currency: string | null
+          fiscal_month_start: number | null
+          hide_balances: boolean | null
+          id: string
+          show_cents: boolean | null
+          updated_at: string | null
+          user_key: string
+        }
+        Insert: {
+          created_at?: string | null
+          default_currency?: string | null
+          fiscal_month_start?: number | null
+          hide_balances?: boolean | null
+          id?: string
+          show_cents?: boolean | null
+          updated_at?: string | null
+          user_key: string
+        }
+        Update: {
+          created_at?: string | null
+          default_currency?: string | null
+          fiscal_month_start?: number | null
+          hide_balances?: boolean | null
+          id?: string
+          show_cents?: boolean | null
+          updated_at?: string | null
+          user_key?: string
+        }
+        Relationships: []
+      }
+      finance_subscriptions: {
+        Row: {
+          amount: number
+          cancellation_date: string | null
+          cancellation_notes: string | null
+          category: string | null
+          created_at: string | null
+          currency: string | null
+          first_billing_date: string | null
+          frequency: string
+          id: string
+          is_active: boolean | null
+          is_manual: boolean | null
+          last_billing_date: string | null
+          linked_account_id: string | null
+          merchant_name: string
+          next_billing_date: string | null
+          notes: string | null
+          plaid_stream_id: string | null
+          previous_amount: number | null
+          price_increased: boolean | null
+          remind_before_days: number | null
+          updated_at: string | null
+          user_key: string
+          website_url: string | null
+        }
+        Insert: {
+          amount: number
+          cancellation_date?: string | null
+          cancellation_notes?: string | null
+          category?: string | null
+          created_at?: string | null
+          currency?: string | null
+          first_billing_date?: string | null
+          frequency?: string
+          id?: string
+          is_active?: boolean | null
+          is_manual?: boolean | null
+          last_billing_date?: string | null
+          linked_account_id?: string | null
+          merchant_name: string
+          next_billing_date?: string | null
+          notes?: string | null
+          plaid_stream_id?: string | null
+          previous_amount?: number | null
+          price_increased?: boolean | null
+          remind_before_days?: number | null
+          updated_at?: string | null
+          user_key: string
+          website_url?: string | null
+        }
+        Update: {
+          amount?: number
+          cancellation_date?: string | null
+          cancellation_notes?: string | null
+          category?: string | null
+          created_at?: string | null
+          currency?: string | null
+          first_billing_date?: string | null
+          frequency?: string
+          id?: string
+          is_active?: boolean | null
+          is_manual?: boolean | null
+          last_billing_date?: string | null
+          linked_account_id?: string | null
+          merchant_name?: string
+          next_billing_date?: string | null
+          notes?: string | null
+          plaid_stream_id?: string | null
+          previous_amount?: number | null
+          price_increased?: boolean | null
+          remind_before_days?: number | null
+          updated_at?: string | null
+          user_key?: string
+          website_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_subscriptions_linked_account_id_fkey"
+            columns: ["linked_account_id"]
+            isOneToOne: false
+            referencedRelation: "finance_linked_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_transactions: {
+        Row: {
+          amount: number
+          category: string | null
+          category_detailed: string | null
+          created_at: string | null
+          currency: string | null
+          date: string
+          id: string
+          is_manual: boolean | null
+          is_recurring: boolean | null
+          linked_account_id: string | null
+          location_city: string | null
+          location_state: string | null
+          merchant_name: string | null
+          name: string
+          notes: string | null
+          payment_channel: string | null
+          pending: boolean | null
+          plaid_transaction_id: string | null
+          project_id: string | null
+          receipt_file_id: string | null
+          recurring_stream_id: string | null
+          tags: string[] | null
+          task_id: string | null
+          updated_at: string | null
+          user_key: string
+        }
+        Insert: {
+          amount: number
+          category?: string | null
+          category_detailed?: string | null
+          created_at?: string | null
+          currency?: string | null
+          date: string
+          id?: string
+          is_manual?: boolean | null
+          is_recurring?: boolean | null
+          linked_account_id?: string | null
+          location_city?: string | null
+          location_state?: string | null
+          merchant_name?: string | null
+          name: string
+          notes?: string | null
+          payment_channel?: string | null
+          pending?: boolean | null
+          plaid_transaction_id?: string | null
+          project_id?: string | null
+          receipt_file_id?: string | null
+          recurring_stream_id?: string | null
+          tags?: string[] | null
+          task_id?: string | null
+          updated_at?: string | null
+          user_key: string
+        }
+        Update: {
+          amount?: number
+          category?: string | null
+          category_detailed?: string | null
+          created_at?: string | null
+          currency?: string | null
+          date?: string
+          id?: string
+          is_manual?: boolean | null
+          is_recurring?: boolean | null
+          linked_account_id?: string | null
+          location_city?: string | null
+          location_state?: string | null
+          merchant_name?: string | null
+          name?: string
+          notes?: string | null
+          payment_channel?: string | null
+          pending?: boolean | null
+          plaid_transaction_id?: string | null
+          project_id?: string | null
+          receipt_file_id?: string | null
+          recurring_stream_id?: string | null
+          tags?: string[] | null
+          task_id?: string | null
+          updated_at?: string | null
+          user_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "finance_transactions_linked_account_id_fkey"
+            columns: ["linked_account_id"]
+            isOneToOne: false
+            referencedRelation: "finance_linked_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_transactions_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "finance_transactions_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_watchlist: {
+        Row: {
+          added_at: string | null
+          alert_enabled: boolean | null
+          id: string
+          name: string | null
+          notes: string | null
+          symbol: string
+          target_price_high: number | null
+          target_price_low: number | null
+          user_key: string
+        }
+        Insert: {
+          added_at?: string | null
+          alert_enabled?: boolean | null
+          id?: string
+          name?: string | null
+          notes?: string | null
+          symbol: string
+          target_price_high?: number | null
+          target_price_low?: number | null
+          user_key: string
+        }
+        Update: {
+          added_at?: string | null
+          alert_enabled?: boolean | null
+          id?: string
+          name?: string | null
+          notes?: string | null
+          symbol?: string
+          target_price_high?: number | null
+          target_price_low?: number | null
+          user_key?: string
+        }
+        Relationships: []
+      }
       google_calendar_selections: {
         Row: {
           calendar_color: string | null

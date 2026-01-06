@@ -53,3 +53,12 @@ verify_jwt = false
 
 [functions.google-workspace-api]
 verify_jwt = false
+
+[functions.plaid-api]
+verify_jwt = false
+
+[functions.stocks-api]
+verify_jwt = false
+
+[functions.plaid-webhook]
+verify_jwt = false
