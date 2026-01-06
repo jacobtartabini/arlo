@@ -3,14 +3,36 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, PanelLeftClose, PanelLeft, LogIn, Loader2 } from "lucide-react";
+import { PanelLeftClose, PanelLeft, LogIn, Loader2, Download, Share2, FileUp } from "lucide-react";
 import { NotesSidebar } from "@/components/notes/NotesSidebar";
 import { NoteCanvas } from "@/components/notes/NoteCanvas";
 import { PageNoteEditor } from "@/components/notes/PageNoteEditor";
 import { CreateNoteDialog } from "@/components/notes/CreateNoteDialog";
-import type { Note, NoteType } from "@/types/notes";
+import { CreateFolderDialog } from "@/components/notes/CreateFolderDialog";
+import type { Note, NoteType, PageMode } from "@/types/notes";
 import { useNotesPersistence } from "@/hooks/useNotesPersistence";
 import { toast } from "sonner";
+
+// Handle PDF file import from share target
+async function handleSharedFile(): Promise<File | null> {
+  // Check if there's a shared file (from PWA share target)
+  if ('launchQueue' in window) {
+    return new Promise((resolve) => {
+      (window as any).launchQueue.setConsumer(async (launchParams: any) => {
+        if (launchParams.files && launchParams.files.length > 0) {
+          const fileHandle = launchParams.files[0];
+          const file = await fileHandle.getFile();
+          resolve(file);
+        } else {
+          resolve(null);
+        }
+      });
+      // If no file after a short delay, resolve null
+      setTimeout(() => resolve(null), 100);
+    });
+  }
+  return null;
+}
 
 export default function Notes() {
   const navigate = useNavigate();
@@ -19,6 +41,7 @@ export default function Notes() {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
 
   const {
     notes,
@@ -50,12 +73,39 @@ export default function Notes() {
     }
   }, [location.state]);
 
-  // Auto-select first note when notes load
+  // Auto-select first note when notes load (or most recently edited)
   useEffect(() => {
     if (!isLoading && notes.length > 0 && !selectedNoteId) {
-      setSelectedNoteId(notes[0].id);
+      // Select the most recently updated note
+      const mostRecent = [...notes].sort(
+        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      )[0];
+      setSelectedNoteId(mostRecent.id);
     }
   }, [isLoading, notes, selectedNoteId]);
+
+  // Handle shared PDF files (from PWA share target)
+  useEffect(() => {
+    const checkForSharedFile = async () => {
+      const file = await handleSharedFile();
+      if (file && file.type === 'application/pdf') {
+        // Create a new page note in write mode for PDF annotation
+        const newNote = await createNote({
+          noteType: 'page',
+          pageMode: 'write',
+          title: file.name.replace('.pdf', ''),
+        });
+        if (newNote) {
+          setSelectedNoteId(newNote.id);
+          toast.success(`Imported ${file.name} - Ready for annotation`);
+        }
+      }
+    };
+    
+    if (isAuthenticated && !isLoading) {
+      checkForSharedFile();
+    }
+  }, [isAuthenticated, isLoading, createNote]);
 
   const selectedNote = notes.find((n) => n.id === selectedNoteId) || null;
 
@@ -63,8 +113,8 @@ export default function Notes() {
     setCreateDialogOpen(true);
   }, []);
 
-  const handleCreateNote = useCallback(async (noteType: NoteType, folderId?: string) => {
-    const newNote = await createNote({ noteType, folderId });
+  const handleCreateNote = useCallback(async (noteType: NoteType, folderId?: string, pageMode?: PageMode) => {
+    const newNote = await createNote({ noteType, folderId, pageMode });
     if (newNote) {
       setSelectedNoteId(newNote.id);
       if (folderId) {
@@ -115,13 +165,14 @@ export default function Notes() {
     }
   }, [notes, saveNote]);
 
-  const handleCreateFolder = useCallback(async () => {
-    const name = prompt("Enter folder name:");
-    if (name?.trim()) {
-      const folder = await createFolder(name.trim());
-      if (folder) {
-        toast.success(`Folder "${folder.name}" created`);
-      }
+  const handleOpenCreateFolderDialog = useCallback(() => {
+    setCreateFolderDialogOpen(true);
+  }, []);
+
+  const handleCreateFolder = useCallback(async (name: string, color: string) => {
+    const folder = await createFolder(name, color);
+    if (folder) {
+      toast.success(`Folder "${folder.name}" created`);
     }
   }, [createFolder]);
 
@@ -167,6 +218,37 @@ export default function Notes() {
     [selectedNote, saveNote]
   );
 
+  // Export note as PDF (using browser print)
+  const handleExportPdf = useCallback(() => {
+    if (!selectedNote) return;
+    
+    // For now, use print dialog which allows saving as PDF
+    window.print();
+    toast.success("Use 'Save as PDF' in the print dialog");
+  }, [selectedNote]);
+
+  // Native share
+  const handleShare = useCallback(async () => {
+    if (!selectedNote) return;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: selectedNote.title,
+          text: `Check out my note: ${selectedNote.title}`,
+        });
+      } catch (err) {
+        // User cancelled or error
+        if ((err as Error).name !== 'AbortError') {
+          toast.error("Failed to share");
+        }
+      }
+    } else {
+      // Fallback - copy link to clipboard
+      toast.info("Share is not supported on this device");
+    }
+  }, [selectedNote]);
+
   // Loading state
   if (isLoading) {
     return (
@@ -198,31 +280,33 @@ export default function Notes() {
   }
 
   return (
-    <div className="flex h-screen bg-background">
-      {/* Sidebar */}
+    <div className="flex h-screen bg-background print:bg-white">
+      {/* Sidebar - hidden in print */}
       {sidebarOpen && (
-        <NotesSidebar
-          notes={notes}
-          folders={folders}
-          selectedNoteId={selectedNoteId}
-          selectedFolderId={selectedFolderId}
-          onSelectNote={setSelectedNoteId}
-          onSelectFolder={setSelectedFolderId}
-          onCreateNote={handleOpenCreateDialog}
-          onCreateFolder={handleCreateFolder}
-          onDeleteNote={handleDeleteNote}
-          onDuplicateNote={handleDuplicateNote}
-          onTogglePin={handleTogglePin}
-          onRenameNote={handleRenameNote}
-          onMoveToFolder={handleMoveToFolder}
-          onDeleteFolder={handleDeleteFolder}
-        />
+        <div className="print:hidden">
+          <NotesSidebar
+            notes={notes}
+            folders={folders}
+            selectedNoteId={selectedNoteId}
+            selectedFolderId={selectedFolderId}
+            onSelectNote={setSelectedNoteId}
+            onSelectFolder={setSelectedFolderId}
+            onCreateNote={handleOpenCreateDialog}
+            onCreateFolder={handleOpenCreateFolderDialog}
+            onDeleteNote={handleDeleteNote}
+            onDuplicateNote={handleDuplicateNote}
+            onTogglePin={handleTogglePin}
+            onRenameNote={handleRenameNote}
+            onMoveToFolder={handleMoveToFolder}
+            onDeleteFolder={handleDeleteFolder}
+          />
+        </div>
       )}
 
       {/* Main content */}
       <div className="flex flex-1 flex-col min-w-0">
-        {/* Header */}
-        <header className="flex items-center justify-between border-b border-border/40 bg-card/30 px-4 py-3 backdrop-blur-sm">
+        {/* Header - hidden in print */}
+        <header className="flex items-center justify-between border-b border-border/40 bg-card/30 px-4 py-3 backdrop-blur-sm print:hidden">
           <div className="flex items-center gap-3">
             <Button
               variant="ghost"
@@ -236,21 +320,14 @@ export default function Notes() {
                 <PanelLeft className="h-4 w-4" />
               )}
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-2 text-muted-foreground"
-              onClick={() => navigate("/notes-dashboard")}
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Dashboard
-            </Button>
           </div>
           
           {selectedNote && (
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground bg-muted/50 px-2 py-0.5 rounded">
-                {selectedNote.noteType}
+                {selectedNote.noteType === "page" && selectedNote.pageMode 
+                  ? `${selectedNote.pageMode} mode`
+                  : selectedNote.noteType}
               </span>
               <h1 className="text-sm font-medium text-foreground truncate max-w-[300px]">
                 {selectedNote.title}
@@ -258,7 +335,30 @@ export default function Notes() {
             </div>
           )}
           
-          <div className="w-24" /> {/* Spacer for balance */}
+          <div className="flex items-center gap-1">
+            {selectedNote && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-lg"
+                  onClick={handleExportPdf}
+                  title="Export as PDF"
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-lg"
+                  onClick={handleShare}
+                  title="Share"
+                >
+                  <Share2 className="h-4 w-4" />
+                </Button>
+              </>
+            )}
+          </div>
         </header>
 
         {/* Editor area */}
@@ -297,6 +397,13 @@ export default function Notes() {
         onCreateNote={handleCreateNote}
         folders={folders}
         defaultFolderId={selectedFolderId ?? undefined}
+      />
+
+      {/* Create Folder Dialog */}
+      <CreateFolderDialog
+        open={createFolderDialogOpen}
+        onOpenChange={setCreateFolderDialogOpen}
+        onCreateFolder={handleCreateFolder}
       />
     </div>
   );

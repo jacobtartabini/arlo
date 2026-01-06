@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { dataApiHelpers } from '@/lib/data-api';
 import { useAuth } from '@/providers/AuthProvider';
-import type { Note, NoteFolder } from '@/types/notes';
+import type { Note, NoteFolder, PageMode } from '@/types/notes';
 import { toast } from 'sonner';
 
 interface DbNote {
@@ -17,6 +17,7 @@ interface DbNote {
   zoom: number;
   pan_x: number;
   pan_y: number;
+  page_mode: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -42,6 +43,7 @@ const dbToNote = (dbNote: DbNote): Note => ({
   zoom: dbNote.zoom,
   panX: dbNote.pan_x,
   panY: dbNote.pan_y,
+  pageMode: (dbNote.page_mode as PageMode) ?? undefined,
   createdAt: dbNote.created_at,
   updatedAt: dbNote.updated_at,
 });
@@ -58,6 +60,7 @@ const noteToDb = (note: Partial<Note> & { id?: string }) => ({
   zoom: note.zoom ?? 1,
   pan_x: note.panX ?? 0,
   pan_y: note.panY ?? 0,
+  page_mode: note.pageMode ?? null,
 });
 
 // Transform DB folder to app NoteFolder type
