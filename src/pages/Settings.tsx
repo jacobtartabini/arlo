@@ -6,6 +6,7 @@ import CalendarIntegrations from '@/components/settings/CalendarIntegrations';
 import InboxSettings from '@/components/settings/InboxSettings';
 import MorningWakeupSettings from '@/components/settings/MorningWakeupSettings';
 import DriveIntegrations from '@/components/settings/DriveIntegrations';
+import VoiceSettings from '@/components/settings/VoiceSettings';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -189,6 +190,11 @@ export default function Settings() {
               <InboxSettings />
             </CardContent>
           </Card>
+        </section>
+
+        {/* Voice Mode Settings */}
+        <section>
+          <VoiceSettings />
         </section>
 
         {/* AI Assistant Settings */}

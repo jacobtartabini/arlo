@@ -54,7 +54,7 @@ serve(async (req) => {
       );
     }
 
-    const finalVoiceId = voiceId || voiceSettings?.cartesia_voice_id || 'a0e99841-438c-4a64-b679-ae501e7d6091';
+    const finalVoiceId = voiceId || voiceSettings?.cartesia_voice_id || '3faa81ae-d3d8-4ab1-9e44-e50e46d33c30';
     const finalModel = model || voiceSettings?.cartesia_model || 'sonic-english';
 
     // Call Cartesia TTS API
