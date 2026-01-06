@@ -51,7 +51,9 @@ import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { LocationAutocomplete } from "@/components/LocationAutocomplete";
 import { formatSlotLabel } from "@/lib/calendar-data";
-import type { BookingSlot, CalendarEvent, EventRecurrence, Task } from "@/lib/calendar-data";
+import type { BookingSlot, CalendarEvent, EventRecurrence, Task as CalendarTask } from "@/lib/calendar-data";
+import { useTasksPersistence } from "@/hooks/useTasksPersistence";
+import type { Task as ProductivityTask } from "@/types/productivity";
 
 import { CalendarTimeline } from "./calendar/components/CalendarTimeline";
 import { CalendarMonthGrid } from "./calendar/components/CalendarMonthGrid";
@@ -98,11 +100,38 @@ const CalendarPage: React.FC = () => {
   const [view, setView] = React.useState<CalendarView>("week");
   const [selectedDate, setSelectedDate] = React.useState(new Date());
   const [events, setEvents, bookings, setBookings, isCalendarLoading, isCalendarAuthenticated] = useCalendarDatabase();
+  const { fetchTasks } = useTasksPersistence();
+  const [scheduledTasks, setScheduledTasks] = React.useState<CalendarTask[]>([]);
   const [draft, setDraft] = React.useState<DraftState>(DEFAULT_DRAFT);
   const [isDialogOpen, setDialogOpen] = React.useState(false);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const [selectedBlock, setSelectedBlock] = React.useState<SelectedBlockState | null>(null);
   const [editingContext, setEditingContext] = React.useState<{ kind: DraftKind; id: string } | null>(null);
+
+  // Load scheduled tasks
+  React.useEffect(() => {
+    if (!isCalendarAuthenticated) return;
+    
+    const loadScheduledTasks = async () => {
+      const tasks = await fetchTasks();
+      // Filter to only include scheduled tasks that are not done and map to calendar Task type
+      const scheduled: CalendarTask[] = tasks
+        .filter(t => t.scheduledDate && !t.done)
+        .map(t => ({
+          id: t.id,
+          title: t.title,
+          description: t.description,
+          priority: t.priority >= 2 ? 'high' : t.priority === 1 ? 'medium' : 'low' as CalendarTask['priority'],
+          category: 'work' as CalendarTask['category'],
+          dueDate: t.scheduledDate?.toISOString().split('T')[0],
+          completed: t.done,
+          estimatedTime: t.timeEstimateMinutes,
+        }));
+      setScheduledTasks(scheduled);
+    };
+    
+    loadScheduledTasks();
+  }, [isCalendarAuthenticated, fetchTasks, events]); // Re-fetch when events change
 
   const timezone = React.useMemo(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -278,10 +307,18 @@ const CalendarPage: React.FC = () => {
     [visibleRange]
   );
 
-  // Tasks are not used in this calendar view - we only show calendar events and bookings
+  // Group scheduled tasks by date
   const tasksByDay = React.useMemo(() => {
-    return new Map<string, Task[]>();
-  }, []);
+    const map = new Map<string, CalendarTask[]>();
+    scheduledTasks.forEach(task => {
+      if (task.dueDate) {
+        const key = task.dueDate; // Already in yyyy-MM-dd format
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push(task);
+      }
+    });
+    return map;
+  }, [scheduledTasks]);
 
   const focusBlocks = React.useMemo<CalendarDayBlocks[]>(() => {
     if (view === "month") return [];

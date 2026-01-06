@@ -4,7 +4,7 @@ import { format, differenceInDays, eachDayOfInterval } from "date-fns";
 import {
   ArrowLeft, Plane, MapPin, Calendar, DollarSign, 
   List, Plus, RefreshCw,
-  Bookmark, Clock, CheckCircle2
+  Bookmark, Clock, CheckCircle2, Folder
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -27,6 +27,7 @@ import { TripPlanningAssistant } from "@/components/travel/TripPlanningAssistant
 import { FlightExplorer } from "@/components/travel/FlightExplorer";
 import { AddDestinationDialog } from "@/components/travel/AddDestinationDialog";
 import { MapProvider } from "@/components/maps/MapProvider";
+import { LinkedFilesSection } from "@/components/files/LinkedFilesSection";
 import { cn } from "@/lib/utils";
 
 export default function TripDetail() {
@@ -211,6 +212,10 @@ export default function TripDetail() {
               <TabsTrigger value="budget" className="gap-2">
                 <DollarSign className="h-4 w-4" />
                 Budget
+              </TabsTrigger>
+              <TabsTrigger value="files" className="gap-2">
+                <Folder className="h-4 w-4" />
+                Files
               </TabsTrigger>
             </TabsList>
 
@@ -555,6 +560,16 @@ export default function TripDetail() {
                   if (success) setExpenses(prev => prev.filter(e => e.id !== id));
                   return success;
                 }}
+              />
+            </TabsContent>
+
+            {/* Files Tab */}
+            <TabsContent value="files">
+              <LinkedFilesSection
+                entityType="trip"
+                entityId={tripId!}
+                entityName={trip.name}
+                entityDescription={`Trip to ${primaryDestination?.name || 'destination'}`}
               />
             </TabsContent>
           </Tabs>

@@ -727,6 +727,33 @@ Deno.serve(async (req) => {
       return jsonResponse(req, result);
     }
 
+    // Push task to Google Calendar (task-calendar sync)
+    if (action === "push_task") {
+      const { task, taskAction } = body;
+
+      const { data: integration, error: fetchError } = await supabase
+        .from("calendar_integrations")
+        .select("*")
+        .eq("user_key", userKey)
+        .eq("provider", "google")
+        .single();
+
+      if (fetchError || !integration) {
+        // No Google Calendar connected - silently skip
+        return jsonResponse(req, { success: false, error: "Google Calendar not connected" });
+      }
+
+      // Use the same push function but mark the event source as arlo_task
+      const taskEvent = {
+        ...task,
+        external_id: task.external_id ? `task::${task.external_id}` : null,
+      };
+
+      const result = await pushEventToGoogle(integration, taskEvent, taskAction);
+      
+      return jsonResponse(req, result);
+    }
+
     return errorResponse(req, "Invalid action", 400);
   } catch (error) {
     console.error("[calendar-sync] Error:", error);

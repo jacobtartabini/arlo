@@ -6,3 +6,5 @@ export { ConnectDriveDialog } from './ConnectDriveDialog';
 export { FileBreadcrumbs } from './FileBreadcrumbs';
 export { FileSortDropdown } from './FileSortDropdown';
 export { EmbeddedFileViewer } from './EmbeddedFileViewer';
+export { LinkedFilesSection } from './LinkedFilesSection';
+export { LinkFileDialog } from './LinkFileDialog';
