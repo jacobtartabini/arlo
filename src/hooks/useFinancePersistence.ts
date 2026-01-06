@@ -166,15 +166,13 @@ export function useFinancePersistence() {
   const { userKey, isAuthenticated } = useAuth();
   const [loading, setLoading] = useState(false);
 
-  const getToken = useCallback(() => getArloToken(), []);
-
   const apiRequest = useCallback(async (
     action: string,
     table: string,
     data?: Record<string, unknown>,
     options?: { showErrors?: boolean }
   ) => {
-    const token = getToken();
+    const token = await getArloToken();
     if (!isAuthenticated || !token || !userKey) {
       console.log('[useFinancePersistence] Not authenticated');
       return null;
@@ -204,14 +202,15 @@ export function useFinancePersistence() {
       }
       return null;
     }
-  }, [getToken, userKey, isAuthenticated]);
+  }, [userKey, isAuthenticated]);
 
   const plaidRequest = useCallback(async (
     action: string,
     data?: Record<string, unknown>
   ) => {
-    const token = getToken();
+    const token = await getArloToken();
     if (!isAuthenticated || !token) {
+      console.log('[useFinancePersistence] Plaid request skipped - not authenticated');
       return null;
     }
 
@@ -239,13 +238,13 @@ export function useFinancePersistence() {
     } finally {
       setLoading(false);
     }
-  }, [getToken, isAuthenticated]);
+  }, [isAuthenticated]);
 
   const stocksRequest = useCallback(async (
     action: string,
     data?: Record<string, unknown>
   ) => {
-    const token = getToken();
+    const token = await getArloToken();
     if (!isAuthenticated || !token) {
       return null;
     }
@@ -270,7 +269,7 @@ export function useFinancePersistence() {
       console.error('[useFinancePersistence] Stocks error:', error);
       return null;
     }
-  }, [getToken, isAuthenticated]);
+  }, [isAuthenticated]);
 
   // ==================== Linked Accounts ====================
   
