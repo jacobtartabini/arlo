@@ -12,18 +12,22 @@ interface PlacePrediction {
 }
 
 interface LocationAutocompleteProps {
-  value: string;
-  onChange: (value: string) => void;
+  value?: string;
+  onChange?: (value: string) => void;
+  onSelect?: (place: { placeId: string; name: string; address: string; lat: number; lng: number }) => void;
   placeholder?: string;
   className?: string;
 }
 
 export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
-  value,
+  value: controlledValue,
   onChange,
+  onSelect,
   placeholder = "Add location",
   className,
 }) => {
+  const [internalValue, setInternalValue] = React.useState("");
+  const value = controlledValue ?? internalValue;
   const [predictions, setPredictions] = React.useState<PlacePrediction[]>([]);
   const [isOpen, setIsOpen] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -64,7 +68,8 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
-    onChange(newValue);
+    setInternalValue(newValue);
+    onChange?.(newValue);
 
     // Debounce API calls
     if (debounceRef.current) {
@@ -75,10 +80,47 @@ export const LocationAutocomplete: React.FC<LocationAutocompleteProps> = ({
     }, 300);
   };
 
-  const handleSelect = (prediction: PlacePrediction) => {
-    onChange(prediction.description);
+  const handleSelect = async (prediction: PlacePrediction) => {
+    setInternalValue(prediction.description);
+    onChange?.(prediction.description);
     setPredictions([]);
     setIsOpen(false);
+
+    // If onSelect callback provided, fetch place details for coordinates
+    if (onSelect) {
+      try {
+        const { data } = await supabase.functions.invoke("maps-api", {
+          body: { action: "place-details", placeId: prediction.placeId },
+        });
+        if (data?.result) {
+          onSelect({
+            placeId: prediction.placeId,
+            name: prediction.mainText,
+            address: prediction.description,
+            lat: data.result.geometry?.location?.lat ?? 0,
+            lng: data.result.geometry?.location?.lng ?? 0,
+          });
+        } else {
+          // Fallback without coordinates
+          onSelect({
+            placeId: prediction.placeId,
+            name: prediction.mainText,
+            address: prediction.description,
+            lat: 0,
+            lng: 0,
+          });
+        }
+      } catch (err) {
+        console.error("[LocationAutocomplete] Place details error:", err);
+        onSelect({
+          placeId: prediction.placeId,
+          name: prediction.mainText,
+          address: prediction.description,
+          lat: 0,
+          lng: 0,
+        });
+      }
+    }
   };
 
   // Close dropdown when clicking outside
