@@ -1270,6 +1270,7 @@ export type Database = {
           folder_id: string | null
           id: string
           note_type: string
+          page_mode: string | null
           pan_x: number
           pan_y: number
           pinned: boolean
@@ -1287,6 +1288,7 @@ export type Database = {
           folder_id?: string | null
           id?: string
           note_type?: string
+          page_mode?: string | null
           pan_x?: number
           pan_y?: number
           pinned?: boolean
@@ -1304,6 +1306,7 @@ export type Database = {
           folder_id?: string | null
           id?: string
           note_type?: string
+          page_mode?: string | null
           pan_x?: number
           pan_y?: number
           pinned?: boolean
