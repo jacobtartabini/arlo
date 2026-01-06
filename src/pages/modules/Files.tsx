@@ -165,8 +165,13 @@ export default function Files() {
 
   const handleFileClick = (file: DriveFile) => {
     if (canPreviewInApp(file.mime_type || '')) {
-      // Open in embedded viewer
-      setViewingFile(file);
+      // Open in embedded viewer - find account for this file
+      const fileAccount = accounts.find(a => a.account_email === file.account_email);
+      if (fileAccount) {
+        setViewingFile({ ...file, _accountId: fileAccount.id } as DriveFile & { _accountId: string });
+      } else {
+        setViewingFile(file);
+      }
     } else {
       // Show details panel
       setSelectedFile(file);
@@ -232,6 +237,7 @@ export default function Files() {
       {viewingFile && (
         <EmbeddedFileViewer
           file={viewingFile}
+          accountId={(viewingFile as DriveFile & { _accountId?: string })._accountId || selectedAccountId || undefined}
           onClose={() => setViewingFile(null)}
         />
       )}
@@ -460,7 +466,12 @@ export default function Files() {
               onOpenInDrive={() => handleOpenInDrive(selectedFile)}
               onPreview={() => {
                 if (canPreviewInApp(selectedFile.mime_type || '')) {
-                  setViewingFile(selectedFile);
+                  const fileAccount = accounts.find(a => a.account_email === selectedFile.account_email);
+                  if (fileAccount) {
+                    setViewingFile({ ...selectedFile, _accountId: fileAccount.id } as DriveFile & { _accountId: string });
+                  } else {
+                    setViewingFile(selectedFile);
+                  }
                 }
               }}
             />

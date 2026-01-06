@@ -50,3 +50,6 @@ verify_jwt = false
 
 [functions.drive-api]
 verify_jwt = false
+
+[functions.google-workspace-api]
+verify_jwt = false

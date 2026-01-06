@@ -3,23 +3,26 @@ import { X, ExternalLink, Download, Maximize2, Minimize2, Loader2 } from "lucide
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { DriveFile } from "@/types/files";
-import { getEmbedUrl, isGoogleWorkspaceFile } from "@/types/files";
+import { isGoogleWorkspaceFile } from "@/types/files";
+import { GoogleDocsViewer, GoogleSheetsViewer, GoogleSlidesViewer } from "./viewers";
 
 interface EmbeddedFileViewerProps {
   file: DriveFile;
+  accountId?: string;
   onClose: () => void;
 }
 
-export function EmbeddedFileViewer({ file, onClose }: EmbeddedFileViewerProps) {
+export function EmbeddedFileViewer({ file, accountId, onClose }: EmbeddedFileViewerProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
   const mimeType = file.mime_type || '';
   const isImage = mimeType.includes('image');
   const isPdf = mimeType === 'application/pdf';
+  const isGoogleDoc = mimeType === 'application/vnd.google-apps.document';
+  const isGoogleSheet = mimeType === 'application/vnd.google-apps.spreadsheet';
+  const isGoogleSlides = mimeType === 'application/vnd.google-apps.presentation';
   const isGoogleFile = isGoogleWorkspaceFile(mimeType);
-  
-  const embedUrl = getEmbedUrl(file);
   
   const handleOpenInDrive = () => {
     if (file.web_view_link) {
@@ -35,13 +38,16 @@ export function EmbeddedFileViewer({ file, onClose }: EmbeddedFileViewerProps) {
 
   // Get the file type label for display
   const getFileTypeLabel = () => {
-    if (mimeType.includes('document')) return 'Google Doc';
-    if (mimeType.includes('spreadsheet')) return 'Google Sheet';
-    if (mimeType.includes('presentation')) return 'Google Slides';
+    if (isGoogleDoc) return 'Google Doc';
+    if (isGoogleSheet) return 'Google Sheet';
+    if (isGoogleSlides) return 'Google Slides';
     if (isPdf) return 'PDF';
     if (isImage) return 'Image';
     return 'File';
   };
+
+  // Determine if we can render natively (with accountId for Google Workspace files)
+  const canRenderNatively = accountId && (isGoogleDoc || isGoogleSheet || isGoogleSlides);
 
   return (
     <div
@@ -110,39 +116,86 @@ export function EmbeddedFileViewer({ file, onClose }: EmbeddedFileViewerProps) {
         "relative flex-1 overflow-hidden bg-muted/30",
         isFullscreen && "pt-14"
       )}>
-        {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-background/80">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        {/* Native Google Docs Viewer */}
+        {isGoogleDoc && canRenderNatively && (
+          <GoogleDocsViewer
+            file={file}
+            accountId={accountId!}
+            onOpenInDrive={handleOpenInDrive}
+          />
+        )}
+
+        {/* Native Google Sheets Viewer */}
+        {isGoogleSheet && canRenderNatively && (
+          <GoogleSheetsViewer
+            file={file}
+            accountId={accountId!}
+            onOpenInDrive={handleOpenInDrive}
+          />
+        )}
+
+        {/* Native Google Slides Viewer */}
+        {isGoogleSlides && canRenderNatively && (
+          <GoogleSlidesViewer
+            file={file}
+            accountId={accountId!}
+            onOpenInDrive={handleOpenInDrive}
+          />
+        )}
+
+        {/* Image Viewer */}
+        {isImage && (
+          <>
+            {isLoading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-background/80">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            )}
+            <div className="flex h-full items-center justify-center p-4">
+              <img
+                src={file.thumbnail_url?.replace('=s220', '=s1600') || file.web_content_link || ''}
+                alt={file.name}
+                className="max-h-full max-w-full object-contain"
+                onLoad={() => setIsLoading(false)}
+                onError={() => setIsLoading(false)}
+              />
+            </div>
+          </>
+        )}
+
+        {/* PDF Viewer - use Google's preview as fallback */}
+        {isPdf && file.web_view_link && (
+          <>
+            {isLoading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-background/80">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            )}
+            <iframe
+              src={`${file.web_view_link.replace('/view', '/preview')}`}
+              className="h-full w-full border-0"
+              title={file.name}
+              onLoad={() => setIsLoading(false)}
+              allow="autoplay"
+            />
+          </>
+        )}
+
+        {/* Google Workspace files without accountId - fallback message */}
+        {isGoogleFile && !canRenderNatively && (
+          <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
+            <p className="text-muted-foreground">
+              Unable to load native editor. Missing account information.
+            </p>
+            <Button onClick={handleOpenInDrive}>
+              <ExternalLink className="mr-2 h-4 w-4" />
+              Open in Google Drive
+            </Button>
           </div>
         )}
 
-        {isImage ? (
-          <div className="flex h-full items-center justify-center p-4">
-            <img
-              src={file.thumbnail_url?.replace('=s220', '=s1600') || file.web_content_link || ''}
-              alt={file.name}
-              className="max-h-full max-w-full object-contain"
-              onLoad={() => setIsLoading(false)}
-              onError={() => setIsLoading(false)}
-            />
-          </div>
-        ) : isPdf && file.web_view_link ? (
-          <iframe
-            src={`${file.web_view_link.replace('/view', '/preview')}`}
-            className="h-full w-full border-0"
-            title={file.name}
-            onLoad={() => setIsLoading(false)}
-            allow="autoplay"
-          />
-        ) : isGoogleFile && embedUrl ? (
-          <iframe
-            src={embedUrl}
-            className="h-full w-full border-0"
-            title={file.name}
-            onLoad={() => setIsLoading(false)}
-            allow="autoplay"
-          />
-        ) : (
+        {/* Unsupported file types */}
+        {!isImage && !isPdf && !isGoogleFile && (
           <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
             <p className="text-muted-foreground">
               This file type cannot be previewed directly.
