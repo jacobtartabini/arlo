@@ -68,7 +68,7 @@ export function useTasksPersistence() {
         priority?: number;
       }
     ): Promise<Task | null> => {
-      if (!isAuthenticated()) return null;
+      // Note: dataApiHelpers.insert handles auth internally via getArloToken()
 
       const { data, error } = await dataApiHelpers.insert<DbTask>("tasks", {
         title,
@@ -97,7 +97,7 @@ export function useTasksPersistence() {
       id: string,
       updates: Partial<Omit<Task, "id" | "createdAt" | "updatedAt">>
     ): Promise<boolean> => {
-      if (!isAuthenticated()) return false;
+      // Note: dataApiHelpers.update handles auth internally via getArloToken()
 
       const dbUpdates: Record<string, unknown> = {};
       if (updates.title !== undefined) dbUpdates.title = updates.title;
@@ -128,7 +128,7 @@ export function useTasksPersistence() {
   );
 
   const deleteTask = useCallback(async (id: string): Promise<boolean> => {
-    if (!isAuthenticated()) return false;
+    // Note: dataApiHelpers.delete handles auth internally via getArloToken()
 
     const { error } = await dataApiHelpers.delete("tasks", id);
 
