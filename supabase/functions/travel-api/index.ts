@@ -38,12 +38,27 @@ interface FlightSearchRequest {
   maxPrice?: number;
 }
 
+interface HotelSearchRequest {
+  action: 'hotel_search';
+  cityCode: string;
+  checkInDate: string;
+  checkOutDate: string;
+  adults?: number;
+  radius?: number;
+  radiusUnit?: 'KM' | 'MILE';
+}
+
+interface AirportSearchRequest {
+  action: 'airport_search';
+  keyword: string;
+}
+
 interface ParseReservationRequest {
   action: 'parse_reservation';
   text: string;
 }
 
-type RequestBody = WeatherRequest | CurrencyRequest | FlightSearchRequest | ParseReservationRequest;
+type RequestBody = WeatherRequest | CurrencyRequest | FlightSearchRequest | HotelSearchRequest | AirportSearchRequest | ParseReservationRequest;
 
 // Parse common reservation formats
 function parseReservationText(text: string): { type: string; data: Record<string, unknown> } | null {
@@ -223,12 +238,13 @@ Deno.serve(async (req) => {
       }
 
       case 'flight_search': {
-        const amadeusKey = Deno.env.get('AMADEUS_API_KEY');
-        const amadeusSecret = Deno.env.get('AMADEUS_API_SECRET');
+        const amadeusKey = Deno.env.get('AMADEUS_CLIENT_ID');
+        const amadeusSecret = Deno.env.get('AMADEUS_CLIENT_SECRET');
         
         if (!amadeusKey || !amadeusSecret) {
+          console.log('[travel-api] Amadeus not configured. AMADEUS_CLIENT_ID:', !!amadeusKey, 'AMADEUS_CLIENT_SECRET:', !!amadeusSecret);
           return jsonResponse(req, { 
-            error: 'Flight search not configured',
+            error: 'Flight search not configured. Please add AMADEUS_CLIENT_ID and AMADEUS_CLIENT_SECRET.',
             configured: false 
           });
         }
@@ -244,8 +260,10 @@ Deno.serve(async (req) => {
           });
           
           const tokenData = await tokenResponse.json();
+          console.log('[travel-api] Amadeus token response:', tokenData.access_token ? 'got token' : tokenData);
+          
           if (!tokenData.access_token) {
-            throw new Error('Failed to authenticate with Amadeus');
+            throw new Error('Failed to authenticate with Amadeus: ' + (tokenData.error_description || tokenData.error || 'Unknown error'));
           }
           
           // Search flights
@@ -255,6 +273,8 @@ Deno.serve(async (req) => {
           if (nonstop) searchUrl += `&nonStop=true`;
           if (maxPrice) searchUrl += `&maxPrice=${maxPrice}`;
           
+          console.log('[travel-api] Flight search URL:', searchUrl);
+          
           const searchResponse = await fetch(searchUrl, {
             headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
           });
@@ -262,6 +282,7 @@ Deno.serve(async (req) => {
           const searchData = await searchResponse.json();
           
           if (searchData.errors) {
+            console.error('[travel-api] Amadeus search errors:', searchData.errors);
             throw new Error(searchData.errors[0]?.detail || 'Flight search failed');
           }
           
@@ -293,10 +314,147 @@ Deno.serve(async (req) => {
             };
           });
           
+          console.log('[travel-api] Found', flights.length, 'flights');
           return jsonResponse(req, { flights, configured: true });
         } catch (e) {
           console.error('[travel-api] Flight search error:', e);
-          return jsonResponse(req, { error: 'Failed to search flights', configured: true });
+          return jsonResponse(req, { error: e instanceof Error ? e.message : 'Failed to search flights', configured: true });
+        }
+      }
+
+      case 'hotel_search': {
+        const amadeusKey = Deno.env.get('AMADEUS_CLIENT_ID');
+        const amadeusSecret = Deno.env.get('AMADEUS_CLIENT_SECRET');
+        
+        if (!amadeusKey || !amadeusSecret) {
+          return jsonResponse(req, { 
+            error: 'Hotel search not configured',
+            configured: false 
+          });
+        }
+
+        const { cityCode, checkInDate, checkOutDate, adults = 1, radius = 50, radiusUnit = 'KM' } = body as HotelSearchRequest;
+        
+        try {
+          // Get access token
+          const tokenResponse = await fetch('https://api.amadeus.com/v1/security/oauth2/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `grant_type=client_credentials&client_id=${amadeusKey}&client_secret=${amadeusSecret}`,
+          });
+          
+          const tokenData = await tokenResponse.json();
+          if (!tokenData.access_token) {
+            throw new Error('Failed to authenticate with Amadeus');
+          }
+          
+          // First get hotels in the city
+          const hotelsUrl = `https://api.amadeus.com/v1/reference-data/locations/hotels/by-city?cityCode=${cityCode}&radius=${radius}&radiusUnit=${radiusUnit}&hotelSource=ALL`;
+          
+          const hotelsResponse = await fetch(hotelsUrl, {
+            headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
+          });
+          
+          const hotelsData = await hotelsResponse.json();
+          
+          if (hotelsData.errors) {
+            throw new Error(hotelsData.errors[0]?.detail || 'Hotel search failed');
+          }
+          
+          // Get up to 20 hotel IDs
+          const hotelIds = (hotelsData.data || []).slice(0, 20).map((h: { hotelId: string }) => h.hotelId);
+          
+          if (hotelIds.length === 0) {
+            return jsonResponse(req, { hotels: [], configured: true });
+          }
+          
+          // Get hotel offers
+          const offersUrl = `https://api.amadeus.com/v3/shopping/hotel-offers?hotelIds=${hotelIds.join(',')}&checkInDate=${checkInDate}&checkOutDate=${checkOutDate}&adults=${adults}&currency=USD`;
+          
+          const offersResponse = await fetch(offersUrl, {
+            headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
+          });
+          
+          const offersData = await offersResponse.json();
+          
+          if (offersData.errors) {
+            // Some hotels might not have availability, that's ok
+            console.log('[travel-api] Hotel offers errors:', offersData.errors);
+          }
+          
+          const hotels = (offersData.data || []).map((offer: { hotel: { hotelId: string; name: string; rating?: string; latitude?: number; longitude?: number; address?: { lines?: string[] } }; offers?: { id: string; price?: { total?: string; currency?: string }; room?: { description?: { text?: string } } }[] }) => ({
+            id: offer.hotel.hotelId,
+            name: offer.hotel.name,
+            rating: offer.hotel.rating ? parseInt(offer.hotel.rating) : null,
+            latitude: offer.hotel.latitude,
+            longitude: offer.hotel.longitude,
+            address: offer.hotel.address?.lines?.join(', '),
+            offers: (offer.offers || []).map((o: { id: string; price?: { total?: string; currency?: string }; room?: { description?: { text?: string } } }) => ({
+              id: o.id,
+              price: o.price?.total ? parseFloat(o.price.total) : null,
+              currency: o.price?.currency || 'USD',
+              roomDescription: o.room?.description?.text,
+            })),
+          }));
+          
+          return jsonResponse(req, { hotels, configured: true });
+        } catch (e) {
+          console.error('[travel-api] Hotel search error:', e);
+          return jsonResponse(req, { error: e instanceof Error ? e.message : 'Failed to search hotels', configured: true });
+        }
+      }
+
+      case 'airport_search': {
+        const amadeusKey = Deno.env.get('AMADEUS_CLIENT_ID');
+        const amadeusSecret = Deno.env.get('AMADEUS_CLIENT_SECRET');
+        
+        if (!amadeusKey || !amadeusSecret) {
+          return jsonResponse(req, { 
+            error: 'Airport search not configured',
+            configured: false 
+          });
+        }
+
+        const { keyword } = body as AirportSearchRequest;
+        
+        try {
+          // Get access token
+          const tokenResponse = await fetch('https://api.amadeus.com/v1/security/oauth2/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `grant_type=client_credentials&client_id=${amadeusKey}&client_secret=${amadeusSecret}`,
+          });
+          
+          const tokenData = await tokenResponse.json();
+          if (!tokenData.access_token) {
+            throw new Error('Failed to authenticate with Amadeus');
+          }
+          
+          // Search airports
+          const searchUrl = `https://api.amadeus.com/v1/reference-data/locations?keyword=${encodeURIComponent(keyword)}&subType=AIRPORT,CITY&page[limit]=10`;
+          
+          const searchResponse = await fetch(searchUrl, {
+            headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
+          });
+          
+          const searchData = await searchResponse.json();
+          
+          if (searchData.errors) {
+            throw new Error(searchData.errors[0]?.detail || 'Airport search failed');
+          }
+          
+          const locations = (searchData.data || []).map((loc: { iataCode: string; name: string; subType: string; address?: { cityName?: string; countryName?: string } }) => ({
+            code: loc.iataCode,
+            name: loc.name,
+            type: loc.subType,
+            city: loc.address?.cityName,
+            country: loc.address?.countryName,
+          }));
+          
+          return jsonResponse(req, { locations, configured: true });
+        } catch (e) {
+          console.error('[travel-api] Airport search error:', e);
+          return jsonResponse(req, { error: e instanceof Error ? e.message : 'Failed to search airports', configured: true });
         }
       }
 
