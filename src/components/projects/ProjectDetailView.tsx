@@ -36,6 +36,7 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { DraggableTaskList } from "./DraggableTaskList";
 import { CreateTaskDialog } from "./CreateTaskDialog";
+import { LinkedFilesSection } from "@/components/files/LinkedFilesSection";
 import type { Project, ProjectStatus, Subtask } from "@/types/productivity";
 import type { Task } from "@/types/tasks";
 
@@ -235,6 +236,16 @@ export function ProjectDetailView({
         </div>
         <Progress value={progress} className="h-2" />
       </Card>
+
+      <Separator />
+
+      {/* Files Section */}
+      <LinkedFilesSection
+        entityType="project"
+        entityId={project.id}
+        entityName={project.name}
+        entityDescription={project.description}
+      />
 
       <Separator />
 

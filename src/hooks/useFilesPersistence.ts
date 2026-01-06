@@ -224,6 +224,24 @@ export function useFilesPersistence() {
     }
   }, [callEdgeFunction]);
 
+  // Get links for specific files (to display linked entity badges)
+  const getFileLinks = useCallback(async (
+    driveFileIds: string[]
+  ): Promise<Array<{ drive_file_id_external: string; link_type: string; linked_entity_id: string }>> => {
+    if (driveFileIds.length === 0) return [];
+    
+    try {
+      const data = await callEdgeFunction('drive-api', {
+        action: 'get_file_links',
+        driveFileIds,
+      });
+      return data.links || [];
+    } catch (err) {
+      console.error('Failed to get file links:', err);
+      return [];
+    }
+  }, [callEdgeFunction]);
+
   return {
     isLoading,
     error,
@@ -236,5 +254,6 @@ export function useFilesPersistence() {
     linkFile,
     unlinkFile,
     getLinkedFiles,
+    getFileLinks,
   };
 }

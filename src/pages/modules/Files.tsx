@@ -40,6 +40,7 @@ export default function Files() {
     listFiles,
     searchAllFiles,
     syncFiles,
+    getFileLinks,
   } = useFilesPersistence();
 
   const {
@@ -53,6 +54,7 @@ export default function Files() {
   // State
   const [accounts, setAccounts] = useState<DriveAccount[]>([]);
   const [files, setFiles] = useState<DriveFile[]>([]);
+  const [fileLinks, setFileLinks] = useState<Map<string, Array<{ link_type: string; linked_entity_id: string }>>>(new Map());
   const [selectedFile, setSelectedFile] = useState<DriveFile | null>(null);
   const [viewingFile, setViewingFile] = useState<DriveFile | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
@@ -100,6 +102,23 @@ export default function Files() {
     // Sort with folders first
     const sortedFiles = sortFilesWithFoldersFirst(data, sortOption);
     setFiles(sortedFiles);
+    
+    // Load links for these files
+    const driveFileIds = data.filter(f => !f.is_folder).map(f => f.drive_file_id);
+    if (driveFileIds.length > 0) {
+      const links = await getFileLinks(driveFileIds);
+      const linkMap = new Map<string, Array<{ link_type: string; linked_entity_id: string }>>();
+      for (const link of links) {
+        const key = link.drive_file_id_external;
+        if (!linkMap.has(key)) {
+          linkMap.set(key, []);
+        }
+        linkMap.get(key)!.push({ link_type: link.link_type, linked_entity_id: link.linked_entity_id });
+      }
+      setFileLinks(linkMap);
+    } else {
+      setFileLinks(new Map());
+    }
   };
 
   const handleSearch = useCallback(async () => {
@@ -425,6 +444,7 @@ export default function Files() {
                       onClick={() => handleFileClick(file)}
                       onOpenInDrive={() => handleOpenInDrive(file)}
                       onOpenFolder={handleOpenFolder}
+                      links={(fileLinks.get(file.drive_file_id) || []) as Array<{ link_type: 'project' | 'task' | 'trip' | 'event'; linked_entity_id: string }>}
                     />
                   ))}
                 </div>

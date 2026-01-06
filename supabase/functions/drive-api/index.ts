@@ -8,7 +8,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 interface DriveApiRequest {
-  action: 'list_files' | 'search_files' | 'get_file' | 'sync_files' | 'link_file' | 'unlink_file' | 'get_links';
+  action: 'list_files' | 'search_files' | 'get_file' | 'sync_files' | 'link_file' | 'unlink_file' | 'get_links' | 'get_all_links' | 'get_file_links';
   accountId?: string;
   query?: string;
   pageToken?: string;
@@ -18,6 +18,7 @@ interface DriveApiRequest {
   linkedEntityId?: string;
   mimeType?: string;
   folderId?: string;
+  driveFileIds?: string[];
 }
 
 interface DriveFile {
@@ -519,6 +520,75 @@ Deno.serve(async (req) => {
         }
 
         return jsonResponse(req, { links: links || [] });
+      }
+
+      case 'get_all_links': {
+        // Get all file links for a user (to display in /files)
+        const { data: links, error } = await supabase
+          .from('drive_file_links')
+          .select(`
+            id,
+            link_type,
+            linked_entity_id,
+            drive_file_id,
+            created_at
+          `)
+          .eq('user_key', userKey);
+
+        if (error) {
+          console.error('[drive-api] Failed to get all links:', error);
+          return errorResponse(req, 'Failed to get file links', 500);
+        }
+
+        return jsonResponse(req, { links: links || [] });
+      }
+
+      case 'get_file_links': {
+        // Get links for specific files by their drive_file_id
+        const { driveFileIds } = body;
+        
+        if (!driveFileIds || driveFileIds.length === 0) {
+          return jsonResponse(req, { links: [] });
+        }
+
+        // First get the internal file IDs
+        const { data: files } = await supabase
+          .from('drive_files')
+          .select('id, drive_file_id')
+          .eq('user_key', userKey)
+          .in('drive_file_id', driveFileIds);
+
+        if (!files || files.length === 0) {
+          return jsonResponse(req, { links: [] });
+        }
+
+        const fileIdMap = new Map(files.map(f => [f.id, f.drive_file_id]));
+        const internalIds = files.map(f => f.id);
+
+        // Get links for these files
+        const { data: links, error } = await supabase
+          .from('drive_file_links')
+          .select(`
+            id,
+            link_type,
+            linked_entity_id,
+            drive_file_id
+          `)
+          .eq('user_key', userKey)
+          .in('drive_file_id', internalIds);
+
+        if (error) {
+          console.error('[drive-api] Failed to get file links:', error);
+          return errorResponse(req, 'Failed to get file links', 500);
+        }
+
+        // Map back to drive_file_id for the frontend
+        const mappedLinks = (links || []).map(link => ({
+          ...link,
+          drive_file_id_external: fileIdMap.get(link.drive_file_id),
+        }));
+
+        return jsonResponse(req, { links: mappedLinks });
       }
 
       default:
