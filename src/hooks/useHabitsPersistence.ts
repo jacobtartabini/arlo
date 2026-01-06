@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { dataApiHelpers } from "@/lib/data-api";
 import { isAuthenticated } from "@/lib/arloAuth";
 import type { Habit, HabitLog, HabitWithStreak } from "@/types/habits";
@@ -36,14 +37,14 @@ const dbToHabit = (db: DbHabit): Habit => ({
   id: db.id,
   title: db.title,
   description: db.description ?? undefined,
-  icon: db.icon ?? 'check',
+  icon: db.icon ?? "check",
   category: db.category as Habit["category"],
-  habitType: (db.habit_type ?? 'check') as Habit["habitType"],
+  habitType: (db.habit_type ?? "check") as Habit["habitType"],
   targetValue: db.target_value ?? 1,
-  scheduleType: (db.schedule_type ?? 'daily') as Habit["scheduleType"],
+  scheduleType: (db.schedule_type ?? "daily") as Habit["scheduleType"],
   scheduleDays: db.schedule_days ?? [0, 1, 2, 3, 4, 5, 6],
   weeklyFrequency: db.weekly_frequency ?? 7,
-  difficulty: (db.difficulty ?? 'normal') as Habit["difficulty"],
+  difficulty: (db.difficulty ?? "normal") as Habit["difficulty"],
   routineId: db.routine_id ?? undefined,
   routineOrder: db.routine_order ?? 0,
   enabled: db.enabled,
@@ -100,17 +101,15 @@ const countLast7Days = (logs: HabitLog[]): number => {
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   sevenDaysAgo.setHours(0, 0, 0, 0);
 
-  return logs.filter(log => 
-    !log.skipped && log.completedAt >= sevenDaysAgo
-  ).length;
+  return logs.filter((log) => !log.skipped && log.completedAt >= sevenDaysAgo).length;
 };
 
 export function useHabitsPersistence() {
-  const fetchHabits = async (): Promise<Habit[]> => {
+  const fetchHabits = useCallback(async (): Promise<Habit[]> => {
     if (!isAuthenticated()) return [];
 
-    const { data, error } = await dataApiHelpers.select<DbHabit[]>('habits', {
-      order: { column: 'created_at', ascending: false },
+    const { data, error } = await dataApiHelpers.select<DbHabit[]>("habits", {
+      order: { column: "created_at", ascending: false },
     });
 
     if (error || !data) {
@@ -119,9 +118,24 @@ export function useHabitsPersistence() {
     }
 
     return data.map(dbToHabit);
-  };
+  }, []);
 
-  const fetchHabitsWithStreaks = async (): Promise<HabitWithStreak[]> => {
+  const fetchAllHabitLogs = useCallback(async (): Promise<HabitLog[]> => {
+    if (!isAuthenticated()) return [];
+
+    const { data, error } = await dataApiHelpers.select<DbHabitLog[]>("habit_logs", {
+      order: { column: "completed_at", ascending: false },
+    });
+
+    if (error || !data) {
+      console.error("Error fetching habit logs:", error);
+      return [];
+    }
+
+    return data.map(dbToHabitLog);
+  }, []);
+
+  const fetchHabitsWithStreaks = useCallback(async (): Promise<HabitWithStreak[]> => {
     // Fetch habits + logs in parallel to avoid serial timeouts
     const [habits, logs] = await Promise.all([fetchHabits(), fetchAllHabitLogs()]);
 
@@ -149,79 +163,70 @@ export function useHabitsPersistence() {
 
       return { ...habit, streak, lastCompleted, completedToday, last7Days };
     });
-  };
+  }, [fetchHabits, fetchAllHabitLogs]);
 
-  const fetchAllHabitLogs = async (): Promise<HabitLog[]> => {
-    if (!isAuthenticated()) return [];
+  const createHabit = useCallback(
+    async (
+      title: string,
+      description?: string,
+      category: Habit["category"] = "routine"
+    ): Promise<Habit | null> => {
+      if (!isAuthenticated()) return null;
 
-    const { data, error } = await dataApiHelpers.select<DbHabitLog[]>('habit_logs', {
-      order: { column: 'completed_at', ascending: false },
-    });
+      const { data, error } = await dataApiHelpers.insert<DbHabit>("habits", {
+        title,
+        description: description ?? null,
+        category,
+      });
 
-    if (error || !data) {
-      console.error("Error fetching habit logs:", error);
-      return [];
-    }
+      if (error || !data) {
+        console.error("Error creating habit:", error);
+        return null;
+      }
 
-    return data.map(dbToHabitLog);
-  };
+      return dbToHabit(data);
+    },
+    []
+  );
 
-  const createHabit = async (
-    title: string,
-    description?: string,
-    category: Habit["category"] = "routine"
-  ): Promise<Habit | null> => {
-    if (!isAuthenticated()) return null;
+  const updateHabit = useCallback(
+    async (
+      id: string,
+      updates: Partial<Omit<Habit, "id" | "createdAt" | "updatedAt">>
+    ): Promise<boolean> => {
+      if (!isAuthenticated()) return false;
 
-    const { data, error } = await dataApiHelpers.insert<DbHabit>('habits', {
-      title,
-      description: description ?? null,
-      category,
-    });
+      const dbUpdates: Record<string, unknown> = {};
+      if (updates.title !== undefined) dbUpdates.title = updates.title;
+      if (updates.description !== undefined) dbUpdates.description = updates.description;
+      if (updates.category !== undefined) dbUpdates.category = updates.category;
+      if (updates.enabled !== undefined) dbUpdates.enabled = updates.enabled;
+      if (updates.icon !== undefined) dbUpdates.icon = updates.icon;
+      if (updates.habitType !== undefined) dbUpdates.habit_type = updates.habitType;
+      if (updates.targetValue !== undefined) dbUpdates.target_value = updates.targetValue;
+      if (updates.scheduleType !== undefined) dbUpdates.schedule_type = updates.scheduleType;
+      if (updates.scheduleDays !== undefined) dbUpdates.schedule_days = updates.scheduleDays;
+      if (updates.weeklyFrequency !== undefined) dbUpdates.weekly_frequency = updates.weeklyFrequency;
+      if (updates.difficulty !== undefined) dbUpdates.difficulty = updates.difficulty;
+      if (updates.routineId !== undefined) dbUpdates.routine_id = updates.routineId;
+      if (updates.routineOrder !== undefined) dbUpdates.routine_order = updates.routineOrder;
 
-    if (error || !data) {
-      console.error("Error creating habit:", error);
-      return null;
-    }
+      const { error } = await dataApiHelpers.update("habits", id, dbUpdates);
 
-    return dbToHabit(data);
-  };
+      if (error) {
+        console.error("Error updating habit:", error);
+        return false;
+      }
 
-  const updateHabit = async (
-    id: string,
-    updates: Partial<Omit<Habit, "id" | "createdAt" | "updatedAt">>
-  ): Promise<boolean> => {
+      return true;
+    },
+    []
+  );
+
+  const deleteHabit = useCallback(async (id: string): Promise<boolean> => {
     if (!isAuthenticated()) return false;
 
-    const dbUpdates: Record<string, unknown> = {};
-    if (updates.title !== undefined) dbUpdates.title = updates.title;
-    if (updates.description !== undefined) dbUpdates.description = updates.description;
-    if (updates.category !== undefined) dbUpdates.category = updates.category;
-    if (updates.enabled !== undefined) dbUpdates.enabled = updates.enabled;
-    if (updates.icon !== undefined) dbUpdates.icon = updates.icon;
-    if (updates.habitType !== undefined) dbUpdates.habit_type = updates.habitType;
-    if (updates.targetValue !== undefined) dbUpdates.target_value = updates.targetValue;
-    if (updates.scheduleType !== undefined) dbUpdates.schedule_type = updates.scheduleType;
-    if (updates.scheduleDays !== undefined) dbUpdates.schedule_days = updates.scheduleDays;
-    if (updates.weeklyFrequency !== undefined) dbUpdates.weekly_frequency = updates.weeklyFrequency;
-    if (updates.difficulty !== undefined) dbUpdates.difficulty = updates.difficulty;
-    if (updates.routineId !== undefined) dbUpdates.routine_id = updates.routineId;
-    if (updates.routineOrder !== undefined) dbUpdates.routine_order = updates.routineOrder;
-
-    const { error } = await dataApiHelpers.update('habits', id, dbUpdates);
-
-    if (error) {
-      console.error("Error updating habit:", error);
-      return false;
-    }
-
-    return true;
-  };
-
-  const deleteHabit = async (id: string): Promise<boolean> => {
-    if (!isAuthenticated()) return false;
-
-    const { error } = await dataApiHelpers.delete('habits', id);
+    const { error } = await dataApiHelpers.delete("habits", id);
 
     if (error) {
       console.error("Error deleting habit:", error);
@@ -229,33 +234,33 @@ export function useHabitsPersistence() {
     }
 
     return true;
-  };
+  }, []);
 
-  const logHabitCompletion = async (
-    habitId: string,
-    notes?: string
-  ): Promise<HabitLog | null> => {
-    if (!isAuthenticated()) return null;
+  const logHabitCompletion = useCallback(
+    async (habitId: string, notes?: string): Promise<HabitLog | null> => {
+      if (!isAuthenticated()) return null;
 
-    const { data, error } = await dataApiHelpers.insert<DbHabitLog>('habit_logs', {
-      habit_id: habitId,
-      notes: notes ?? null,
-      value: 1,
-      skipped: false,
-    });
+      const { data, error } = await dataApiHelpers.insert<DbHabitLog>("habit_logs", {
+        habit_id: habitId,
+        notes: notes ?? null,
+        value: 1,
+        skipped: false,
+      });
 
-    if (error || !data) {
-      console.error("Error logging habit completion:", error);
-      return null;
-    }
+      if (error || !data) {
+        console.error("Error logging habit completion:", error);
+        return null;
+      }
 
-    return dbToHabitLog(data);
-  };
+      return dbToHabitLog(data);
+    },
+    []
+  );
 
-  const deleteHabitLog = async (logId: string): Promise<boolean> => {
+  const deleteHabitLog = useCallback(async (logId: string): Promise<boolean> => {
     if (!isAuthenticated()) return false;
 
-    const { error } = await dataApiHelpers.delete('habit_logs', logId);
+    const { error } = await dataApiHelpers.delete("habit_logs", logId);
 
     if (error) {
       console.error("Error deleting habit log:", error);
@@ -263,7 +268,7 @@ export function useHabitsPersistence() {
     }
 
     return true;
-  };
+  }, []);
 
   return {
     fetchHabits,
@@ -276,3 +281,4 @@ export function useHabitsPersistence() {
     deleteHabitLog,
   };
 }
+
