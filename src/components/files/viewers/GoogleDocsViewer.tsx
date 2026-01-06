@@ -3,8 +3,10 @@ import { Loader2, Save, RotateCcw, ExternalLink, AlertCircle } from "lucide-reac
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { getAuthHeaders } from "@/lib/arloAuth";
 import type { DriveFile } from "@/types/files";
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 interface GoogleDocsViewerProps {
   file: DriveFile;
@@ -84,15 +86,30 @@ export function GoogleDocsViewer({ file, accountId, onOpenInDrive }: GoogleDocsV
     setError(null);
     
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('google-workspace-api', {
-        body: {
+      const headers = await getAuthHeaders();
+      if (!headers) {
+        throw new Error('Not authenticated');
+      }
+
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/google-workspace-api`, {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           action: 'get_doc',
           accountId,
           fileId: file.drive_file_id,
-        },
+        }),
       });
 
-      if (fnError) throw fnError;
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Request failed' }));
+        throw new Error(err.error || 'Failed to load document');
+      }
+
+      const data = await response.json();
       if (data?.document) {
         setDocument(data.document);
         const content = extractTextContent(data.document);
@@ -154,16 +171,29 @@ export function GoogleDocsViewer({ file, accountId, onOpenInDrive }: GoogleDocsV
         });
       }
 
-      const { error: fnError } = await supabase.functions.invoke('google-workspace-api', {
-        body: {
+      const headers = await getAuthHeaders();
+      if (!headers) {
+        throw new Error('Not authenticated');
+      }
+
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/google-workspace-api`, {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           action: 'update_doc',
           accountId,
           fileId: file.drive_file_id,
           content: { requests },
-        },
+        }),
       });
 
-      if (fnError) throw fnError;
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Request failed' }));
+        throw new Error(err.error || 'Failed to save document');
+      }
       
       toast.success('Document saved');
       setOriginalContent(editableContent);
