@@ -1,37 +1,41 @@
 import { useEffect, useState, useCallback } from "react";
 import { Card } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { 
   CalendarCheck, 
-  CheckSquare, 
-  Flame, 
   FolderKanban,
+  ListTodo,
 } from "lucide-react";
 import { useTasksPersistence } from "@/hooks/useTasksPersistence";
 import { useProjectsPersistence } from "@/hooks/useProjectsPersistence";
+import { useSubtasksPersistence } from "@/hooks/useSubtasksPersistence";
 import { useHabitsPersistence } from "@/hooks/useHabitsPersistence";
 import { useNotificationsPersistence } from "@/hooks/useNotificationsPersistence";
 import { useProductivityRealtime } from "@/hooks/useRealtimeSubscription";
 import { supabase } from "@/integrations/supabase/client";
-import { ProjectList, ProjectDetailView } from "@/components/projects";
-import type { Task } from "@/types/productivity";
+import { ProjectList, ProjectDetailView, TaskListView } from "@/components/projects";
+import type { Task, Subtask } from "@/types/productivity";
 import type { Project, ProjectStatus } from "@/types/productivity";
 import type { HabitWithStreak } from "@/types/habits";
 import type { Notification } from "@/types/notifications";
 
 export default function Productivity() {
-  const { fetchTasks, toggleTask, fetchTasksForProject } = useTasksPersistence();
+  const { fetchTasks, toggleTask, fetchTasksForProject, updateTask } = useTasksPersistence();
   const { fetchProjects, updateProject, archiveProject } = useProjectsPersistence();
+  const { fetchSubtasksForTasks, toggleSubtask, createSubtask, deleteSubtask, updateSubtask } = useSubtasksPersistence();
   const { fetchHabitsWithStreaks } = useHabitsPersistence();
   const { fetchNotifications } = useNotificationsPersistence();
   
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectTasks, setProjectTasks] = useState<Task[]>([]);
+  const [projectSubtasks, setProjectSubtasks] = useState<Map<string, Subtask[]>>(new Map());
   const [habits, setHabits] = useState<HabitWithStreak[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [activeTab, setActiveTab] = useState<"projects" | "tasks">("projects");
 
   useEffect(() => {
     document.title = "Productivity – Arlo";
@@ -60,7 +64,15 @@ export default function Productivity() {
   const loadProjectTasks = useCallback(async (projectId: string) => {
     const tasks = await fetchTasksForProject(projectId);
     setProjectTasks(tasks);
-  }, [fetchTasksForProject]);
+    
+    // Load subtasks for project tasks
+    if (tasks.length > 0) {
+      const subtasks = await fetchSubtasksForTasks(tasks.map(t => t.id));
+      setProjectSubtasks(subtasks);
+    } else {
+      setProjectSubtasks(new Map());
+    }
+  }, [fetchTasksForProject, fetchSubtasksForTasks]);
 
   // Subscribe to realtime updates
   useProductivityRealtime({
@@ -111,6 +123,77 @@ export default function Productivity() {
     }
   };
 
+  const handleUpdateTask = async (taskId: string, updates: Partial<Task>) => {
+    setProjectTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates } : t));
+    await updateTask(taskId, updates);
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    setProjectTasks(prev => prev.filter(t => t.id !== taskId));
+    // Note: actual deletion handled by TaskListView
+  };
+
+  const handleSubtaskToggle = async (subtaskId: string, done: boolean) => {
+    setProjectSubtasks(prev => {
+      const newMap = new Map(prev);
+      for (const [taskId, subtasks] of newMap) {
+        const index = subtasks.findIndex(s => s.id === subtaskId);
+        if (index !== -1) {
+          const updated = [...subtasks];
+          updated[index] = { ...updated[index], done };
+          newMap.set(taskId, updated);
+          break;
+        }
+      }
+      return newMap;
+    });
+    await toggleSubtask(subtaskId, done);
+  };
+
+  const handleSubtaskCreate = async (taskId: string, title: string) => {
+    const subtask = await createSubtask(taskId, title);
+    if (subtask) {
+      setProjectSubtasks(prev => {
+        const newMap = new Map(prev);
+        const existing = newMap.get(taskId) || [];
+        newMap.set(taskId, [...existing, subtask]);
+        return newMap;
+      });
+    }
+  };
+
+  const handleSubtaskDelete = async (subtaskId: string) => {
+    setProjectSubtasks(prev => {
+      const newMap = new Map(prev);
+      for (const [taskId, subtasks] of newMap) {
+        const filtered = subtasks.filter(s => s.id !== subtaskId);
+        if (filtered.length !== subtasks.length) {
+          newMap.set(taskId, filtered);
+          break;
+        }
+      }
+      return newMap;
+    });
+    await deleteSubtask(subtaskId);
+  };
+
+  const handleSubtaskUpdate = async (subtaskId: string, title: string) => {
+    setProjectSubtasks(prev => {
+      const newMap = new Map(prev);
+      for (const [taskId, subtasks] of newMap) {
+        const index = subtasks.findIndex(s => s.id === subtaskId);
+        if (index !== -1) {
+          const updated = [...subtasks];
+          updated[index] = { ...updated[index], title };
+          newMap.set(taskId, updated);
+          break;
+        }
+      }
+      return newMap;
+    });
+    await updateSubtask(subtaskId, { title });
+  };
+
   const handleProjectStatusChange = async (status: ProjectStatus) => {
     if (!selectedProject) return;
     await updateProject(selectedProject.id, { status });
@@ -147,9 +230,17 @@ export default function Productivity() {
           <ProjectDetailView
             project={selectedProject}
             tasks={projectTasks}
+            subtasksByTask={projectSubtasks}
+            projects={projects}
             onBack={() => setSelectedProject(null)}
             onStatusChange={handleProjectStatusChange}
             onTaskToggle={handleToggleTask}
+            onTaskUpdate={handleUpdateTask}
+            onTaskDelete={handleDeleteTask}
+            onSubtaskToggle={handleSubtaskToggle}
+            onSubtaskCreate={handleSubtaskCreate}
+            onSubtaskDelete={handleSubtaskDelete}
+            onSubtaskUpdate={handleSubtaskUpdate}
             onTaskCreated={() => {
               loadProjectTasks(selectedProject.id);
               loadProjects();
@@ -206,13 +297,37 @@ export default function Productivity() {
           </div>
         </header>
 
-        {/* Projects Section */}
-        <ProjectList
-          projects={projects}
-          loading={loading}
-          onProjectClick={setSelectedProject}
-          onRefresh={loadProjects}
-        />
+        {/* Tabs for Projects / Tasks */}
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "projects" | "tasks")}>
+          <TabsList className="bg-muted/50">
+            <TabsTrigger value="projects" className="gap-2">
+              <FolderKanban className="h-4 w-4" />
+              Projects
+            </TabsTrigger>
+            <TabsTrigger value="tasks" className="gap-2">
+              <ListTodo className="h-4 w-4" />
+              All Tasks
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="projects" className="mt-6">
+            <ProjectList
+              projects={projects}
+              loading={loading}
+              onProjectClick={setSelectedProject}
+              onRefresh={loadProjects}
+            />
+          </TabsContent>
+
+          <TabsContent value="tasks" className="mt-6">
+            <TaskListView
+              onTasksChange={() => {
+                loadTasks();
+                loadProjects();
+              }}
+            />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

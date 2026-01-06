@@ -1,6 +1,9 @@
 export { CreateProjectDialog } from "./CreateProjectDialog";
 export { CreateTaskDialog } from "./CreateTaskDialog";
+export { DraggableTaskList } from "./DraggableTaskList";
+export { EnhancedTaskItem } from "./EnhancedTaskItem";
 export { ProjectCard } from "./ProjectCard";
 export { ProjectDetailView } from "./ProjectDetailView";
 export { ProjectList } from "./ProjectList";
 export { TaskItem } from "./TaskItem";
+export { TaskListView } from "./TaskListView";

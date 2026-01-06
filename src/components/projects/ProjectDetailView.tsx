@@ -34,9 +34,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { TaskItem } from "./TaskItem";
+import { DraggableTaskList } from "./DraggableTaskList";
 import { CreateTaskDialog } from "./CreateTaskDialog";
-import type { Project, ProjectStatus } from "@/types/productivity";
+import type { Project, ProjectStatus, Subtask } from "@/types/productivity";
 import type { Task } from "@/types/tasks";
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -59,9 +59,17 @@ const STATUS_OPTIONS: { value: ProjectStatus; label: string; icon: React.Element
 interface ProjectDetailViewProps {
   project: Project;
   tasks: Task[];
+  subtasksByTask?: Map<string, Subtask[]>;
+  projects?: Project[];
   onBack: () => void;
   onStatusChange: (status: ProjectStatus) => void;
   onTaskToggle: (taskId: string, done: boolean) => void;
+  onTaskUpdate?: (taskId: string, updates: Partial<Task>) => void;
+  onTaskDelete?: (taskId: string) => void;
+  onSubtaskToggle?: (subtaskId: string, done: boolean) => void;
+  onSubtaskCreate?: (taskId: string, title: string) => void;
+  onSubtaskDelete?: (subtaskId: string) => void;
+  onSubtaskUpdate?: (subtaskId: string, title: string) => void;
   onTaskCreated: () => void;
   onArchive: () => void;
 }
@@ -69,9 +77,17 @@ interface ProjectDetailViewProps {
 export function ProjectDetailView({ 
   project, 
   tasks,
+  subtasksByTask = new Map(),
+  projects = [],
   onBack, 
   onStatusChange,
   onTaskToggle,
+  onTaskUpdate,
+  onTaskDelete,
+  onSubtaskToggle,
+  onSubtaskCreate,
+  onSubtaskDelete,
+  onSubtaskUpdate,
   onTaskCreated,
   onArchive,
 }: ProjectDetailViewProps) {
@@ -92,6 +108,16 @@ export function ProjectDetailView({
     { label: "In Progress", value: pendingTasks.length },
     { label: "Progress", value: `${progress}%` },
   ];
+
+  // Handlers with defaults
+  const handleUpdate = onTaskUpdate || (() => {});
+  const handleDelete = onTaskDelete || (() => {});
+  const handleAssignProject = () => {}; // No-op in project view
+  const handleReorder = (reorderedTasks: Task[]) => {
+    reorderedTasks.forEach((task, index) => {
+      handleUpdate(task.id, { orderIndex: index });
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -229,19 +255,24 @@ export function ProjectDetailView({
         </div>
 
         {tasks.length > 0 ? (
-          <div className="space-y-2">
+          <div className="space-y-4">
             {/* Pending Tasks */}
             {pendingTasks.length > 0 && (
-              <div className="space-y-2">
-                {pendingTasks.map((task) => (
-                  <TaskItem 
-                    key={task.id} 
-                    task={task} 
-                    projectColor={project.color}
-                    onToggle={onTaskToggle}
-                  />
-                ))}
-              </div>
+              <DraggableTaskList
+                tasks={pendingTasks}
+                projectColor={project.color}
+                projects={projects}
+                subtasksByTask={subtasksByTask}
+                onToggle={onTaskToggle}
+                onUpdate={handleUpdate}
+                onDelete={handleDelete}
+                onReorder={handleReorder}
+                onAssignProject={handleAssignProject}
+                onSubtaskToggle={onSubtaskToggle || (() => {})}
+                onSubtaskCreate={onSubtaskCreate || (() => {})}
+                onSubtaskDelete={onSubtaskDelete || (() => {})}
+                onSubtaskUpdate={onSubtaskUpdate || (() => {})}
+              />
             )}
 
             {/* Completed Tasks */}
@@ -250,14 +281,21 @@ export function ProjectDetailView({
                 <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   Completed ({completedTasks.length})
                 </p>
-                {completedTasks.map((task) => (
-                  <TaskItem 
-                    key={task.id} 
-                    task={task} 
-                    projectColor={project.color}
-                    onToggle={onTaskToggle}
-                  />
-                ))}
+                <DraggableTaskList
+                  tasks={completedTasks}
+                  projectColor={project.color}
+                  projects={projects}
+                  subtasksByTask={subtasksByTask}
+                  onToggle={onTaskToggle}
+                  onUpdate={handleUpdate}
+                  onDelete={handleDelete}
+                  onReorder={handleReorder}
+                  onAssignProject={handleAssignProject}
+                  onSubtaskToggle={onSubtaskToggle || (() => {})}
+                  onSubtaskCreate={onSubtaskCreate || (() => {})}
+                  onSubtaskDelete={onSubtaskDelete || (() => {})}
+                  onSubtaskUpdate={onSubtaskUpdate || (() => {})}
+                />
               </div>
             )}
           </div>
