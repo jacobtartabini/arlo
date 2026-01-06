@@ -6,6 +6,7 @@ export type PageMode = "type" | "write";
 export type BackgroundStyle = "blank" | "lined" | "dotted" | "grid";
 export type EraserType = "stroke" | "precision";
 export type PenStyle = "fine" | "medium" | "thick" | "brush" | "calligraphy";
+export type LassoMode = "freeform" | "rectangle";
 
 export interface NoteElement {
   id: string;
@@ -73,9 +74,11 @@ export interface Note {
   zoom: number;
   panX: number;
   panY: number;
-  // Page note specific
+  // Page note specific - LOCKED after creation
   pageMode?: PageMode;
   backgroundStyle?: BackgroundStyle;
+  // PDF import
+  importedPdfUrl?: string;
 }
 
 export interface NoteFolder {
@@ -94,7 +97,8 @@ export type DrawingTool =
   | "lasso"
   | "text"
   | "shape"
-  | "image";
+  | "image"
+  | "pan";
 
 export type ShapeType = "line" | "arrow" | "rectangle" | "circle" | "triangle";
 
@@ -106,6 +110,7 @@ export interface DrawingSettings {
   shape?: ShapeType;
   penStyle?: PenStyle;
   eraserType?: EraserType;
+  lassoMode?: LassoMode;
 }
 
 export interface CanvasViewport {
@@ -121,6 +126,7 @@ export const DEFAULT_DRAWING_SETTINGS: DrawingSettings = {
   opacity: 1,
   penStyle: "medium",
   eraserType: "stroke",
+  lassoMode: "freeform",
 };
 
 export const PEN_COLORS = [

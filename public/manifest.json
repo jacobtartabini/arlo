@@ -36,6 +36,18 @@
       ]
     },
     {
+      "name": "Notes",
+      "short_name": "Notes",
+      "description": "Open Arlo Notes",
+      "url": "/notes",
+      "icons": [
+        {
+          "src": "/icon-192x192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
       "name": "Settings",
       "short_name": "Settings",
       "description": "Configure Arlo",
@@ -46,6 +58,27 @@
           "sizes": "192x192"
         }
       ]
+    }
+  ],
+  "share_target": {
+    "action": "/notes",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "files": [
+        {
+          "name": "file",
+          "accept": ["application/pdf", ".pdf"]
+        }
+      ]
+    }
+  },
+  "file_handlers": [
+    {
+      "action": "/notes",
+      "accept": {
+        "application/pdf": [".pdf"]
+      }
     }
   ],
   "categories": ["productivity", "utilities"]

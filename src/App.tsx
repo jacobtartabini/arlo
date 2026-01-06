@@ -33,7 +33,7 @@ import Creation from "./pages/modules/Creation";
 import Automations from "./pages/modules/Automations";
 import Notifications from "./pages/modules/Notifications";
 import Notes from "./pages/Notes";
-import NotesDashboard from "./pages/modules/NotesDashboard";
+// NotesDashboard removed - /notes-dashboard now redirects to /notes
 import Habits from "./pages/modules/Habits";
 import Inbox from "./pages/Inbox";
 import ArloMaps from "./pages/ArloMaps";
@@ -155,9 +155,10 @@ const App = () => (
                       <Notes />
                     </ProtectedRoute>
                   } />
+                  {/* Redirect /notes-dashboard to /notes */}
                   <Route path="/notes-dashboard" element={
                     <ProtectedRoute>
-                      <NotesDashboard />
+                      <Notes />
                     </ProtectedRoute>
                   } />
                   <Route path="/habits" element={
