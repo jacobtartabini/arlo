@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { PanelLeftClose, PanelLeft, LogIn, Loader2, Download, Share2 } from "lucide-react";
@@ -44,7 +44,6 @@ export default function Notes() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const contentRef = useRef<HTMLDivElement>(null);
   const {
     notes,
     folders,
@@ -222,12 +221,15 @@ export default function Notes() {
 
   // Generate PDF from current note content
   const generateNotePdf = useCallback(async (): Promise<Blob | null> => {
-    if (!selectedNote || !contentRef.current) return null;
+    if (!selectedNote) return null;
 
-    // Find the page content element (exclude toolbars)
-    const pageContainer = contentRef.current.querySelector('[data-note-content="true"]') as HTMLElement;
+    // Wait a tick for React to settle
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    // Find the page content element by data attribute (works globally)
+    const pageContainer = document.querySelector('[data-note-content="true"]') as HTMLElement;
     if (!pageContainer) {
-      console.error('Could not find note content element');
+      console.error('Could not find note content element [data-note-content="true"]');
       return null;
     }
 
@@ -240,7 +242,7 @@ export default function Notes() {
       return blob;
     } catch (error) {
       console.error('Error generating PDF:', error);
-      return null;
+      throw error; // Re-throw to let caller handle
     }
   }, [selectedNote]);
 
@@ -283,12 +285,16 @@ export default function Notes() {
           toast.success("Note shared as PDF");
         }
       } else {
-        toast.error("Could not generate PDF for sharing");
+        // Fallback: download via print dialog
+        toast.info("Opening print dialog - select 'Save as PDF'");
+        window.print();
       }
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
         console.error('Share error:', err);
-        toast.error("Failed to share");
+        // Fallback: download via print dialog
+        toast.info("Opening print dialog - select 'Save as PDF'");
+        window.print();
       }
     } finally {
       setIsExporting(false);
@@ -414,7 +420,7 @@ export default function Notes() {
         </header>
 
         {/* Editor area */}
-        <div className="flex-1 relative" ref={contentRef}>
+        <div className="flex-1 relative">
           {selectedNote ? (
             selectedNote.noteType === "page" ? (
               <PageNoteEditor
