@@ -179,6 +179,24 @@ export interface TripSavedFlight {
   createdAt: Date;
 }
 
+// Hotel search types
+export interface HotelSearchResult {
+  id: string;
+  name: string;
+  rating?: number;
+  latitude?: number;
+  longitude?: number;
+  address?: string;
+  offers?: HotelOffer[];
+}
+
+export interface HotelOffer {
+  id: string;
+  price?: number;
+  currency: string;
+  roomDescription?: string;
+}
+
 // Weather API types
 export interface WeatherForecast {
   date: string;

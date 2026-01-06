@@ -75,16 +75,30 @@ export function TripMapTab({
 
   const primaryDestination = destinations[0];
   
-  // Calculate map center from destination or saved places
+  // Calculate map center from destination or saved places - prioritize destination
   const mapCenter = useMemo(() => {
+    // First priority: primary destination coordinates
     if (primaryDestination?.latitude && primaryDestination?.longitude) {
       return { lat: primaryDestination.latitude, lng: primaryDestination.longitude };
     }
+    // Second priority: itinerary items with coordinates
+    const itemWithCoords = itineraryItems.find(i => i.latitude && i.longitude);
+    if (itemWithCoords) {
+      return { lat: itemWithCoords.latitude!, lng: itemWithCoords.longitude! };
+    }
+    // Third priority: saved places
     if (savedPlaces.length > 0) {
       return { lat: savedPlaces[0].latitude, lng: savedPlaces[0].longitude };
     }
     return defaultCenter;
-  }, [primaryDestination, savedPlaces]);
+  }, [primaryDestination, savedPlaces, itineraryItems]);
+  
+  // Calculate appropriate zoom level based on content
+  const defaultZoom = useMemo(() => {
+    if (primaryDestination?.latitude) return 12; // City-level zoom for destination
+    if (savedPlaces.length > 0 || itineraryItems.some(i => i.latitude)) return 13;
+    return 10;
+  }, [primaryDestination, savedPlaces, itineraryItems]);
 
   const filteredPlaces = useMemo(() => {
     if (activeCollection === 'all') return savedPlaces;
@@ -232,7 +246,7 @@ export function TripMapTab({
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
         center={mapCenter}
-        zoom={13}
+        zoom={defaultZoom}
         onLoad={handleMapLoad}
         options={{
           disableDefaultUI: true,
