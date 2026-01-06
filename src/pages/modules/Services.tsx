@@ -43,7 +43,8 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { getAuthHeaders } from '@/lib/arloAuth';
+import { getAuthHeaders, isAuthenticated as checkArloAuth } from '@/lib/arloAuth';
+import { useAuth } from '@/providers/AuthProvider';
 
 interface Device {
   id: string;
@@ -198,6 +199,7 @@ const StatCard = ({
 
 const Services = () => {
   const navigate = useNavigate();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [expandedFinding, setExpandedFinding] = useState<string | null>(null);
   const [osintCategory, setOsintCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -234,23 +236,33 @@ const Services = () => {
 
   const fetchTailscaleData = useCallback(async (action: string) => {
     try {
-      const authHeaders = await getAuthHeaders();
-      if (!authHeaders) {
-        throw new Error('Authentication required');
+      // Check auth state before making request
+      if (!checkArloAuth()) {
+        console.log('[Services] Not authenticated, skipping API call');
+        throw new Error('Not authenticated. Please connect to the Tailnet.');
       }
 
+      const authHeaders = await getAuthHeaders();
+      if (!authHeaders) {
+        throw new Error('Failed to get authentication headers');
+      }
+
+      console.log('[Services] Calling tailscale-api with action:', action);
+      
       const { data, error } = await supabase.functions.invoke('tailscale-api', {
         body: { action },
         headers: authHeaders as Record<string, string>,
       });
 
       if (error) {
-        console.error(`Tailscale API error (${action}):`, error);
+        console.error(`[Services] Tailscale API error (${action}):`, error);
         throw new Error(error.message || 'Failed to fetch Tailscale data');
       }
+      
+      console.log(`[Services] Successfully fetched ${action}:`, data);
       return data;
     } catch (err) {
-      console.error(`Error fetching ${action}:`, err);
+      console.error(`[Services] Error fetching ${action}:`, err);
       throw err;
     }
   }, []);
@@ -330,15 +342,31 @@ const Services = () => {
     setIsRefreshing(false);
   }, [loadDevices, loadAuditEvents, loadAuthKeys]);
 
-  // Initial load and realtime polling
+  // Initial load and realtime polling - wait for auth to be ready
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   useEffect(() => {
+    // Wait for auth to finish loading before making decisions
+    if (authLoading) {
+      console.log('[Services] Waiting for auth to finish loading...');
+      return;
+    }
+
+    if (!isAuthenticated) {
+      console.log('[Services] Not authenticated, setting error state');
+      setApiError('Authentication required. Please connect to the Tailnet.');
+      return;
+    }
+
+    console.log('[Services] Auth ready and authenticated, loading data');
+    setApiError(null);
     loadAllData();
     
     // Set up polling for realtime updates (every 30 seconds)
     pollingIntervalRef.current = setInterval(() => {
-      loadAllData();
+      if (checkArloAuth()) {
+        loadAllData();
+      }
     }, 30000);
     
     return () => {
@@ -346,7 +374,7 @@ const Services = () => {
         clearInterval(pollingIntervalRef.current);
       }
     };
-  }, [loadAllData]);
+  }, [authLoading, isAuthenticated, loadAllData]);
 
   const handleExport = () => {
     const report = {

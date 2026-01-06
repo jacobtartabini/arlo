@@ -44,8 +44,14 @@ interface TailscaleAuditEvent {
 }
 
 Deno.serve(async (req) => {
+  // Log incoming request details for debugging
+  console.log('[tailscale-api] Request received:', req.method, req.url)
+  console.log('[tailscale-api] Origin:', req.headers.get('origin'))
+  console.log('[tailscale-api] Has Authorization:', !!req.headers.get('authorization'))
+  
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
+    console.log('[tailscale-api] Handling CORS preflight')
     return handleCorsOptions(req)
   }
 
