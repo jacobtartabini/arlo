@@ -3041,6 +3041,51 @@ export type Database = {
         }
         Relationships: []
       }
+      voice_settings: {
+        Row: {
+          auto_send_on_silence: boolean | null
+          cartesia_api_key: string | null
+          cartesia_model: string | null
+          cartesia_voice_id: string | null
+          created_at: string
+          id: string
+          silence_timeout_ms: number | null
+          updated_at: string
+          user_key: string
+          voice_mode_enabled: boolean | null
+          wake_word_enabled: boolean | null
+          wake_word_phrase: string | null
+        }
+        Insert: {
+          auto_send_on_silence?: boolean | null
+          cartesia_api_key?: string | null
+          cartesia_model?: string | null
+          cartesia_voice_id?: string | null
+          created_at?: string
+          id?: string
+          silence_timeout_ms?: number | null
+          updated_at?: string
+          user_key: string
+          voice_mode_enabled?: boolean | null
+          wake_word_enabled?: boolean | null
+          wake_word_phrase?: string | null
+        }
+        Update: {
+          auto_send_on_silence?: boolean | null
+          cartesia_api_key?: string | null
+          cartesia_model?: string | null
+          cartesia_voice_id?: string | null
+          created_at?: string
+          id?: string
+          silence_timeout_ms?: number | null
+          updated_at?: string
+          user_key?: string
+          voice_mode_enabled?: boolean | null
+          wake_word_enabled?: boolean | null
+          wake_word_phrase?: string | null
+        }
+        Relationships: []
+      }
       xp_events: {
         Row: {
           created_at: string
