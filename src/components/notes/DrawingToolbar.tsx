@@ -9,8 +9,11 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import {
+  Calculator,
   Circle,
   Eraser,
+  FileText,
+  Globe,
   Highlighter,
   ImagePlus,
   Lasso,
@@ -19,6 +22,7 @@ import {
   Pen,
   Plus,
   Redo2,
+  Sparkles,
   Square,
   Triangle,
   Type,
@@ -51,6 +55,8 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 
+export type ModuleType = "calculator" | "web-search" | "pdf-viewer" | "arlo-ai";
+
 interface DrawingToolbarProps {
   settings: DrawingSettings;
   onSettingsChange: (settings: DrawingSettings) => void;
@@ -68,6 +74,7 @@ interface DrawingToolbarProps {
   palmRejectionEnabled?: boolean;
   onPalmRejectionChange?: (enabled: boolean) => void;
   onImageUpload?: (file: File) => void;
+  onAddModule?: (type: ModuleType) => void;
 }
 
 const TOOLS: { id: DrawingTool; icon: React.ElementType; label: string }[] = [
@@ -101,6 +108,13 @@ const ERASER_TYPES: { id: EraserType; label: string; description: string }[] = [
   { id: "precision", label: "Precision Eraser", description: "Erase portions of strokes" },
 ];
 
+const MODULE_CONFIG: { type: ModuleType; icon: React.ElementType; label: string; description: string }[] = [
+  { type: "calculator", icon: Calculator, label: "Calculator", description: "Basic & scientific calculator" },
+  { type: "web-search", icon: Globe, label: "Web Search", description: "Search the web inline" },
+  { type: "pdf-viewer", icon: FileText, label: "PDF Viewer", description: "View and annotate PDFs" },
+  { type: "arlo-ai", icon: Sparkles, label: "Arlo AI", description: "AI assistant for your notes" },
+];
+
 export function DrawingToolbar({
   settings,
   onSettingsChange,
@@ -118,6 +132,7 @@ export function DrawingToolbar({
   palmRejectionEnabled = true,
   onPalmRejectionChange,
   onImageUpload,
+  onAddModule,
 }: DrawingToolbarProps) {
   const [showShapes, setShowShapes] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -477,6 +492,37 @@ export function DrawingToolbar({
           )}
 
           <Separator orientation="vertical" className="h-6 mx-1" />
+
+          {/* Add Module button */}
+          {onAddModule && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-9 rounded-xl px-2 gap-1">
+                  <Plus className="h-4 w-4" />
+                  <span className="text-xs hidden sm:inline">Module</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="center" side="top" className="w-56">
+                <DropdownMenuLabel className="text-xs text-muted-foreground">Add Module</DropdownMenuLabel>
+                {MODULE_CONFIG.map((config) => {
+                  const Icon = config.icon;
+                  return (
+                    <DropdownMenuItem
+                      key={config.type}
+                      onClick={() => onAddModule(config.type)}
+                      className="flex items-center gap-3 py-2"
+                    >
+                      <Icon className="h-4 w-4 text-primary" />
+                      <div>
+                        <p className="font-medium">{config.label}</p>
+                        <p className="text-xs text-muted-foreground">{config.description}</p>
+                      </div>
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
 
           {/* Zoom Controls */}
           <div className="flex items-center gap-0.5 pl-1">

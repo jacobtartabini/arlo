@@ -5,7 +5,7 @@ import type { TPointerEvent } from "fabric";
 import { Canvas as FabricCanvas, PencilBrush, Circle, Rect, Triangle, Line, FabricObject, IText, ActiveSelection } from "fabric";
 import { DrawingSettings, Note, DEFAULT_DRAWING_SETTINGS } from "@/types/notes";
 import { DrawingToolbar } from "./DrawingToolbar";
-import { EmbeddedModules } from "./EmbeddedModules";
+import { EmbeddedModules, type ModuleType } from "./EmbeddedModules";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -38,6 +38,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
   const lastPanPosition = useRef({ x: 0, y: 0 });
   const touchTracking = useRef<Map<number, TouchInfo>>(new Map());
   const primaryTouchId = useRef<number | null>(null);
+  const addModuleRef = useRef<((type: ModuleType) => void) | null>(null);
 
   // Initialize canvas
   useEffect(() => {
@@ -449,6 +450,72 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     });
   }, [redoStack]);
 
+  // Touch gesture shortcuts: 2-finger tap = undo, 3-finger tap = redo
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    let touchStartTime = 0;
+    let touchStartCount = 0;
+    let touchStartPositions: { x: number; y: number }[] = [];
+    const TAP_THRESHOLD_MS = 300;
+    const TAP_MOVEMENT_THRESHOLD = 20;
+
+    const handleGestureTouchStart = (e: TouchEvent) => {
+      touchStartTime = Date.now();
+      touchStartCount = e.touches.length;
+      touchStartPositions = Array.from(e.touches).map(t => ({ x: t.clientX, y: t.clientY }));
+    };
+
+    const handleGestureTouchEnd = (e: TouchEvent) => {
+      const touchDuration = Date.now() - touchStartTime;
+      const endTouchCount = e.changedTouches.length;
+      
+      // Check if it was a quick tap (not a drag)
+      if (touchDuration < TAP_THRESHOLD_MS) {
+        // Verify touches didn't move much (it's a tap, not a swipe)
+        let isTap = true;
+        for (let i = 0; i < e.changedTouches.length && i < touchStartPositions.length; i++) {
+          const touch = e.changedTouches[i];
+          const startPos = touchStartPositions.find((_, idx) => idx === i);
+          if (startPos) {
+            const dx = Math.abs(touch.clientX - startPos.x);
+            const dy = Math.abs(touch.clientY - startPos.y);
+            if (dx > TAP_MOVEMENT_THRESHOLD || dy > TAP_MOVEMENT_THRESHOLD) {
+              isTap = false;
+              break;
+            }
+          }
+        }
+
+        if (isTap) {
+          // 2-finger tap = undo
+          if (touchStartCount === 2 && endTouchCount === 2) {
+            e.preventDefault();
+            handleUndo();
+            toast.info("Undo", { duration: 1000 });
+          }
+          // 3-finger tap = redo
+          else if (touchStartCount === 3 && endTouchCount === 3) {
+            e.preventDefault();
+            handleRedo();
+            toast.info("Redo", { duration: 1000 });
+          }
+        }
+      }
+
+      touchStartPositions = [];
+    };
+
+    container.addEventListener("touchstart", handleGestureTouchStart, { passive: true });
+    container.addEventListener("touchend", handleGestureTouchEnd, { passive: false });
+
+    return () => {
+      container.removeEventListener("touchstart", handleGestureTouchStart);
+      container.removeEventListener("touchend", handleGestureTouchEnd);
+    };
+  }, [handleUndo, handleRedo]);
+
   // Copy/Paste for lasso selection
   const handleCopy = useCallback(() => {
     const canvas = fabricRef.current;
@@ -634,6 +701,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       <EmbeddedModules 
         noteContent={note.canvasState}
         onInsertText={handleInsertText}
+        onModuleAdd={(callback) => { addModuleRef.current = callback; }}
       />
 
       {/* Toolbar */}
@@ -654,6 +722,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
         palmRejectionEnabled={palmRejectionEnabled}
         onPalmRejectionChange={setPalmRejectionEnabled}
         onImageUpload={handleImageUpload}
+        onAddModule={(type) => addModuleRef.current?.(type)}
       />
     </div>
   );
