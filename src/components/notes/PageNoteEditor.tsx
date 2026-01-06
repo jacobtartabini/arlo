@@ -472,6 +472,62 @@ export function PageNoteEditor({ note, onSave }: PageNoteEditorProps) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleUndo, handleRedo]);
 
+  // Touch gestures: 2-finger tap = undo, 3-finger tap = redo
+  useEffect(() => {
+    const container = pageContainerRef.current;
+    if (!container) return;
+
+    let touchStartTime = 0;
+    let touchStartCount = 0;
+    let touchStartPositions: { x: number; y: number }[] = [];
+
+    const TAP_THRESHOLD_MS = 300;
+    const TAP_MOVEMENT_THRESHOLD = 20;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      touchStartTime = Date.now();
+      touchStartCount = e.touches.length;
+      touchStartPositions = Array.from(e.touches).map(t => ({ x: t.clientX, y: t.clientY }));
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      const elapsed = Date.now() - touchStartTime;
+      if (elapsed > TAP_THRESHOLD_MS) return;
+
+      // Check movement
+      const endPositions = Array.from(e.changedTouches).map(t => ({ x: t.clientX, y: t.clientY }));
+      let moved = false;
+      for (const end of endPositions) {
+        const start = touchStartPositions.find(s => 
+          Math.abs(s.x - end.x) < TAP_MOVEMENT_THRESHOLD * 2 && 
+          Math.abs(s.y - end.y) < TAP_MOVEMENT_THRESHOLD * 2
+        );
+        if (start && (Math.abs(start.x - end.x) > TAP_MOVEMENT_THRESHOLD || Math.abs(start.y - end.y) > TAP_MOVEMENT_THRESHOLD)) {
+          moved = true;
+          break;
+        }
+      }
+
+      if (moved) return;
+
+      if (touchStartCount === 2 && e.touches.length === 0) {
+        handleUndo();
+        toast.info("Undo", { duration: 1000 });
+      } else if (touchStartCount === 3 && e.touches.length === 0) {
+        handleRedo();
+        toast.info("Redo", { duration: 1000 });
+      }
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: true });
+    container.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [handleUndo, handleRedo]);
+
   // Background pattern CSS
   const getBackgroundCSS = (): string => {
     switch (backgroundStyle) {
