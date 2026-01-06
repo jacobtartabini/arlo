@@ -43,7 +43,11 @@ const ALLOWED_TABLES = [
   // Travel system tables
   'trips', 'trip_destinations', 'trip_travelers', 'trip_itinerary_items',
   'trip_saved_places', 'trip_reservations', 'trip_expenses',
-  'trip_flight_searches', 'trip_saved_flights'
+  'trip_flight_searches', 'trip_saved_flights',
+  // Finance system tables
+  'finance_linked_accounts', 'finance_transactions', 'finance_budgets',
+  'finance_subscriptions', 'finance_gift_cards', 'finance_gift_card_usage',
+  'finance_portfolio', 'finance_watchlist', 'finance_settings'
 ]
 
 // Fields that should be encrypted when stored
