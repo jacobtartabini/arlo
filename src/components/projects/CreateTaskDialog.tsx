@@ -50,15 +50,26 @@ const formSchema = z.object({
   energyLevel: z.enum(["low", "medium", "high"]),
   timeEstimateMinutes: z.number().min(1).max(480).optional(),
   dueDate: z.date().optional(),
+  scheduledDate: z.date().optional(),
+  projectId: z.string().optional(),
 });
 
 type FormData = z.infer<typeof formSchema>;
+
+interface Project {
+  id: string;
+  name: string;
+  color: string;
+  icon: string;
+}
 
 interface CreateTaskDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   projectId?: string;
   projectColor?: string;
+  projects?: Project[];
+  defaultScheduledDate?: Date;
   onCreated: () => void;
 }
 
@@ -67,6 +78,8 @@ export function CreateTaskDialog({
   onOpenChange, 
   projectId,
   projectColor = "#6366f1",
+  projects = [],
+  defaultScheduledDate,
   onCreated,
 }: CreateTaskDialogProps) {
   const { createTask } = useTasksPersistence();
@@ -81,6 +94,8 @@ export function CreateTaskDialog({
       energyLevel: "medium",
       timeEstimateMinutes: undefined,
       dueDate: undefined,
+      scheduledDate: defaultScheduledDate,
+      projectId: projectId,
     },
   });
 
@@ -91,12 +106,13 @@ export function CreateTaskDialog({
     setLoading(true);
     
     const task = await createTask(data.title, {
-      projectId,
+      projectId: data.projectId || projectId,
       description: data.description,
       priority: data.priority,
       energyLevel: data.energyLevel,
       timeEstimateMinutes: data.timeEstimateMinutes,
       dueDate: data.dueDate,
+      scheduledDate: data.scheduledDate,
     });
 
     setLoading(false);
@@ -230,6 +246,59 @@ export function CreateTaskDialog({
               )}
             />
 
+            {/* Project selector - only show if projects available and no fixed projectId */}
+            {projects.length > 0 && !projectId && (
+              <FormField
+                control={form.control}
+                name="projectId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Project (optional)</FormLabel>
+                    <div className="flex flex-wrap gap-2">
+                      <Label
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all text-sm",
+                          !field.value 
+                            ? "border-primary bg-primary/5 text-primary"
+                            : "border-border hover:border-border/80"
+                        )}
+                      >
+                        <input
+                          type="radio"
+                          checked={!field.value}
+                          onChange={() => field.onChange(undefined)}
+                          className="sr-only"
+                        />
+                        <span>No Project</span>
+                      </Label>
+                      {projects.map((project) => (
+                        <Label
+                          key={project.id}
+                          className={cn(
+                            "flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-all text-sm",
+                            field.value === project.id 
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-border/80"
+                          )}
+                          style={field.value === project.id ? { borderColor: project.color, color: project.color } : {}}
+                        >
+                          <input
+                            type="radio"
+                            checked={field.value === project.id}
+                            onChange={() => field.onChange(project.id)}
+                            className="sr-only"
+                          />
+                          <span>{project.icon}</span>
+                          <span>{project.name}</span>
+                        </Label>
+                      ))}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
@@ -254,10 +323,10 @@ export function CreateTaskDialog({
 
               <FormField
                 control={form.control}
-                name="dueDate"
+                name="scheduledDate"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
-                    <FormLabel>Due Date</FormLabel>
+                    <FormLabel>Scheduled</FormLabel>
                     <Popover>
                       <PopoverTrigger asChild>
                         <FormControl>
@@ -269,7 +338,7 @@ export function CreateTaskDialog({
                             )}
                           >
                             <CalendarIcon className="mr-2 h-4 w-4" />
-                            {field.value ? format(field.value, "PPP") : "Optional"}
+                            {field.value ? format(field.value, "MMM d") : "Today"}
                           </Button>
                         </FormControl>
                       </PopoverTrigger>
@@ -287,6 +356,41 @@ export function CreateTaskDialog({
                 )}
               />
             </div>
+
+            <FormField
+              control={form.control}
+              name="dueDate"
+              render={({ field }) => (
+                <FormItem className="flex flex-col">
+                  <FormLabel>Due Date (optional)</FormLabel>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "justify-start text-left font-normal w-full",
+                            !field.value && "text-muted-foreground"
+                          )}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {field.value ? format(field.value, "PPP") : "No deadline"}
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={field.value}
+                        onSelect={field.onChange}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <div className="flex gap-3 justify-end pt-2">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

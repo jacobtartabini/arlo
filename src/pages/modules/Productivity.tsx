@@ -5,6 +5,7 @@ import {
   CalendarCheck, 
   FolderKanban,
   ListTodo,
+  Sparkles,
 } from "lucide-react";
 import { useTasksPersistence } from "@/hooks/useTasksPersistence";
 import { useProjectsPersistence } from "@/hooks/useProjectsPersistence";
@@ -14,6 +15,7 @@ import { useNotificationsPersistence } from "@/hooks/useNotificationsPersistence
 import { useProductivityRealtime } from "@/hooks/useRealtimeSubscription";
 import { supabase } from "@/integrations/supabase/client";
 import { ProjectList, ProjectDetailView, TaskListView } from "@/components/projects";
+import { TodayView } from "@/components/productivity";
 import type { Task, Subtask } from "@/types/productivity";
 import type { Project, ProjectStatus } from "@/types/productivity";
 import type { HabitWithStreak } from "@/types/habits";
@@ -35,7 +37,7 @@ export default function Productivity() {
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [activeTab, setActiveTab] = useState<"projects" | "tasks">("projects");
+  const [activeTab, setActiveTab] = useState<"today" | "projects" | "tasks">("today");
 
   useEffect(() => {
     document.title = "Productivity – Arlo";
@@ -297,9 +299,13 @@ export default function Productivity() {
           </div>
         </header>
 
-        {/* Tabs for Projects / Tasks */}
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "projects" | "tasks")}>
+        {/* Tabs for Today / Projects / Tasks */}
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "today" | "projects" | "tasks")}>
           <TabsList className="bg-muted/50">
+            <TabsTrigger value="today" className="gap-2">
+              <Sparkles className="h-4 w-4" />
+              Today
+            </TabsTrigger>
             <TabsTrigger value="projects" className="gap-2">
               <FolderKanban className="h-4 w-4" />
               Projects
@@ -309,6 +315,13 @@ export default function Productivity() {
               All Tasks
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="today" className="mt-6">
+            <TodayView 
+              onTaskClick={() => setActiveTab("tasks")}
+              onViewAllTasks={() => setActiveTab("tasks")}
+            />
+          </TabsContent>
 
           <TabsContent value="projects" className="mt-6">
             <ProjectList
