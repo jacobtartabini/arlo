@@ -47,7 +47,7 @@ export interface VoiceContextType {
 
 export const DEFAULT_VOICE_SETTINGS: Omit<VoiceSettings, 'id' | 'user_key' | 'created_at' | 'updated_at'> = {
   cartesia_api_key: null,
-  cartesia_voice_id: 'a0e99841-438c-4a64-b679-ae501e7d6091', // Default Cartesia voice
+  cartesia_voice_id: '3faa81ae-d3d8-4ab1-9e44-e50e46d33c30', // User's preferred Cartesia voice
   cartesia_model: 'sonic-english',
   wake_word_enabled: false,
   wake_word_phrase: 'Hey Arlo',
