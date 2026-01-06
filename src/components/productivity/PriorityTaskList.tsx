@@ -36,6 +36,22 @@ const ENERGY_COLORS: Record<EnergyLevel, string> = {
   low: 'text-muted-foreground',
 };
 
+// Safe accessor for energy icon (handles unexpected DB values)
+function getEnergyIcon(level: string | undefined): typeof Zap {
+  if (level && level in ENERGY_ICONS) {
+    return ENERGY_ICONS[level as EnergyLevel];
+  }
+  return Battery; // Default fallback
+}
+
+// Safe accessor for energy color
+function getEnergyColor(level: string | undefined): string {
+  if (level && level in ENERGY_COLORS) {
+    return ENERGY_COLORS[level as EnergyLevel];
+  }
+  return 'text-muted-foreground';
+}
+
 export function PriorityTaskList({
   tasks,
   projects = [],
@@ -99,9 +115,10 @@ export function PriorityTaskList({
 
       {/* Task List */}
       <div className="divide-y divide-border/50">
-        {sortedTasks.map((task) => {
+      {sortedTasks.map((task) => {
           const project = task.projectId ? projectMap.get(task.projectId) : null;
-          const EnergyIcon = ENERGY_ICONS[task.energyLevel];
+          const EnergyIcon = getEnergyIcon(task.energyLevel);
+          const energyColor = getEnergyColor(task.energyLevel);
           
           return (
             <div
@@ -153,7 +170,7 @@ export function PriorityTaskList({
                   )}
                   
                   {/* Energy level */}
-                  <span className={cn("flex items-center gap-1 text-xs", ENERGY_COLORS[task.energyLevel])}>
+                  <span className={cn("flex items-center gap-1 text-xs", energyColor)}>
                     <EnergyIcon className="h-3 w-3" />
                   </span>
                   

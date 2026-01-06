@@ -1,13 +1,14 @@
 /**
  * Data API client for server-side database operations.
-/**
- * Data API client for server-side database operations.
  * All database operations go through the edge function which validates JWT tokens.
  */
 
 import { getArloToken, isAuthenticated } from '@/lib/arloAuth';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+
+// Network timeout for data API requests (12 seconds)
+const DATA_API_TIMEOUT_MS = 12 * 1000;
 
 interface DataApiRequest {
   action: 'select' | 'insert' | 'update' | 'delete' | 'upsert' | 'select_with_in' | 'count' | 'update_where';
@@ -25,6 +26,24 @@ interface DataApiResponse<T = unknown> {
 }
 
 /**
+ * Fetch with timeout using AbortController
+ */
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
  * Call the data-api edge function with JWT authentication
  */
 export async function dataApi<T = unknown>(request: DataApiRequest): Promise<DataApiResponse<T>> {
@@ -36,14 +55,18 @@ export async function dataApi<T = unknown>(request: DataApiRequest): Promise<Dat
   }
 
   try {
-    const response = await fetch(`${SUPABASE_URL}/functions/v1/data-api`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
+    const response = await fetchWithTimeout(
+      `${SUPABASE_URL}/functions/v1/data-api`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(request),
       },
-      body: JSON.stringify(request),
-    });
+      DATA_API_TIMEOUT_MS
+    );
 
     const result = await response.json();
 
@@ -53,6 +76,10 @@ export async function dataApi<T = unknown>(request: DataApiRequest): Promise<Dat
 
     return { data: result.data };
   } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.error('[dataApi] Request timed out');
+      return { error: { message: 'Request timed out' } };
+    }
     console.error('[dataApi] Error:', error);
     return { error: { message: error instanceof Error ? error.message : 'Network error' } };
   }
