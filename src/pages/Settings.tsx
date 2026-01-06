@@ -5,6 +5,7 @@ import EnhancedThemeToggle from '@/components/EnhancedThemeToggle';
 import CalendarIntegrations from '@/components/settings/CalendarIntegrations';
 import InboxSettings from '@/components/settings/InboxSettings';
 import MorningWakeupSettings from '@/components/settings/MorningWakeupSettings';
+import DriveIntegrations from '@/components/settings/DriveIntegrations';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -165,6 +166,11 @@ export default function Settings() {
         {/* Calendar Integrations */}
         <section>
           <CalendarIntegrations />
+        </section>
+
+        {/* Cloud Storage Integrations */}
+        <section>
+          <DriveIntegrations />
         </section>
 
         {/* Inbox Integrations */}
