@@ -17,6 +17,8 @@ import {
   ListTodo,
   Filter,
   SortAsc,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 import { DraggableTaskList } from "./DraggableTaskList";
 import { CreateTaskDialog } from "./CreateTaskDialog";
@@ -44,6 +46,7 @@ export function TaskListView({ initialProjectId, onTasksChange }: TaskListViewPr
   const [subtasksByTask, setSubtasksByTask] = useState<Map<string, Subtask[]>>(new Map());
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   
   // Filters
@@ -54,21 +57,28 @@ export function TaskListView({ initialProjectId, onTasksChange }: TaskListViewPr
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [fetchedTasks, fetchedProjects] = await Promise.all([
-      fetchTasks(),
-      fetchProjects(),
-    ]);
+    setLoadError(null);
     
-    setTasks(fetchedTasks);
-    setProjects(fetchedProjects);
-    
-    // Load subtasks for all tasks
-    if (fetchedTasks.length > 0) {
-      const subtasks = await fetchSubtasksForTasks(fetchedTasks.map(t => t.id));
-      setSubtasksByTask(subtasks);
+    try {
+      const [fetchedTasks, fetchedProjects] = await Promise.all([
+        fetchTasks(),
+        fetchProjects(),
+      ]);
+      
+      setTasks(fetchedTasks);
+      setProjects(fetchedProjects);
+      
+      // Load subtasks for all tasks
+      if (fetchedTasks.length > 0) {
+        const subtasks = await fetchSubtasksForTasks(fetchedTasks.map(t => t.id));
+        setSubtasksByTask(subtasks);
+      }
+    } catch (err) {
+      console.error('[TaskListView] Failed to load data:', err);
+      setLoadError(err instanceof Error ? err.message : 'Failed to load data');
+    } finally {
+      setLoading(false);
     }
-    
-    setLoading(false);
   }, [fetchTasks, fetchProjects, fetchSubtasksForTasks]);
 
   useEffect(() => {
@@ -173,13 +183,11 @@ export function TaskListView({ initialProjectId, onTasksChange }: TaskListViewPr
 
   const handleSubtaskDelete = useCallback(async (subtaskId: string) => {
     // Find and remove optimistically
-    let deletedTaskId: string | null = null;
     setSubtasksByTask(prev => {
       const newMap = new Map(prev);
       for (const [taskId, subtasks] of newMap) {
         const filtered = subtasks.filter(s => s.id !== subtaskId);
         if (filtered.length !== subtasks.length) {
-          deletedTaskId = taskId;
           newMap.set(taskId, filtered);
           break;
         }
@@ -249,6 +257,20 @@ export function TaskListView({ initialProjectId, onTasksChange }: TaskListViewPr
 
   const pendingCount = tasks.filter(t => !t.done).length;
   const completedCount = tasks.filter(t => t.done).length;
+
+  if (loadError) {
+    return (
+      <Card className="p-8 text-center border-destructive/50">
+        <AlertCircle className="h-10 w-10 mx-auto text-destructive mb-3" />
+        <p className="text-foreground font-medium mb-2">Failed to load tasks</p>
+        <p className="text-sm text-muted-foreground mb-4">{loadError}</p>
+        <Button onClick={loadData} variant="outline" size="sm" className="gap-2">
+          <RefreshCw className="h-4 w-4" />
+          Retry
+        </Button>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">

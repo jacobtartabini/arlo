@@ -10,6 +10,9 @@ const AUTH_ENDPOINT = 'https://raspberrypi.tailf531bd.ts.net/auth/verify';
 // Buffer time before expiry to trigger refresh (15 seconds)
 const REFRESH_BUFFER_MS = 15 * 1000;
 
+// Network timeout for auth requests (10 seconds)
+const AUTH_TIMEOUT_MS = 10 * 1000;
+
 function base64UrlToString(input: string): string {
   const pad = '='.repeat((4 - (input.length % 4)) % 4);
   const base64 = (input + pad).replace(/-/g, '+').replace(/_/g, '/');
@@ -82,14 +85,36 @@ function isTokenValid(): boolean {
 }
 
 /**
+ * Fetch with timeout using AbortController
+ */
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
  * Fetch a new token from the auth server
  */
 async function fetchNewToken(): Promise<CachedToken | null> {
   try {
-    const response = await fetch(AUTH_ENDPOINT, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
+    const response = await fetchWithTimeout(
+      AUTH_ENDPOINT,
+      {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      },
+      AUTH_TIMEOUT_MS
+    );
 
     if (!response.ok) {
       console.error('[arloAuth] Auth endpoint returned:', response.status);
@@ -117,7 +142,11 @@ async function fetchNewToken(): Promise<CachedToken | null> {
       },
     };
   } catch (error) {
-    console.error('[arloAuth] Failed to fetch token:', error);
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.error('[arloAuth] Auth request timed out');
+    } else {
+      console.error('[arloAuth] Failed to fetch token:', error);
+    }
     return null;
   }
 }

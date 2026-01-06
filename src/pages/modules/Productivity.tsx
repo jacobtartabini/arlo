@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { 
   CalendarCheck, 
@@ -8,6 +9,8 @@ import {
   Sparkles,
   CalendarRange,
   Timer,
+  RefreshCw,
+  AlertCircle,
 } from "lucide-react";
 import { useTasksPersistence } from "@/hooks/useTasksPersistence";
 import { useProjectsPersistence } from "@/hooks/useProjectsPersistence";
@@ -15,7 +18,7 @@ import { useSubtasksPersistence } from "@/hooks/useSubtasksPersistence";
 import { useHabitsPersistence } from "@/hooks/useHabitsPersistence";
 import { useNotificationsPersistence } from "@/hooks/useNotificationsPersistence";
 import { useProductivityRealtime } from "@/hooks/useRealtimeSubscription";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/providers/AuthProvider";
 import { ProjectList, ProjectDetailView, TaskListView } from "@/components/projects";
 import { TodayView, WeeklyPlanningView, TimelineDropZone } from "@/components/productivity";
 import type { Task, Subtask } from "@/types/productivity";
@@ -29,6 +32,7 @@ export default function Productivity() {
   const { fetchSubtasksForTasks, toggleSubtask, createSubtask, deleteSubtask, updateSubtask } = useSubtasksPersistence();
   const { fetchHabitsWithStreaks } = useHabitsPersistence();
   const { fetchNotifications } = useNotificationsPersistence();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -37,7 +41,7 @@ export default function Productivity() {
   const [habits, setHabits] = useState<HabitWithStreak[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [activeTab, setActiveTab] = useState<"today" | "week" | "schedule" | "projects" | "tasks">("today");
 
@@ -65,6 +69,25 @@ export default function Productivity() {
     setNotifications(fetchedNotifications.filter(n => !n.read).slice(0, 3));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Combined refresh function with proper error handling
+  const refreshAll = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      await Promise.all([
+        loadTasks(),
+        loadProjects(),
+        loadHabits(),
+        loadNotifications(),
+      ]);
+    } catch (err) {
+      console.error('[Productivity] Failed to load data:', err);
+      setLoadError(err instanceof Error ? err.message : 'Failed to load data');
+    } finally {
+      setLoading(false);
+    }
+  }, [loadTasks, loadProjects, loadHabits, loadNotifications]);
+
   const loadProjectTasks = useCallback(async (projectId: string) => {
     const tasks = await fetchTasksForProject(projectId);
     setProjectTasks(tasks);
@@ -78,7 +101,7 @@ export default function Productivity() {
     }
   }, [fetchTasksForProject, fetchSubtasksForTasks]);
 
-  // Subscribe to realtime updates
+  // Subscribe to realtime updates - only when authenticated
   useProductivityRealtime({
     onTaskChange: loadTasks,
     onHabitChange: loadHabits,
@@ -86,23 +109,15 @@ export default function Productivity() {
     enabled: isAuthenticated,
   });
 
+  // Load data when authenticated
   useEffect(() => {
-    const checkAuthAndLoad = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      setIsAuthenticated(!!user);
-      
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-      await Promise.all([loadTasks(), loadProjects(), loadHabits(), loadNotifications()]);
+    if (isAuthenticated) {
+      refreshAll();
+    } else if (!authLoading) {
+      // Not authenticated and not loading - clear loading state
       setLoading(false);
-    };
-
-    checkAuthAndLoad();
-  }, []);
+    }
+  }, [isAuthenticated, authLoading, refreshAll]);
 
   // Load project tasks when a project is selected
   useEffect(() => {
@@ -225,6 +240,25 @@ export default function Productivity() {
     { label: "Active Habits", value: String(habits.length), helper: maxStreak > 0 ? `+${maxStreak} day streak` : "Start a streak" },
     { label: "Unread", value: String(notifications.length), helper: notifications.length > 0 ? "Action needed" : "All caught up" },
   ];
+
+  // Show error state if loading failed
+  if (loadError) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="container mx-auto px-4 py-8 max-w-7xl">
+          <Card className="p-8 text-center border-destructive/50">
+            <AlertCircle className="h-12 w-12 mx-auto text-destructive mb-4" />
+            <h2 className="text-xl font-semibold text-foreground mb-2">Failed to load</h2>
+            <p className="text-muted-foreground mb-4">{loadError}</p>
+            <Button onClick={refreshAll} className="gap-2">
+              <RefreshCw className="h-4 w-4" />
+              Retry
+            </Button>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   // Show project detail view if a project is selected
   if (selectedProject) {

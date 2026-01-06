@@ -9,8 +9,9 @@ import {
   Zap,
   Battery,
   BatteryLow,
-  Plus,
   Calendar,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 import {
   DndContext,
@@ -23,7 +24,7 @@ import {
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import { format, addMinutes, setHours, setMinutes, startOfDay, isSameDay } from "date-fns";
+import { format, addMinutes, setHours, setMinutes, startOfDay } from "date-fns";
 import { useTasksPersistence } from "@/hooks/useTasksPersistence";
 import { useTimeBlocksPersistence } from "@/hooks/useTimeBlocksPersistence";
 import { useProjectsPersistence } from "@/hooks/useProjectsPersistence";
@@ -43,6 +44,14 @@ const ENERGY_ICONS: Record<EnergyLevel, typeof Zap> = {
   low: BatteryLow,
 };
 
+// Safe energy icon accessor
+function getEnergyIcon(level: string | undefined): typeof Zap {
+  if (level && level in ENERGY_ICONS) {
+    return ENERGY_ICONS[level as EnergyLevel];
+  }
+  return Battery; // Default fallback
+}
+
 // Draggable Task Card
 function DraggableTask({ task, project }: { task: Task; project?: Project }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
@@ -50,7 +59,7 @@ function DraggableTask({ task, project }: { task: Task; project?: Project }) {
     data: { task },
   });
 
-  const EnergyIcon = ENERGY_ICONS[task.energyLevel];
+  const EnergyIcon = getEnergyIcon(task.energyLevel);
 
   return (
     <div
@@ -124,8 +133,6 @@ function TimeSlot({
     data: { hour, minute, date },
   });
 
-  const slotTime = setMinutes(setHours(date, hour), minute);
-
   return (
     <div
       ref={setNodeRef}
@@ -169,6 +176,7 @@ export function TimelineDropZone({ date = new Date(), onBlockCreated }: Timeline
   const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
 
   const sensors = useSensors(
@@ -179,15 +187,23 @@ export function TimelineDropZone({ date = new Date(), onBlockCreated }: Timeline
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [fetchedTasks, fetchedBlocks, fetchedProjects] = await Promise.all([
-      fetchTasks(),
-      fetchTimeBlocksForDate(date),
-      fetchProjects(),
-    ]);
-    setTasks(fetchedTasks.filter(t => !t.done));
-    setTimeBlocks(fetchedBlocks);
-    setProjects(fetchedProjects);
-    setLoading(false);
+    setLoadError(null);
+    
+    try {
+      const [fetchedTasks, fetchedBlocks, fetchedProjects] = await Promise.all([
+        fetchTasks(),
+        fetchTimeBlocksForDate(date),
+        fetchProjects(),
+      ]);
+      setTasks(fetchedTasks.filter(t => !t.done));
+      setTimeBlocks(fetchedBlocks);
+      setProjects(fetchedProjects);
+    } catch (err) {
+      console.error('[TimelineDropZone] Failed to load data:', err);
+      setLoadError(err instanceof Error ? err.message : 'Failed to load data');
+    } finally {
+      setLoading(false);
+    }
   }, [fetchTasks, fetchTimeBlocksForDate, fetchProjects, date.toDateString()]);
 
   useEffect(() => {
@@ -240,6 +256,20 @@ export function TimelineDropZone({ date = new Date(), onBlockCreated }: Timeline
     }
   };
 
+  if (loadError) {
+    return (
+      <Card className="p-8 text-center border-destructive/50">
+        <AlertCircle className="h-10 w-10 mx-auto text-destructive mb-3" />
+        <p className="text-foreground font-medium mb-2">Failed to load schedule</p>
+        <p className="text-sm text-muted-foreground mb-4">{loadError}</p>
+        <Button onClick={loadData} variant="outline" size="sm" className="gap-2">
+          <RefreshCw className="h-4 w-4" />
+          Retry
+        </Button>
+      </Card>
+    );
+  }
+
   return (
     <DndContext 
       sensors={sensors} 
@@ -255,14 +285,21 @@ export function TimelineDropZone({ date = new Date(), onBlockCreated }: Timeline
           </div>
           <ScrollArea className="h-[400px]">
             <div className="space-y-2 pr-2">
-              {unscheduledTasks.map((task) => (
-                <DraggableTask 
-                  key={task.id} 
-                  task={task} 
-                  project={task.projectId ? projectMap.get(task.projectId) : undefined}
-                />
-              ))}
-              {unscheduledTasks.length === 0 && (
+              {loading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map(i => (
+                    <div key={i} className="h-14 bg-muted/50 rounded-lg animate-pulse" />
+                  ))}
+                </div>
+              ) : unscheduledTasks.length > 0 ? (
+                unscheduledTasks.map((task) => (
+                  <DraggableTask 
+                    key={task.id} 
+                    task={task} 
+                    project={task.projectId ? projectMap.get(task.projectId) : undefined}
+                  />
+                ))
+              ) : (
                 <p className="text-sm text-muted-foreground text-center py-8">
                   All tasks are scheduled!
                 </p>
@@ -290,7 +327,6 @@ export function TimelineDropZone({ date = new Date(), onBlockCreated }: Timeline
                   </div>
                   <div className="flex-1">
                     {[0, 15, 30, 45].map((minute) => {
-                      const slotTime = setMinutes(setHours(startOfDay(date), hour), minute);
                       const existingBlock = timeBlocks.find(b => 
                         b.startTime.getHours() === hour && 
                         b.startTime.getMinutes() === minute

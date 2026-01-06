@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,13 +11,14 @@ import {
   Clock,
   CheckCircle2,
   Circle,
+  AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 import { 
   format, 
   startOfWeek, 
   endOfWeek, 
   eachDayOfInterval, 
-  isSameDay, 
   isToday,
   addWeeks,
   subWeeks,
@@ -45,37 +46,53 @@ export function WeeklyPlanningView({ onTaskClick, onDayClick }: WeeklyPlanningVi
   const [timeBlocksByDay, setTimeBlocksByDay] = useState<Map<string, TimeBlock[]>>(new Map());
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const weekStart = startOfWeek(currentWeek, { weekStartsOn: 0 });
   const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 0 });
   const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
+  
+  // Use ref to track the week for stable dependency
+  const weekKeyRef = useRef(weekStart.toDateString());
+  weekKeyRef.current = weekStart.toDateString();
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     
-    const [fetchedTasks, fetchedProjects] = await Promise.all([
-      fetchTasks(),
-      fetchProjects(),
-    ]);
+    try {
+      const [fetchedTasks, fetchedProjects] = await Promise.all([
+        fetchTasks(),
+        fetchProjects(),
+      ]);
 
-    // Fetch time blocks for each day of the week
-    const blocksMap = new Map<string, TimeBlock[]>();
-    await Promise.all(
-      weekDays.map(async (day) => {
-        const blocks = await fetchTimeBlocksForDate(day);
-        blocksMap.set(day.toDateString(), blocks);
-      })
-    );
+      // Fetch time blocks for each day of the week
+      const start = startOfWeek(currentWeek, { weekStartsOn: 0 });
+      const end = endOfWeek(currentWeek, { weekStartsOn: 0 });
+      const days = eachDayOfInterval({ start, end });
+      
+      const blocksMap = new Map<string, TimeBlock[]>();
+      await Promise.all(
+        days.map(async (day) => {
+          const blocks = await fetchTimeBlocksForDate(day);
+          blocksMap.set(day.toDateString(), blocks);
+        })
+      );
 
-    setTasks(fetchedTasks);
-    setTimeBlocksByDay(blocksMap);
-    setProjects(fetchedProjects);
-    setLoading(false);
-  }, [fetchTasks, fetchProjects, fetchTimeBlocksForDate, weekDays.map(d => d.toDateString()).join(',')]);
+      setTasks(fetchedTasks);
+      setTimeBlocksByDay(blocksMap);
+      setProjects(fetchedProjects);
+    } catch (err) {
+      console.error('[WeeklyPlanningView] Failed to load data:', err);
+      setLoadError(err instanceof Error ? err.message : 'Failed to load data');
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchTasks, fetchProjects, fetchTimeBlocksForDate, currentWeek]);
 
   useEffect(() => {
     loadData();
-  }, [currentWeek]);
+  }, [loadData]);
 
   const projectMap = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects]);
 
@@ -102,6 +119,20 @@ export function WeeklyPlanningView({ onTaskClick, onDayClick }: WeeklyPlanningVi
         <Skeleton className="h-12 w-full rounded-xl" />
         <Skeleton className="h-96 w-full rounded-xl" />
       </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <Card className="p-8 text-center border-destructive/50">
+        <AlertCircle className="h-10 w-10 mx-auto text-destructive mb-3" />
+        <p className="text-foreground font-medium mb-2">Failed to load week data</p>
+        <p className="text-sm text-muted-foreground mb-4">{loadError}</p>
+        <Button onClick={loadData} variant="outline" size="sm" className="gap-2">
+          <RefreshCw className="h-4 w-4" />
+          Retry
+        </Button>
+      </Card>
     );
   }
 

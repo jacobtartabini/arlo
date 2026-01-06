@@ -11,7 +11,7 @@ import {
   Plus,
   RefreshCw,
   Settings2,
-  Timer,
+  AlertCircle,
 } from "lucide-react";
 import { format } from "date-fns";
 import { CurrentTimeBlock } from "./CurrentTimeBlock";
@@ -52,34 +52,43 @@ export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
   const [timeBlocks, setTimeBlocks] = useState<TimeBlock[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [quickScheduleTask, setQuickScheduleTask] = useState<Task | null>(null);
   const [energySettingsOpen, setEnergySettingsOpen] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const today = new Date();
+    setLoadError(null);
     
-    const [fetchedTasks, fetchedBlocks, fetchedProjects] = await Promise.all([
-      fetchTasks(),
-      fetchTimeBlocksForDate(today),
-      fetchProjects(),
-    ]);
+    try {
+      const today = new Date();
+      
+      const [fetchedTasks, fetchedBlocks, fetchedProjects] = await Promise.all([
+        fetchTasks(),
+        fetchTimeBlocksForDate(today),
+        fetchProjects(),
+      ]);
 
-    // Filter to today's tasks (scheduled for today OR has due date today OR high priority)
-    const todayStr = today.toDateString();
-    const todayTasks = fetchedTasks.filter(task => {
-      if (task.done) return false;
-      if (task.scheduledDate?.toDateString() === todayStr) return true;
-      if (task.dueDate?.toDateString() === todayStr) return true;
-      if (task.priority >= 2) return true; // High priority always shows
-      return false;
-    });
+      // Filter to today's tasks (scheduled for today OR has due date today OR high priority)
+      const todayStr = today.toDateString();
+      const todayTasks = fetchedTasks.filter(task => {
+        if (task.done) return false;
+        if (task.scheduledDate?.toDateString() === todayStr) return true;
+        if (task.dueDate?.toDateString() === todayStr) return true;
+        if (task.priority >= 2) return true; // High priority always shows
+        return false;
+      });
 
-    setTasks(todayTasks.length > 0 ? todayTasks : fetchedTasks.filter(t => !t.done));
-    setTimeBlocks(fetchedBlocks);
-    setProjects(fetchedProjects);
-    setLoading(false);
+      setTasks(todayTasks.length > 0 ? todayTasks : fetchedTasks.filter(t => !t.done));
+      setTimeBlocks(fetchedBlocks);
+      setProjects(fetchedProjects);
+    } catch (err) {
+      console.error('[TodayView] Failed to load data:', err);
+      setLoadError(err instanceof Error ? err.message : 'Failed to load data');
+    } finally {
+      setLoading(false);
+    }
   }, [fetchTasks, fetchTimeBlocksForDate, fetchProjects]);
 
   useEffect(() => {
@@ -141,6 +150,20 @@ export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
         </div>
         <Skeleton className="h-64 w-full rounded-2xl" />
       </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <Card className="p-8 text-center border-destructive/50">
+        <AlertCircle className="h-10 w-10 mx-auto text-destructive mb-3" />
+        <p className="text-foreground font-medium mb-2">Failed to load today's data</p>
+        <p className="text-sm text-muted-foreground mb-4">{loadError}</p>
+        <Button onClick={loadData} variant="outline" size="sm" className="gap-2">
+          <RefreshCw className="h-4 w-4" />
+          Retry
+        </Button>
+      </Card>
     );
   }
 
