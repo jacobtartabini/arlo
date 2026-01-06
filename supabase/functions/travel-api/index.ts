@@ -253,7 +253,9 @@ Deno.serve(async (req) => {
         
         try {
           // Get access token
-          const tokenResponse = await fetch('https://api.amadeus.com/v1/security/oauth2/token', {
+          // Use test environment for test credentials, production for live
+          const amadeusBaseUrl = 'https://test.api.amadeus.com';
+          const tokenResponse = await fetch(`${amadeusBaseUrl}/v1/security/oauth2/token`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: `grant_type=client_credentials&client_id=${amadeusKey}&client_secret=${amadeusSecret}`,
@@ -267,7 +269,7 @@ Deno.serve(async (req) => {
           }
           
           // Search flights
-          let searchUrl = `https://api.amadeus.com/v2/shopping/flight-offers?originLocationCode=${origin}&destinationLocationCode=${destination}&departureDate=${departureDate}&adults=${adults}&currencyCode=USD&max=20`;
+          let searchUrl = `${amadeusBaseUrl}/v2/shopping/flight-offers?originLocationCode=${origin}&destinationLocationCode=${destination}&departureDate=${departureDate}&adults=${adults}&currencyCode=USD&max=20`;
           
           if (returnDate) searchUrl += `&returnDate=${returnDate}`;
           if (nonstop) searchUrl += `&nonStop=true`;
@@ -337,7 +339,8 @@ Deno.serve(async (req) => {
         
         try {
           // Get access token
-          const tokenResponse = await fetch('https://api.amadeus.com/v1/security/oauth2/token', {
+          const amadeusBaseUrl = 'https://test.api.amadeus.com';
+          const tokenResponse = await fetch(`${amadeusBaseUrl}/v1/security/oauth2/token`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: `grant_type=client_credentials&client_id=${amadeusKey}&client_secret=${amadeusSecret}`,
@@ -349,7 +352,7 @@ Deno.serve(async (req) => {
           }
           
           // First get hotels in the city
-          const hotelsUrl = `https://api.amadeus.com/v1/reference-data/locations/hotels/by-city?cityCode=${cityCode}&radius=${radius}&radiusUnit=${radiusUnit}&hotelSource=ALL`;
+          const hotelsUrl = `${amadeusBaseUrl}/v1/reference-data/locations/hotels/by-city?cityCode=${cityCode}&radius=${radius}&radiusUnit=${radiusUnit}&hotelSource=ALL`;
           
           const hotelsResponse = await fetch(hotelsUrl, {
             headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
@@ -369,7 +372,7 @@ Deno.serve(async (req) => {
           }
           
           // Get hotel offers
-          const offersUrl = `https://api.amadeus.com/v3/shopping/hotel-offers?hotelIds=${hotelIds.join(',')}&checkInDate=${checkInDate}&checkOutDate=${checkOutDate}&adults=${adults}&currency=USD`;
+          const offersUrl = `${amadeusBaseUrl}/v3/shopping/hotel-offers?hotelIds=${hotelIds.join(',')}&checkInDate=${checkInDate}&checkOutDate=${checkOutDate}&adults=${adults}&currency=USD`;
           
           const offersResponse = await fetch(offersUrl, {
             headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
@@ -419,7 +422,8 @@ Deno.serve(async (req) => {
         
         try {
           // Get access token
-          const tokenResponse = await fetch('https://api.amadeus.com/v1/security/oauth2/token', {
+          const amadeusBaseUrl = 'https://test.api.amadeus.com';
+          const tokenResponse = await fetch(`${amadeusBaseUrl}/v1/security/oauth2/token`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: `grant_type=client_credentials&client_id=${amadeusKey}&client_secret=${amadeusSecret}`,
@@ -431,7 +435,7 @@ Deno.serve(async (req) => {
           }
           
           // Search airports
-          const searchUrl = `https://api.amadeus.com/v1/reference-data/locations?keyword=${encodeURIComponent(keyword)}&subType=AIRPORT,CITY&page[limit]=10`;
+          const searchUrl = `${amadeusBaseUrl}/v1/reference-data/locations?keyword=${encodeURIComponent(keyword)}&subType=AIRPORT,CITY&page[limit]=10`;
           
           const searchResponse = await fetch(searchUrl, {
             headers: { 'Authorization': `Bearer ${tokenData.access_token}` },
