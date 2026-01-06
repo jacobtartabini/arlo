@@ -115,37 +115,17 @@ export const APP_MODULES: Module[] = [
     summary: "2 drafts awaiting review",
     keywords: ["design", "drafts", "content", "studio"]
   },
-  {
-    id: "knowledge",
-    title: "Knowledge & Archives",
-    icon: Library,
-    route: "/knowledge",
-    color: "primary",
-    size: "medium",
-    summary: "Today's brief • 3 new archives",
-    keywords: ["docs", "brief", "history", "research"]
-  },
-  {
-    id: "automations",
-    title: "Automations",
-    icon: Workflow,
-    route: "/automations",
-    color: "accent",
-    size: "medium",
-    summary: "3 active • 6.4h saved",
-    keywords: ["workflows", "bots", "routines", "automation"]
-  },
-  {
-    id: "insights",
-    title: "AI Insights",
-    icon: Sparkles,
-    route: "/insights",
-    color: "primary",
-    size: "medium",
-    summary: "12% uplift • New actions",
-    keywords: ["ai", "analytics", "recommendations", "intel"]
-  },
-  // Notifications removed from canvas - now integrated into status chip
+  // Automations hidden from dashboard for now
+  // {
+  //   id: "automations",
+  //   title: "Automations",
+  //   icon: Workflow,
+  //   route: "/automations",
+  //   color: "accent",
+  //   size: "medium",
+  //   summary: "3 active • 6.4h saved",
+  //   keywords: ["workflows", "bots", "routines", "automation"]
+  // },
   {
     id: "notes",
     title: "Smart Notes",

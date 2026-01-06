@@ -30,9 +30,7 @@ import Services from "./pages/modules/Services";
 import Health from "./pages/modules/Health";
 import Files from "./pages/modules/Files";
 import Creation from "./pages/modules/Creation";
-import Knowledge from "./pages/modules/Knowledge";
 import Automations from "./pages/modules/Automations";
-import AIInsights from "./pages/modules/AIInsights";
 import Notifications from "./pages/modules/Notifications";
 import Notes from "./pages/Notes";
 import NotesDashboard from "./pages/modules/NotesDashboard";
@@ -142,19 +140,9 @@ const App = () => (
                       <Creation />
                     </ProtectedRoute>
                   } />
-                  <Route path="/knowledge" element={
-                    <ProtectedRoute>
-                      <Knowledge />
-                    </ProtectedRoute>
-                  } />
                   <Route path="/automations" element={
                     <ProtectedRoute>
                       <Automations />
-                    </ProtectedRoute>
-                  } />
-                  <Route path="/insights" element={
-                    <ProtectedRoute>
-                      <AIInsights />
                     </ProtectedRoute>
                   } />
                   <Route path="/notifications" element={
