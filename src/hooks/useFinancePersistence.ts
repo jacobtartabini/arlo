@@ -367,6 +367,13 @@ export function useFinancePersistence() {
     return result?.data || [];
   }, [apiRequest]);
 
+  const createBudget = useCallback(async (budget: Partial<Budget>): Promise<Budget | null> => {
+    const result = await apiRequest('create', 'finance_budgets', {
+      data: budget,
+    });
+    return result?.data?.[0] || null;
+  }, [apiRequest]);
+
   const upsertBudget = useCallback(async (budget: Partial<Budget>): Promise<Budget | null> => {
     const result = await apiRequest('upsert', 'finance_budgets', {
       data: budget,
@@ -569,6 +576,9 @@ export function useFinancePersistence() {
 
   return {
     loading,
+    // Raw API access for Plaid Link
+    plaidRequest,
+    stocksRequest,
     // Accounts
     getLinkedAccounts,
     createLinkToken,
@@ -584,6 +594,7 @@ export function useFinancePersistence() {
     deleteTransaction,
     // Budgets
     getBudgets,
+    createBudget,
     upsertBudget,
     deleteBudget,
     // Subscriptions

@@ -6,6 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useFinancePersistence } from "@/hooks/useFinancePersistence";
 import { 
+  PlaidLinkButton, 
+  AddTransactionDialog, 
+  AddSubscriptionDialog, 
+  AddGiftCardDialog, 
+  AddBudgetDialog 
+} from "@/components/finance";
+import { 
   Building2, CreditCard, PiggyBank, TrendingUp, RefreshCw, 
   Plus, Wallet, Gift, BarChart3, ArrowUpRight, ArrowDownRight,
   Calendar, AlertCircle, ChevronRight
@@ -68,20 +75,6 @@ export default function Finance() {
       setSyncing(false);
     }
   };
-
-  const handleConnectBank = async () => {
-    try {
-      const result = await finance.createLinkToken();
-      if (result?.link_token) {
-        // In production, you'd use Plaid Link SDK here
-        toast.info("Plaid Link token created. Integrate Plaid Link SDK to complete connection.");
-        console.log("Link token:", result.link_token);
-      }
-    } catch {
-      toast.error("Failed to create link token");
-    }
-  };
-
   // Calculate summary stats
   const totalBalance = accounts.reduce((sum, a) => sum + (a.current_balance || 0), 0);
   const monthStart = startOfMonth(new Date()).toISOString().split('T')[0];
@@ -123,10 +116,7 @@ export default function Finance() {
               <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
               Sync
             </Button>
-            <Button size="sm" onClick={handleConnectBank}>
-              <Plus className="h-4 w-4 mr-2" />
-              Connect Account
-            </Button>
+            <PlaidLinkButton onSuccess={loadData} />
           </div>
         </div>
 
@@ -210,10 +200,7 @@ export default function Finance() {
                   <div className="text-center py-8">
                     <Building2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                     <p className="text-muted-foreground mb-4">No accounts linked yet</p>
-                    <Button onClick={handleConnectBank}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Connect Your First Account
-                    </Button>
+                    <PlaidLinkButton onSuccess={loadData} />
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -285,10 +272,7 @@ export default function Finance() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle>All Transactions</CardTitle>
-                  <Button size="sm">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Manual
-                  </Button>
+                  <AddTransactionDialog onSuccess={loadData} />
                 </div>
               </CardHeader>
               <CardContent>
@@ -326,10 +310,7 @@ export default function Finance() {
                 <div className="text-center py-12">
                   <PiggyBank className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                   <p className="text-muted-foreground mb-4">Set up your first budget category</p>
-                  <Button>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Budget
-                  </Button>
+                  <AddBudgetDialog onSuccess={loadData} />
                 </div>
               </CardContent>
             </Card>
@@ -343,10 +324,13 @@ export default function Finance() {
                     <CardTitle>Subscriptions</CardTitle>
                     <CardDescription>Recurring payments detected from your transactions</CardDescription>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => finance.syncRecurring()}>
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                    Detect Subscriptions
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => finance.syncRecurring()}>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Detect
+                    </Button>
+                    <AddSubscriptionDialog onSuccess={loadData} />
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -391,10 +375,7 @@ export default function Finance() {
                     </CardTitle>
                     <CardDescription>Total available: {formatCurrency(totalGiftCards)}</CardDescription>
                   </div>
-                  <Button size="sm">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Gift Card
-                  </Button>
+                  <AddGiftCardDialog onSuccess={loadData} />
                 </div>
               </CardHeader>
               <CardContent>
@@ -447,7 +428,7 @@ export default function Finance() {
               <CardContent>
                 {watchlist.length === 0 ? (
                   <div className="text-center py-12">
-                    <BarChart3 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <TrendingUp className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                     <p className="text-muted-foreground">Add stocks to your watchlist</p>
                   </div>
                 ) : (
