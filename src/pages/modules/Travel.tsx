@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,9 @@ export default function Travel() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [activeTab, setActiveTab] = useState<"upcoming" | "planning" | "past" | "all">("upcoming");
+  
+  // Track if we've already loaded to prevent duplicate fetches
+  const hasLoadedRef = useRef(false);
 
   useEffect(() => {
     document.title = "Arlo";
@@ -41,12 +44,14 @@ export default function Travel() {
     } finally {
       setIsLoading(false);
     }
-  }, [fetchTrips]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Load data once when authenticated
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && !hasLoadedRef.current) {
+      hasLoadedRef.current = true;
       loadTrips();
-    } else if (!authLoading) {
+    } else if (!authLoading && !isAuthenticated) {
       setIsLoading(false);
     }
   }, [isAuthenticated, authLoading, loadTrips]);
