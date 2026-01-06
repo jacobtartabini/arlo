@@ -33,6 +33,7 @@ interface SortableTaskProps {
   onSubtaskCreate: (taskId: string, title: string) => void;
   onSubtaskDelete: (subtaskId: string) => void;
   onSubtaskUpdate: (subtaskId: string, title: string) => void;
+  onTaskClick?: (task: Task) => void;
 }
 
 function SortableTask({
@@ -48,6 +49,7 @@ function SortableTask({
   onSubtaskCreate,
   onSubtaskDelete,
   onSubtaskUpdate,
+  onTaskClick,
 }: SortableTaskProps) {
   const {
     attributes,
@@ -64,7 +66,7 @@ function SortableTask({
   };
 
   return (
-    <div ref={setNodeRef} style={style}>
+    <div ref={setNodeRef} style={style} onClick={() => onTaskClick?.(task)}>
       <EnhancedTaskItem
         task={task}
         projectColor={projectColor}
@@ -99,6 +101,7 @@ interface DraggableTaskListProps {
   onSubtaskCreate: (taskId: string, title: string) => void;
   onSubtaskDelete: (subtaskId: string) => void;
   onSubtaskUpdate: (subtaskId: string, title: string) => void;
+  onTaskClick?: (task: Task) => void;
 }
 
 export function DraggableTaskList({
@@ -115,6 +118,7 @@ export function DraggableTaskList({
   onSubtaskCreate,
   onSubtaskDelete,
   onSubtaskUpdate,
+  onTaskClick,
 }: DraggableTaskListProps) {
   const [localTasks, setLocalTasks] = useState(tasks);
 
@@ -178,6 +182,7 @@ export function DraggableTaskList({
               onSubtaskCreate={onSubtaskCreate}
               onSubtaskDelete={onSubtaskDelete}
               onSubtaskUpdate={onSubtaskUpdate}
+              onTaskClick={onTaskClick}
             />
           ))}
         </div>

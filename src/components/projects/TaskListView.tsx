@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,7 @@ import {
 } from "lucide-react";
 import { DraggableTaskList } from "./DraggableTaskList";
 import { CreateTaskDialog } from "./CreateTaskDialog";
+import { EditTaskDialog } from "./EditTaskDialog";
 import { useTasksPersistence } from "@/hooks/useTasksPersistence";
 import { useSubtasksPersistence } from "@/hooks/useSubtasksPersistence";
 import { useProjectsPersistence } from "@/hooks/useProjectsPersistence";
@@ -38,6 +40,7 @@ interface TaskListViewProps {
 }
 
 export function TaskListView({ initialProjectId, onTasksChange }: TaskListViewProps) {
+  const navigate = useNavigate();
   const { fetchTasks, updateTask, deleteTask, toggleTask, assignToProject } = useTasksPersistence();
   const { fetchSubtasksForTasks, createSubtask, toggleSubtask, deleteSubtask, updateSubtask } = useSubtasksPersistence();
   const { fetchProjects } = useProjectsPersistence();
@@ -48,6 +51,7 @@ export function TaskListView({ initialProjectId, onTasksChange }: TaskListViewPr
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editTask, setEditTask] = useState<Task | null>(null);
   
   // Filters
   const [search, setSearch] = useState("");
@@ -370,6 +374,7 @@ export function TaskListView({ initialProjectId, onTasksChange }: TaskListViewPr
           onSubtaskCreate={handleSubtaskCreate}
           onSubtaskDelete={handleSubtaskDelete}
           onSubtaskUpdate={handleSubtaskUpdate}
+          onTaskClick={(task) => setEditTask(task)}
         />
       ) : (
         <Card className="p-8 text-center border-dashed">
@@ -394,6 +399,25 @@ export function TaskListView({ initialProjectId, onTasksChange }: TaskListViewPr
         onCreated={() => {
           loadData();
           onTasksChange?.();
+        }}
+      />
+
+      <EditTaskDialog
+        task={editTask}
+        open={!!editTask}
+        onOpenChange={(open) => !open && setEditTask(null)}
+        projects={projects}
+        onUpdated={() => {
+          loadData();
+          onTasksChange?.();
+        }}
+        onDeleted={() => {
+          loadData();
+          onTasksChange?.();
+        }}
+        onStartFocus={(task) => {
+          setEditTask(null);
+          navigate(`/focus?taskId=${task.id}&duration=${task.timeEstimateMinutes || 25}`);
         }}
       />
     </div>
