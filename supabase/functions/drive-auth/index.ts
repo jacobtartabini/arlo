@@ -1,7 +1,7 @@
 import { verifyArloJWT, handleCorsOptions, jsonResponse, unauthorizedResponse, errorResponse } from '../_shared/arloAuth.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { encrypt, decrypt, isEncrypted } from '../_shared/encryption.ts';
-import { createNonce, verifyNonce } from '../_shared/oauthNonce.ts';
+import { createOAuthNonce, validateAndConsumeNonce } from '../_shared/oauthNonce.ts';
 
 const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_DRIVE_CLIENT_ID') || Deno.env.get('GOOGLE_CLIENT_ID');
 const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_DRIVE_CLIENT_SECRET') || Deno.env.get('GOOGLE_CLIENT_SECRET');
@@ -123,8 +123,8 @@ Deno.serve(async (req) => {
         const supabase = getSupabaseClient();
 
         // Verify nonce
-        const nonceValid = await verifyNonce(supabase, nonce, 'google_drive', userKey);
-        if (!nonceValid) {
+        const nonceResult = await validateAndConsumeNonce(nonce, 'google_drive');
+        if (!nonceResult.valid) {
           throw new Error('Invalid or expired nonce');
         }
 
@@ -247,7 +247,7 @@ Deno.serve(async (req) => {
         }
 
         // Create nonce for CSRF protection
-        const nonce = await createNonce(supabase, 'google_drive', userKey);
+        const nonce = await createOAuthNonce(userKey, 'google_drive');
 
         const state = btoa(JSON.stringify({
           userKey,
