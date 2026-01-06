@@ -13,22 +13,23 @@ export function useProjectsPersistence() {
     if (!isAuthenticated()) return [];
 
     const filters = status ? { status } : undefined;
-    const { data, error } = await dataApiHelpers.select<DbProject[]>('projects', {
-      filters,
-      order: { column: 'updated_at', ascending: false },
-    });
+
+    // Fetch projects and tasks in parallel (prevents 2x serial timeouts)
+    const [{ data, error }, { data: tasksData }] = await Promise.all([
+      dataApiHelpers.select<DbProject[]>('projects', {
+        filters,
+        order: { column: 'updated_at', ascending: false },
+      }),
+      dataApiHelpers.select<DbTask[]>('tasks', {}),
+    ]);
 
     if (error || !data) {
       console.error("Error fetching projects:", error);
       return [];
     }
 
-    // Fetch task counts for each project
     const projects = data.map(convertProject);
-    
-    // Get all tasks to calculate progress
-    const { data: tasksData } = await dataApiHelpers.select<DbTask[]>('tasks', {});
-    
+
     if (tasksData) {
       const tasksByProject = tasksData.reduce((acc, task) => {
         if (task.project_id) {
@@ -46,8 +47,8 @@ export function useProjectsPersistence() {
         if (counts) {
           project.taskCount = counts.total;
           project.completedTaskCount = counts.completed;
-          project.progress = counts.total > 0 
-            ? Math.round((counts.completed / counts.total) * 100) 
+          project.progress = counts.total > 0
+            ? Math.round((counts.completed / counts.total) * 100)
             : 0;
         } else {
           project.taskCount = 0;

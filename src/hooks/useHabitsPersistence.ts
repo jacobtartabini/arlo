@@ -64,9 +64,8 @@ const dbToHabitLog = (db: DbHabitLog): HabitLog => ({
 const calculateStreak = (logs: HabitLog[]): number => {
   if (logs.length === 0) return 0;
 
-  const sortedLogs = [...logs].sort(
-    (a, b) => b.completedAt.getTime() - a.completedAt.getTime()
-  );
+  // Logs are fetched in descending order (most recent first). Keep it O(n).
+  const sortedLogs = logs;
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -76,7 +75,7 @@ const calculateStreak = (logs: HabitLog[]): number => {
 
   for (const log of sortedLogs) {
     if (log.skipped) continue; // Skips don't break streaks
-    
+
     const logDate = new Date(log.completedAt);
     logDate.setHours(0, 0, 0, 0);
 
@@ -123,17 +122,25 @@ export function useHabitsPersistence() {
   };
 
   const fetchHabitsWithStreaks = async (): Promise<HabitWithStreak[]> => {
-    const habits = await fetchHabits();
-    const logs = await fetchAllHabitLogs();
+    // Fetch habits + logs in parallel to avoid serial timeouts
+    const [habits, logs] = await Promise.all([fetchHabits(), fetchAllHabitLogs()]);
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    // Group logs by habit once (prevents O(habits * logs) filtering)
+    const logsByHabitId = new Map<string, HabitLog[]>();
+    for (const log of logs) {
+      const arr = logsByHabitId.get(log.habitId);
+      if (arr) arr.push(log);
+      else logsByHabitId.set(log.habitId, [log]);
+    }
+
     return habits.map((habit) => {
-      const habitLogs = logs.filter((log) => log.habitId === habit.id);
+      const habitLogs = logsByHabitId.get(habit.id) ?? [];
       const streak = calculateStreak(habitLogs);
-      const lastCompleted = habitLogs.find(l => !l.skipped)?.completedAt;
-      const completedToday = habitLogs.some(log => {
+      const lastCompleted = habitLogs.find((l) => !l.skipped)?.completedAt;
+      const completedToday = habitLogs.some((log) => {
         const logDate = new Date(log.completedAt);
         logDate.setHours(0, 0, 0, 0);
         return logDate.getTime() === today.getTime() && !log.skipped;
