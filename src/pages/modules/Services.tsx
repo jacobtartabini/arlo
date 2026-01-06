@@ -43,7 +43,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { getAuthHeaders, isAuthenticated as checkArloAuth } from '@/lib/arloAuth';
+import { getAuthHeaders } from '@/lib/arloAuth';
 import { useAuth } from '@/providers/AuthProvider';
 
 interface Device {
@@ -236,15 +236,10 @@ const Services = () => {
 
   const fetchTailscaleData = useCallback(async (action: string) => {
     try {
-      // Check auth state before making request
-      if (!checkArloAuth()) {
-        console.log('[Services] Not authenticated, skipping API call');
-        throw new Error('Not authenticated. Please connect to the Tailnet.');
-      }
-
+      // Get auth headers (will auto-refresh token if needed)
       const authHeaders = await getAuthHeaders();
       if (!authHeaders) {
-        throw new Error('Failed to get authentication headers');
+        throw new Error('Not authenticated. Please connect to the Tailnet.');
       }
 
       console.log('[Services] Calling tailscale-api with action:', action);
@@ -364,7 +359,7 @@ const Services = () => {
     
     // Set up polling for realtime updates (every 30 seconds)
     pollingIntervalRef.current = setInterval(() => {
-      if (checkArloAuth()) {
+      if (isAuthenticated) {
         loadAllData();
       }
     }, 30000);
