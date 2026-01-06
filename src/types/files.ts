@@ -34,6 +34,7 @@ export interface DriveFile {
   modified_time: string | null;
   account_email?: string;
   account_name?: string;
+  account_id?: string;
 }
 
 export interface DriveFileLink {
@@ -44,6 +45,13 @@ export interface DriveFileLink {
   notes: string | null;
   created_at: string;
   drive_files?: DriveFile;
+}
+
+// Breadcrumb item for folder navigation
+export interface BreadcrumbItem {
+  id: string;
+  name: string;
+  isRoot?: boolean;
 }
 
 export type FileViewMode = 'grid' | 'list';
@@ -58,6 +66,14 @@ export type FileTypeFilter =
   | 'pdf' 
   | 'video';
 
+export type FileSortField = 'name' | 'modified_time' | 'created_time' | 'size_bytes';
+export type FileSortDirection = 'asc' | 'desc';
+
+export interface FileSortOption {
+  field: FileSortField;
+  direction: FileSortDirection;
+}
+
 export const FILE_TYPE_LABELS: Record<FileTypeFilter, string> = {
   all: 'All Files',
   folder: 'Folders',
@@ -67,6 +83,28 @@ export const FILE_TYPE_LABELS: Record<FileTypeFilter, string> = {
   image: 'Images',
   pdf: 'PDFs',
   video: 'Videos',
+};
+
+export const SORT_FIELD_LABELS: Record<FileSortField, string> = {
+  name: 'Name',
+  modified_time: 'Modified',
+  created_time: 'Created',
+  size_bytes: 'Size',
+};
+
+// File preferences stored in localStorage
+export interface FilePreferences {
+  viewMode: FileViewMode;
+  sortField: FileSortField;
+  sortDirection: FileSortDirection;
+  typeFilter: FileTypeFilter;
+}
+
+export const DEFAULT_FILE_PREFERENCES: FilePreferences = {
+  viewMode: 'list',
+  sortField: 'name',
+  sortDirection: 'asc',
+  typeFilter: 'all',
 };
 
 // Helper to get file type icon name
@@ -96,6 +134,73 @@ export function formatFileSize(bytes: number | null): string {
 export function canPreviewInApp(mimeType: string): boolean {
   return (
     mimeType.includes('image') ||
-    mimeType === 'application/pdf'
+    mimeType === 'application/pdf' ||
+    isGoogleWorkspaceFile(mimeType)
   );
+}
+
+// Check if it's a Google Workspace file (Docs, Sheets, Slides)
+export function isGoogleWorkspaceFile(mimeType: string): boolean {
+  return (
+    mimeType === 'application/vnd.google-apps.document' ||
+    mimeType === 'application/vnd.google-apps.spreadsheet' ||
+    mimeType === 'application/vnd.google-apps.presentation'
+  );
+}
+
+// Get embedded URL for Google Workspace files
+export function getEmbedUrl(file: DriveFile): string | null {
+  if (!file.web_view_link) return null;
+  
+  const mimeType = file.mime_type;
+  
+  // Google Docs, Sheets, Slides can be embedded
+  if (mimeType === 'application/vnd.google-apps.document') {
+    // Convert view URL to embedded preview URL
+    return file.web_view_link.replace('/edit', '/preview');
+  }
+  if (mimeType === 'application/vnd.google-apps.spreadsheet') {
+    return file.web_view_link.replace('/edit', '/preview');
+  }
+  if (mimeType === 'application/vnd.google-apps.presentation') {
+    return file.web_view_link.replace('/edit', '/embed?start=false&loop=false&delayms=3000');
+  }
+  
+  return null;
+}
+
+// Sort files with folders first
+export function sortFilesWithFoldersFirst(files: DriveFile[], sortOption: FileSortOption): DriveFile[] {
+  return [...files].sort((a, b) => {
+    // Folders always come first
+    if (a.is_folder && !b.is_folder) return -1;
+    if (!a.is_folder && b.is_folder) return 1;
+    
+    // Then sort by the specified field
+    const { field, direction } = sortOption;
+    const multiplier = direction === 'asc' ? 1 : -1;
+    
+    let comparison = 0;
+    
+    switch (field) {
+      case 'name':
+        comparison = a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+        break;
+      case 'modified_time':
+        const aModified = a.modified_time ? new Date(a.modified_time).getTime() : 0;
+        const bModified = b.modified_time ? new Date(b.modified_time).getTime() : 0;
+        comparison = aModified - bModified;
+        break;
+      case 'created_time':
+        const aCreated = a.created_time ? new Date(a.created_time).getTime() : 0;
+        const bCreated = b.created_time ? new Date(b.created_time).getTime() : 0;
+        comparison = aCreated - bCreated;
+        break;
+      case 'size_bytes':
+        comparison = (a.size_bytes || 0) - (b.size_bytes || 0);
+        break;
+    }
+    
+    return comparison * multiplier;
+  });
 }
