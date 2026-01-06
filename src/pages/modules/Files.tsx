@@ -14,22 +14,21 @@ import {
   RefreshCw,
   HardDrive,
   FolderOpen,
-  FileText,
-  Table,
-  Presentation,
-  Image,
-  Video,
-  File,
   Cloud,
   Mail,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import { useFilesPersistence } from "@/hooks/useFilesPersistence";
-import type { DriveAccount, DriveFile, FileViewMode, FileTypeFilter } from "@/types/files";
-import { FILE_TYPE_LABELS } from "@/types/files";
+import { useFilePreferences } from "@/hooks/useFilePreferences";
+import type { DriveAccount, DriveFile, BreadcrumbItem } from "@/types/files";
+import { FILE_TYPE_LABELS, sortFilesWithFoldersFirst, canPreviewInApp } from "@/types/files";
 import { FileCard } from "@/components/files/FileCard";
 import { FileListItem } from "@/components/files/FileListItem";
 import { FilePreviewPanel } from "@/components/files/FilePreviewPanel";
+import { FileBreadcrumbs } from "@/components/files/FileBreadcrumbs";
+import { FileSortDropdown } from "@/components/files/FileSortDropdown";
+import { EmbeddedFileViewer } from "@/components/files/EmbeddedFileViewer";
 
 export default function Files() {
   const navigate = useNavigate();
@@ -43,16 +42,27 @@ export default function Files() {
     syncFiles,
   } = useFilesPersistence();
 
+  const {
+    preferences,
+    setViewMode,
+    setSortOption,
+    setTypeFilter,
+    sortOption,
+  } = useFilePreferences();
+
   // State
   const [accounts, setAccounts] = useState<DriveAccount[]>([]);
   const [files, setFiles] = useState<DriveFile[]>([]);
   const [selectedFile, setSelectedFile] = useState<DriveFile | null>(null);
-  const [viewMode, setViewMode] = useState<FileViewMode>('grid');
+  const [viewingFile, setViewingFile] = useState<DriveFile | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
-  const [typeFilter, setTypeFilter] = useState<FileTypeFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  
+  // Folder navigation state
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([]);
 
   useEffect(() => {
     document.title = "Files - Arlo";
@@ -64,15 +74,15 @@ export default function Files() {
     loadAccounts();
   }, [authLoading, isAuthenticated]);
 
-  // Load files when account or filter changes
+  // Load files when account, folder, or filter changes
   useEffect(() => {
     if (authLoading || !isAuthenticated || accounts.length === 0) return;
     
     const accountId = selectedAccountId || accounts[0]?.id;
     if (accountId) {
-      loadFiles(accountId);
+      loadFiles(accountId, currentFolderId);
     }
-  }, [authLoading, isAuthenticated, accounts, selectedAccountId, typeFilter]);
+  }, [authLoading, isAuthenticated, accounts, selectedAccountId, preferences.typeFilter, currentFolderId]);
 
   const loadAccounts = async () => {
     const data = await listAccounts();
@@ -82,27 +92,44 @@ export default function Files() {
     }
   };
 
-  const loadFiles = async (accountId: string) => {
-    const { files: data } = await listFiles(accountId, { mimeType: typeFilter });
-    setFiles(data);
+  const loadFiles = async (accountId: string, folderId: string | null = null) => {
+    const { files: data } = await listFiles(accountId, { 
+      mimeType: preferences.typeFilter,
+      folderId: folderId || undefined,
+    });
+    // Sort with folders first
+    const sortedFiles = sortFilesWithFoldersFirst(data, sortOption);
+    setFiles(sortedFiles);
   };
 
   const handleSearch = useCallback(async () => {
     if (!searchQuery.trim()) {
       if (selectedAccountId) {
-        loadFiles(selectedAccountId);
+        loadFiles(selectedAccountId, currentFolderId);
       }
       return;
     }
 
+    // Clear folder navigation when searching
+    setCurrentFolderId(null);
+    setBreadcrumbs([]);
+    
     setIsSearching(true);
     try {
-      const results = await searchAllFiles(accounts, searchQuery, typeFilter);
-      setFiles(results);
+      const results = await searchAllFiles(accounts, searchQuery, preferences.typeFilter);
+      const sortedResults = sortFilesWithFoldersFirst(results, sortOption);
+      setFiles(sortedResults);
     } finally {
       setIsSearching(false);
     }
-  }, [searchQuery, accounts, typeFilter, searchAllFiles, selectedAccountId]);
+  }, [searchQuery, accounts, preferences.typeFilter, searchAllFiles, selectedAccountId, currentFolderId, sortOption]);
+
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    if (selectedAccountId) {
+      loadFiles(selectedAccountId, currentFolderId);
+    }
+  };
 
   const handleSync = async () => {
     if (!selectedAccountId) return;
@@ -111,14 +138,47 @@ export default function Files() {
     try {
       const count = await syncFiles(selectedAccountId);
       toast.success(`Synced ${count} files`);
-      loadFiles(selectedAccountId);
+      loadFiles(selectedAccountId, currentFolderId);
     } finally {
       setIsSyncing(false);
     }
   };
 
   const handleFileClick = (file: DriveFile) => {
-    setSelectedFile(file);
+    if (canPreviewInApp(file.mime_type || '')) {
+      // Open in embedded viewer
+      setViewingFile(file);
+    } else {
+      // Show details panel
+      setSelectedFile(file);
+    }
+  };
+
+  const handleOpenFolder = (folder: DriveFile) => {
+    // Add to breadcrumbs
+    setBreadcrumbs(prev => [...prev, { id: folder.drive_file_id, name: folder.name }]);
+    setCurrentFolderId(folder.drive_file_id);
+    setSelectedFile(null);
+    // Clear search when navigating folders
+    if (searchQuery) {
+      setSearchQuery('');
+    }
+  };
+
+  const handleBreadcrumbNavigate = (folderId: string | null, name: string) => {
+    if (folderId === null) {
+      // Navigate to root
+      setBreadcrumbs([]);
+      setCurrentFolderId(null);
+    } else {
+      // Navigate to specific folder in breadcrumb
+      const index = breadcrumbs.findIndex(b => b.id === folderId);
+      if (index !== -1) {
+        setBreadcrumbs(breadcrumbs.slice(0, index + 1));
+        setCurrentFolderId(folderId);
+      }
+    }
+    setSelectedFile(null);
   };
 
   const handleOpenInDrive = (file: DriveFile) => {
@@ -127,10 +187,36 @@ export default function Files() {
     }
   };
 
+  const handleSortChange = (newSortOption: typeof sortOption) => {
+    setSortOption(newSortOption);
+    // Re-sort current files
+    setFiles(prev => sortFilesWithFoldersFirst(prev, newSortOption));
+  };
+
+  const handleAccountChange = (accountId: string | null) => {
+    setSelectedAccountId(accountId);
+    // Reset folder navigation when switching accounts
+    setCurrentFolderId(null);
+    setBreadcrumbs([]);
+    setSelectedFile(null);
+  };
+
   const selectedAccount = accounts.find(a => a.id === selectedAccountId);
+
+  // Count folders and files
+  const folderCount = files.filter(f => f.is_folder).length;
+  const fileCount = files.filter(f => !f.is_folder).length;
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Embedded File Viewer */}
+      {viewingFile && (
+        <EmbeddedFileViewer
+          file={viewingFile}
+          onClose={() => setViewingFile(null)}
+        />
+      )}
+
       <div className="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-8">
         {/* Header */}
         <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -174,31 +260,37 @@ export default function Files() {
         <div className="flex gap-6">
           {/* Left Panel - Files */}
           <div className="flex-1 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FolderOpen className="h-5 w-5 text-muted-foreground" />
-                <h2 className="font-medium">All Files</h2>
+            {/* Breadcrumbs */}
+            {accounts.length > 0 && (
+              <div className="flex items-center justify-between">
+                <FileBreadcrumbs
+                  items={breadcrumbs}
+                  onNavigate={handleBreadcrumbNavigate}
+                />
+                <div className="flex items-center gap-2">
+                  <FileSortDropdown
+                    sortOption={sortOption}
+                    onSortChange={handleSortChange}
+                  />
+                  <Button
+                    variant={preferences.viewMode === 'grid' ? 'secondary' : 'ghost'}
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => setViewMode('grid')}
+                  >
+                    <Grid3X3 className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant={preferences.viewMode === 'list' ? 'secondary' : 'ghost'}
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => setViewMode('list')}
+                  >
+                    <List className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => setViewMode('grid')}
-                >
-                  <Grid3X3 className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant={viewMode === 'list' ? 'secondary' : 'ghost'}
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => setViewMode('list')}
-                >
-                  <List className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
+            )}
 
             <div className="space-y-4">
               {/* Search & Filters */}
@@ -210,14 +302,23 @@ export default function Files() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                    className="pl-10"
+                    className="pl-10 pr-10"
                   />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={handleClearSearch}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   {accounts.length > 1 && (
                     <select
                       value={selectedAccountId || ''}
-                      onChange={(e) => setSelectedAccountId(e.target.value || null)}
+                      onChange={(e) => handleAccountChange(e.target.value || null)}
                       className="rounded-md border border-input bg-background px-3 py-2 text-sm"
                     >
                       <option value="">All Accounts</option>
@@ -229,8 +330,8 @@ export default function Files() {
                     </select>
                   )}
                   <select
-                    value={typeFilter}
-                    onChange={(e) => setTypeFilter(e.target.value as FileTypeFilter)}
+                    value={preferences.typeFilter}
+                    onChange={(e) => setTypeFilter(e.target.value as typeof preferences.typeFilter)}
                     className="rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
                     {Object.entries(FILE_TYPE_LABELS).map(([key, label]) => (
@@ -240,14 +341,25 @@ export default function Files() {
                 </div>
               </div>
 
-              {/* Account indicator */}
-              {selectedAccount && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Mail className="h-4 w-4" />
-                  <span>Viewing files from</span>
-                  <span className="font-medium text-foreground">{selectedAccount.account_email}</span>
+              {/* Account indicator & counts */}
+              <div className="flex items-center justify-between text-sm text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  {selectedAccount && (
+                    <>
+                      <Mail className="h-4 w-4" />
+                      <span>Viewing files from</span>
+                      <span className="font-medium text-foreground">{selectedAccount.account_email}</span>
+                    </>
+                  )}
                 </div>
-              )}
+                {files.length > 0 && (
+                  <span>
+                    {folderCount > 0 && `${folderCount} folder${folderCount !== 1 ? 's' : ''}`}
+                    {folderCount > 0 && fileCount > 0 && ', '}
+                    {fileCount > 0 && `${fileCount} file${fileCount !== 1 ? 's' : ''}`}
+                  </span>
+                )}
+              </div>
 
               {/* Files Grid/List */}
               {accounts.length === 0 ? (
@@ -268,12 +380,12 @@ export default function Files() {
               ) : filesLoading || isSearching ? (
                 <div className={cn(
                   "gap-4",
-                  viewMode === 'grid' 
+                  preferences.viewMode === 'grid' 
                     ? "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4" 
                     : "flex flex-col"
                 )}>
                   {Array.from({ length: 8 }).map((_, i) => (
-                    <Skeleton key={i} className={viewMode === 'grid' ? "h-40" : "h-16"} />
+                    <Skeleton key={i} className={preferences.viewMode === 'grid' ? "h-40" : "h-16"} />
                   ))}
                 </div>
               ) : files.length === 0 ? (
@@ -282,19 +394,24 @@ export default function Files() {
                   <div className="text-center">
                     <h3 className="font-semibold">No files found</h3>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      {searchQuery ? 'Try a different search term' : 'This account has no files matching the current filter'}
+                      {searchQuery 
+                        ? 'Try a different search term' 
+                        : currentFolderId 
+                          ? 'This folder is empty' 
+                          : 'This account has no files matching the current filter'}
                     </p>
                   </div>
                 </Card>
-              ) : viewMode === 'grid' ? (
+              ) : preferences.viewMode === 'grid' ? (
                 <div className="grid gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                   {files.map((file) => (
                     <FileCard
-                      key={file.drive_file_id}
+                      key={`${file.drive_file_id}-${file.account_email}`}
                       file={file}
                       isSelected={selectedFile?.drive_file_id === file.drive_file_id}
                       onClick={() => handleFileClick(file)}
                       onOpenInDrive={() => handleOpenInDrive(file)}
+                      onOpenFolder={handleOpenFolder}
                     />
                   ))}
                 </div>
@@ -302,11 +419,12 @@ export default function Files() {
                 <div className="divide-y divide-border rounded-lg border">
                   {files.map((file) => (
                     <FileListItem
-                      key={file.drive_file_id}
+                      key={`${file.drive_file_id}-${file.account_email}`}
                       file={file}
                       isSelected={selectedFile?.drive_file_id === file.drive_file_id}
                       onClick={() => handleFileClick(file)}
                       onOpenInDrive={() => handleOpenInDrive(file)}
+                      onOpenFolder={handleOpenFolder}
                     />
                   ))}
                 </div>
@@ -315,11 +433,16 @@ export default function Files() {
           </div>
 
           {/* Right Panel - File Preview */}
-          {selectedFile && (
+          {selectedFile && !viewingFile && (
             <FilePreviewPanel
               file={selectedFile}
               onClose={() => setSelectedFile(null)}
               onOpenInDrive={() => handleOpenInDrive(selectedFile)}
+              onPreview={() => {
+                if (canPreviewInApp(selectedFile.mime_type || '')) {
+                  setViewingFile(selectedFile);
+                }
+              }}
             />
           )}
         </div>

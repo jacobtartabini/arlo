@@ -10,6 +10,7 @@ interface FilePreviewPanelProps {
   file: DriveFile;
   onClose: () => void;
   onOpenInDrive: () => void;
+  onPreview?: () => void;
 }
 
 function getFileIcon(mimeType: string) {
@@ -30,7 +31,7 @@ function getFileIcon(mimeType: string) {
   return <File className={`${iconClass} text-muted-foreground`} />;
 }
 
-export function FilePreviewPanel({ file, onClose, onOpenInDrive }: FilePreviewPanelProps) {
+export function FilePreviewPanel({ file, onClose, onOpenInDrive, onPreview }: FilePreviewPanelProps) {
   const canPreview = canPreviewInApp(file.mime_type || '');
   const isImage = file.mime_type?.includes('image');
 
@@ -59,10 +60,17 @@ export function FilePreviewPanel({ file, onClose, onOpenInDrive }: FilePreviewPa
 
       {/* Actions */}
       <div className="flex gap-2 border-b p-4">
-        <Button className="flex-1" onClick={onOpenInDrive}>
-          <ExternalLink className="mr-2 h-4 w-4" />
-          Open in Drive
-        </Button>
+        {canPreview && onPreview ? (
+          <Button className="flex-1" onClick={onPreview}>
+            <Eye className="mr-2 h-4 w-4" />
+            Preview in Arlo
+          </Button>
+        ) : (
+          <Button className="flex-1" onClick={onOpenInDrive}>
+            <ExternalLink className="mr-2 h-4 w-4" />
+            Open in Drive
+          </Button>
+        )}
         {file.web_content_link && (
           <Button
             variant="outline"
@@ -70,6 +78,16 @@ export function FilePreviewPanel({ file, onClose, onOpenInDrive }: FilePreviewPa
             onClick={() => window.open(file.web_content_link!, '_blank')}
           >
             <Download className="h-4 w-4" />
+          </Button>
+        )}
+        {canPreview && onPreview && (
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={onOpenInDrive}
+            title="Open in Google Drive"
+          >
+            <ExternalLink className="h-4 w-4" />
           </Button>
         )}
       </div>

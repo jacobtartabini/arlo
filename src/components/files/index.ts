@@ -3,3 +3,6 @@ export { FileListItem } from './FileListItem';
 export { FilePreviewPanel } from './FilePreviewPanel';
 export { DriveAccountCard } from './DriveAccountCard';
 export { ConnectDriveDialog } from './ConnectDriveDialog';
+export { FileBreadcrumbs } from './FileBreadcrumbs';
+export { FileSortDropdown } from './FileSortDropdown';
+export { EmbeddedFileViewer } from './EmbeddedFileViewer';
