@@ -39,7 +39,11 @@ const ALLOWED_TABLES = [
   'inbox_accounts', 'inbox_accounts_safe', 'inbox_threads', 'inbox_messages', 
   'inbox_drafts', 'inbox_sync_state',
   // Productivity system tables
-  'projects', 'subtasks', 'time_blocks', 'project_links'
+  'projects', 'subtasks', 'time_blocks', 'project_links',
+  // Travel system tables
+  'trips', 'trip_destinations', 'trip_travelers', 'trip_itinerary_items',
+  'trip_saved_places', 'trip_reservations', 'trip_expenses',
+  'trip_flight_searches', 'trip_saved_flights'
 ]
 
 // Fields that should be encrypted when stored

@@ -1,145 +1,264 @@
-import { useEffect } from "react";
-import { ModuleTemplate, type ModuleSection, type ModuleStat } from "@/components/ModuleTemplate";
-import { Backpack, Bed, Luggage, Map, Plane, Utensils } from "lucide-react";
-
-const bookings = [
-  { type: "Flight", route: "SFO → NYC", date: "Apr 28", status: "Confirmed" },
-  { type: "Hotel", route: "Hudson Loft", date: "Apr 28 – May 2", status: "Pending" },
-  { type: "Flight", route: "NYC → SFO", date: "May 2", status: "Standby" },
-];
-
-const restaurants = [
-  { name: "Terra Rooftop", time: "Thu 7:30 PM", status: "Confirmed" },
-  { name: "Noir Bistro", time: "Waitlist", status: "Join" },
-  { name: "Green Market", time: "Fri 12:00 PM", status: "Confirmed" },
-];
-
-const tripTimeline = [
-  { time: "Apr 27, 21:30", event: "Pack + sync boarding passes" },
-  { time: "Apr 28, 05:45", event: "Depart home for SFO" },
-  { time: "Apr 28, 07:15", event: "Security & lounge" },
-  { time: "Apr 28, 09:10", event: "Flight DL204 departs" },
-  { time: "Apr 28, 18:05", event: "Arrive JFK + rideshare" },
-];
-
-const packingChecklist = [
-  { item: "Passport & TSA PreCheck", required: true },
-  { item: "Conference badge", required: true },
-  { item: "Camera kit", required: false },
-  { item: "Portable charger", required: false },
-];
+import { useEffect, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import { 
+  Plane, Plus, MapPin, Calendar, DollarSign, 
+  Luggage, ChevronRight, Cloud, Clock
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useTravelPersistence } from "@/hooks/useTravelPersistence";
+import { Trip, TripStatus } from "@/types/travel";
+import { CreateTripDialog } from "@/components/travel/CreateTripDialog";
+import { TripCard } from "@/components/travel/TripCard";
+import { format, differenceInDays, isAfter, isBefore, isToday } from "date-fns";
+import { cn } from "@/lib/utils";
 
 export default function Travel() {
+  const navigate = useNavigate();
+  const { fetchTrips, createTrip, deleteTrip, updateTrip } = useTravelPersistence();
+  
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [filter, setFilter] = useState<TripStatus | 'all'>('all');
+
   useEffect(() => {
     document.title = "Arlo";
   }, []);
 
-  const stats: ModuleStat[] = [
-    { label: "Next flight", value: "SFO → NYC", helper: "Apr 28 · 09:10", tone: "neutral", trend: [12, 9, 6, 3] },
-    { label: "Stay", value: "Hudson Loft", helper: "Check-in Apr 28", tone: "neutral", trend: [1, 1, 1, 0.5] },
-    { label: "Dining", value: "3 holds", helper: "2 confirmed", tone: "positive", trend: [1, 2, 3] },
-    { label: "Packing", value: "4 items", helper: "2 required", tone: "neutral", trend: [20, 40, 60, 70] },
-  ];
+  const loadTrips = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await fetchTrips();
+      setTrips(data);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [fetchTrips]);
 
-  const sections: ModuleSection[] = [
-    {
-      title: "Trip brief",
-      description: "A modern, visual deck for this itinerary so you see the posture, not just the list.",
-      variant: "split",
-      items: [
-        {
-          title: "Outbound",
-          description: "SFO → NYC · Delta 204 · Boarding group checked",
-          badge: "Confirmed",
-          tone: "positive",
-          icon: <Plane className="h-5 w-5" />,
-          visual: { type: "progress", value: 72, label: "Gate timing" },
-          spotlight: true,
-        },
-        {
-          title: "Stay",
-          description: "Hudson Loft · SoHo · Early check-in requested",
-          badge: "Pending response",
-          tone: "info",
-          icon: <Bed className="h-5 w-5" />,
-          visual: { type: "pill", label: "Hold till 6 PM", tone: "info" },
-        },
-        {
-          title: "Return",
-          description: "NYC → SFO · standby window locked",
-          badge: "Standby",
-          tone: "neutral",
-          icon: <Plane className="h-5 w-5" />,
-          visual: { type: "trend", points: [3, 2, 1], tone: "neutral" },
-        },
-      ],
-    },
-    {
-      title: "Flight + stay stack",
-      description: "Everything travelers need in one skinny rail: status, timing, and the nudge you should take now.",
-      items: bookings.map((booking) => ({
-        title: `${booking.type}: ${booking.route}`,
-        description: booking.date,
-        badge: booking.status,
-        tone: booking.status === "Pending" ? "info" : booking.status === "Standby" ? "neutral" : "positive",
-        icon: booking.type === "Flight" ? <Plane className="h-4 w-4" /> : <Bed className="h-4 w-4" />,
-        visual:
-          booking.status === "Confirmed"
-            ? { type: "pill", label: "Boarding pass saved", tone: "positive" }
-            : { type: "progress", value: booking.status === "Pending" ? 48 : 30 },
-      })),
-    },
-    {
-      title: "Itinerary timeline",
-      description: "The checkpoints that matter. Arlo keeps the spacing quiet while still making order obvious.",
-      variant: "timeline",
-      accent: "info",
-      items: tripTimeline.map((stop) => ({
-        title: stop.event,
-        description: stop.time,
-        icon: <Map className="h-4 w-4" />,
-        badge: stop.event.includes("Flight") ? "Airport" : undefined,
-      })),
-    },
-    {
-      title: "Food holds",
-      description: "Reservations and waitlists rendered as signals, not paragraphs.",
-      items: restaurants.map((restaurant) => ({
-        title: restaurant.name,
-        description: restaurant.time,
-        badge: restaurant.status,
-        tone: restaurant.status === "Confirmed" ? "positive" : "info",
-        icon: <Utensils className="h-4 w-4" />,
-        visual:
-          restaurant.status === "Confirmed"
-            ? { type: "pill", label: "Saved to wallet", tone: "positive" }
-            : { type: "progress", value: 35, label: "Waitlist" },
-      })),
-    },
-    {
-      title: "Packing essentials",
-      description: "A minimal kit so you only see the things that break the trip if forgotten.",
-      items: packingChecklist.map((item) => ({
-        title: item.item,
-        badge: item.required ? "Required" : "Optional",
-        tone: item.required ? "positive" : "neutral",
-        icon: <Backpack className="h-4 w-4" />,
-        visual: { type: "progress", value: item.required ? 100 : 60, label: "Check" },
-      })),
-    },
-  ];
+  useEffect(() => {
+    loadTrips();
+  }, [loadTrips]);
+
+  const handleCreateTrip = async (
+    name: string,
+    startDate: Date,
+    endDate: Date,
+    options?: { description?: string; homeAirport?: string; homeCurrency?: string }
+  ) => {
+    const newTrip = await createTrip(name, startDate, endDate, options);
+    if (newTrip) {
+      setTrips(prev => [newTrip, ...prev]);
+      navigate(`/travel/${newTrip.id}`);
+    }
+    setShowCreateDialog(false);
+  };
+
+  const handleDeleteTrip = async (id: string) => {
+    const success = await deleteTrip(id);
+    if (success) {
+      setTrips(prev => prev.filter(t => t.id !== id));
+    }
+  };
+
+  // Categorize trips
+  const now = new Date();
+  const upcomingTrips = trips.filter(t => 
+    (t.status === 'planning' || t.status === 'active') && 
+    isAfter(t.startDate, now)
+  ).sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
+  
+  const activeTrip = trips.find(t => 
+    t.status === 'active' || 
+    (isAfter(now, t.startDate) && isBefore(now, t.endDate))
+  );
+  
+  const pastTrips = trips.filter(t => 
+    t.status === 'completed' || 
+    (isBefore(t.endDate, now) && t.status !== 'cancelled')
+  ).sort((a, b) => b.endDate.getTime() - a.endDate.getTime());
+
+  const filteredTrips = filter === 'all' ? trips : trips.filter(t => t.status === filter);
+
+  const getDaysUntil = (date: Date) => {
+    const days = differenceInDays(date, now);
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Tomorrow';
+    if (days < 0) return `${Math.abs(days)} days ago`;
+    return `${days} days`;
+  };
 
   return (
-    <ModuleTemplate
-      icon={Luggage}
-      title="Travel"
-      description="A light trip board: confirmed holds, a simple timeline, and the essentials you shouldn’t forget."
-      primaryAction="Add booking"
-      secondaryAction="Share itinerary"
-      accent="cyan"
-      stats={stats}
-      sections={sections}
-    />
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <div className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-cyan-500/10">
+                <Luggage className="h-6 w-6 text-cyan-500" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold">Travel</h1>
+                <p className="text-sm text-muted-foreground">
+                  Plan trips, track reservations, explore destinations
+                </p>
+              </div>
+            </div>
+            <Button onClick={() => setShowCreateDialog(true)} className="gap-2">
+              <Plus className="h-4 w-4" />
+              New Trip
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="container mx-auto px-4 py-6 space-y-8">
+        {/* Active Trip Banner */}
+        {activeTrip && (
+          <Card 
+            className="bg-gradient-to-br from-cyan-500/10 via-blue-500/10 to-purple-500/10 border-cyan-500/20 cursor-pointer hover:border-cyan-500/40 transition-colors"
+            onClick={() => navigate(`/travel/${activeTrip.id}`)}
+          >
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 rounded-full bg-cyan-500/20">
+                    <Plane className="h-6 w-6 text-cyan-500" />
+                  </div>
+                  <div>
+                    <Badge variant="secondary" className="mb-1 bg-cyan-500/20 text-cyan-400">
+                      Active Trip
+                    </Badge>
+                    <h2 className="text-xl font-semibold">{activeTrip.name}</h2>
+                    <p className="text-sm text-muted-foreground">
+                      {format(activeTrip.startDate, 'MMM d')} - {format(activeTrip.endDate, 'MMM d, yyyy')}
+                    </p>
+                  </div>
+                </div>
+                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Quick Stats */}
+        {!isLoading && trips.length > 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-cyan-500/10">
+                  <Plane className="h-4 w-4 text-cyan-500" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{upcomingTrips.length}</p>
+                  <p className="text-xs text-muted-foreground">Upcoming</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-green-500/10">
+                  <Calendar className="h-4 w-4 text-green-500" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">
+                    {upcomingTrips[0] ? getDaysUntil(upcomingTrips[0].startDate) : '-'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Next Trip</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-purple-500/10">
+                  <MapPin className="h-4 w-4 text-purple-500" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{pastTrips.length}</p>
+                  <p className="text-xs text-muted-foreground">Past Trips</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-amber-500/10">
+                  <Clock className="h-4 w-4 text-amber-500" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold">{trips.filter(t => t.status === 'planning').length}</p>
+                  <p className="text-xs text-muted-foreground">Planning</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* Filter Tabs */}
+        <div className="flex gap-2 overflow-x-auto pb-2">
+          {(['all', 'planning', 'active', 'completed'] as const).map(status => (
+            <Button
+              key={status}
+              variant={filter === status ? "default" : "outline"}
+              size="sm"
+              onClick={() => setFilter(status)}
+              className="capitalize"
+            >
+              {status === 'all' ? 'All Trips' : status}
+            </Button>
+          ))}
+        </div>
+
+        {/* Trips List */}
+        {isLoading ? (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {[1, 2, 3].map(i => (
+              <Card key={i} className="p-6">
+                <Skeleton className="h-4 w-24 mb-2" />
+                <Skeleton className="h-6 w-48 mb-4" />
+                <Skeleton className="h-4 w-32" />
+              </Card>
+            ))}
+          </div>
+        ) : filteredTrips.length === 0 ? (
+          <Card className="p-12 text-center">
+            <div className="flex flex-col items-center gap-4">
+              <div className="p-4 rounded-full bg-muted">
+                <Plane className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-lg">No trips yet</h3>
+                <p className="text-muted-foreground text-sm mt-1">
+                  Start planning your next adventure
+                </p>
+              </div>
+              <Button onClick={() => setShowCreateDialog(true)} className="mt-2">
+                <Plus className="h-4 w-4 mr-2" />
+                Create Your First Trip
+              </Button>
+            </div>
+          </Card>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {filteredTrips.map(trip => (
+              <TripCard
+                key={trip.id}
+                trip={trip}
+                onClick={() => navigate(`/travel/${trip.id}`)}
+                onDelete={() => handleDeleteTrip(trip.id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <CreateTripDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        onCreateTrip={handleCreateTrip}
+      />
+    </div>
   );
 }
-
