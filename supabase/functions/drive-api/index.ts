@@ -8,7 +8,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 interface DriveApiRequest {
-  action: 'list_files' | 'search_files' | 'get_file' | 'sync_files' | 'link_file' | 'unlink_file' | 'get_links' | 'get_all_links' | 'get_file_links';
+  action: 'list_files' | 'search_files' | 'get_file' | 'sync_files' | 'link_file' | 'unlink_file' | 'get_links' | 'get_all_links' | 'get_file_links' | 'list_shared_drives';
   accountId?: string;
   query?: string;
   pageToken?: string;
@@ -19,6 +19,8 @@ interface DriveApiRequest {
   mimeType?: string;
   folderId?: string;
   driveFileIds?: string[];
+  driveSection?: 'my_drive' | 'shared_with_me' | 'shared_drive';
+  sharedDriveId?: string;
 }
 
 interface DriveFile {
@@ -36,6 +38,16 @@ interface DriveFile {
   trashed?: boolean;
   createdTime?: string;
   modifiedTime?: string;
+  ownedByMe?: boolean;
+  shared?: boolean;
+  driveId?: string;
+}
+
+interface SharedDrive {
+  id: string;
+  name: string;
+  colorRgb?: string;
+  backgroundImageLink?: string;
 }
 
 function getSupabaseClient() {
@@ -104,16 +116,46 @@ async function getValidAccessToken(supabase: ReturnType<typeof getSupabaseClient
   return isEncrypted(account.access_token) ? await decrypt(account.access_token) : account.access_token;
 }
 
-// List files from Google Drive
-async function listDriveFiles(accessToken: string, query?: string, pageToken?: string, folderId?: string, mimeType?: string): Promise<{ files: DriveFile[]; nextPageToken?: string }> {
+// List files from Google Drive with section support
+async function listDriveFiles(
+  accessToken: string,
+  options?: {
+    query?: string;
+    pageToken?: string;
+    folderId?: string;
+    mimeType?: string;
+    driveSection?: 'my_drive' | 'shared_with_me' | 'shared_drive';
+    sharedDriveId?: string;
+  }
+): Promise<{ files: DriveFile[]; nextPageToken?: string }> {
+  const { query, pageToken, folderId, mimeType, driveSection, sharedDriveId } = options || {};
+  
   const params = new URLSearchParams({
     pageSize: '50',
-    fields: 'nextPageToken,files(id,name,mimeType,size,thumbnailLink,webViewLink,webContentLink,iconLink,owners,parents,starred,trashed,createdTime,modifiedTime)',
-    orderBy: 'modifiedTime desc',
+    fields: 'nextPageToken,files(id,name,mimeType,size,thumbnailLink,webViewLink,webContentLink,iconLink,owners,parents,starred,trashed,createdTime,modifiedTime,ownedByMe,shared,driveId)',
+    orderBy: 'folder,modifiedTime desc',
+    supportsAllDrives: 'true',
+    includeItemsFromAllDrives: 'true',
   });
 
   // Build query string
   const queryParts: string[] = ['trashed = false'];
+  
+  // Handle different sections
+  if (driveSection === 'shared_with_me') {
+    queryParts.push('sharedWithMe = true');
+  } else if (driveSection === 'shared_drive' && sharedDriveId) {
+    params.set('driveId', sharedDriveId);
+    params.set('corpora', 'drive');
+    if (!folderId) {
+      queryParts.push(`'${sharedDriveId}' in parents`);
+    }
+  } else if (driveSection === 'my_drive' || !driveSection) {
+    // My Drive: files I own or in my root
+    if (!folderId && !query) {
+      queryParts.push("'root' in parents");
+    }
+  }
   
   if (query) {
     queryParts.push(`name contains '${query.replace(/'/g, "\\'")}'`);
@@ -158,6 +200,26 @@ async function listDriveFiles(accessToken: string, query?: string, pageToken?: s
 
   const data = await response.json();
   return { files: data.files || [], nextPageToken: data.nextPageToken };
+}
+
+// List shared drives
+async function listSharedDrives(accessToken: string): Promise<SharedDrive[]> {
+  const params = new URLSearchParams({
+    pageSize: '100',
+    fields: 'drives(id,name,colorRgb,backgroundImageLink)',
+  });
+
+  const response = await fetch(`https://www.googleapis.com/drive/v3/drives?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    console.error('[drive-api] Failed to list shared drives:', await response.text());
+    return [];
+  }
+
+  const data = await response.json();
+  return data.drives || [];
 }
 
 // Get file extension from mime type
@@ -214,13 +276,14 @@ Deno.serve(async (req) => {
           return errorResponse(req, 'Invalid or expired account - please reconnect', 401);
         }
 
-        const { files, nextPageToken } = await listDriveFiles(
-          accessToken,
-          body.query,
-          body.pageToken,
-          body.folderId,
-          body.mimeType
-        );
+        const { files, nextPageToken } = await listDriveFiles(accessToken, {
+          query: body.query,
+          pageToken: body.pageToken,
+          folderId: body.folderId,
+          mimeType: body.mimeType,
+          driveSection: body.driveSection,
+          sharedDriveId: body.sharedDriveId,
+        });
 
         // Get account info for the response
         const { data: account } = await supabase
@@ -249,6 +312,9 @@ Deno.serve(async (req) => {
           modified_time: file.modifiedTime,
           account_email: account?.account_email,
           account_name: account?.account_name,
+          owned_by_me: file.ownedByMe,
+          shared: file.shared,
+          drive_id: file.driveId,
         }));
 
         return jsonResponse(req, { 
@@ -256,6 +322,20 @@ Deno.serve(async (req) => {
           nextPageToken,
           accountId,
         });
+      }
+
+      case 'list_shared_drives': {
+        if (!accountId) {
+          return errorResponse(req, 'Account ID is required', 400);
+        }
+
+        const accessToken = await getValidAccessToken(supabase, accountId, userKey);
+        if (!accessToken) {
+          return errorResponse(req, 'Invalid or expired account - please reconnect', 401);
+        }
+
+        const sharedDrives = await listSharedDrives(accessToken);
+        return jsonResponse(req, { sharedDrives });
       }
 
       case 'sync_files': {
@@ -269,7 +349,7 @@ Deno.serve(async (req) => {
         }
 
         // Fetch recent files (last 100)
-        const { files } = await listDriveFiles(accessToken);
+        const { files } = await listDriveFiles(accessToken, {});
 
         // Upsert files to database
         const filesToUpsert = files.map(file => ({

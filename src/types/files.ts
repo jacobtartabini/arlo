@@ -35,7 +35,20 @@ export interface DriveFile {
   account_email?: string;
   account_name?: string;
   account_id?: string;
+  // New fields for drive section support
+  owned_by_me?: boolean;
+  shared?: boolean;
+  drive_id?: string;
 }
+
+export interface SharedDrive {
+  id: string;
+  name: string;
+  colorRgb?: string;
+  backgroundImageLink?: string;
+}
+
+export type DriveSection = 'my_drive' | 'shared_with_me' | 'shared_drive';
 
 export interface DriveFileLink {
   id: string;
