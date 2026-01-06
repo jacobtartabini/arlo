@@ -283,6 +283,7 @@ export function LinkedFilesSection({
         {viewingFile && (
           <EmbeddedFileViewer
             file={viewingFile}
+            accountId={accounts.find(a => a.account_email === viewingFile.account_email)?.id}
             onClose={() => setViewingFile(null)}
           />
         )}
@@ -429,6 +430,7 @@ export function LinkedFilesSection({
       {viewingFile && (
         <EmbeddedFileViewer
           file={viewingFile}
+          accountId={accounts.find(a => a.account_email === viewingFile.account_email)?.id}
           onClose={() => setViewingFile(null)}
         />
       )}
