@@ -1,6 +1,5 @@
 import { useCallback } from "react";
 import { dataApiHelpers } from "@/lib/data-api";
-import { isAuthenticated } from "@/lib/arloAuth";
 import type { Task, DbTask, EnergyLevel } from "@/types/productivity";
 import { dbToTask } from "@/types/productivity";
 
@@ -11,7 +10,7 @@ export function useTasksPersistence() {
       scheduledDate?: Date;
       done?: boolean;
     }): Promise<Task[]> => {
-      if (!isAuthenticated()) return [];
+      // Note: dataApiHelpers.select handles auth internally via getArloToken()
 
       const filters: Record<string, unknown> = {};
       if (options?.projectId) filters.project_id = options.projectId;

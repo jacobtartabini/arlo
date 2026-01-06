@@ -1,12 +1,11 @@
 import { useCallback } from "react";
 import { dataApiHelpers } from "@/lib/data-api";
-import { isAuthenticated } from "@/lib/arloAuth";
 import type { Subtask, DbSubtask } from "@/types/productivity";
 import { dbToSubtask } from "@/types/productivity";
 
 export function useSubtasksPersistence() {
   const fetchSubtasksForTask = useCallback(async (taskId: string): Promise<Subtask[]> => {
-    if (!isAuthenticated()) return [];
+    // Note: dataApiHelpers.select handles auth internally via getArloToken()
 
     const { data, error } = await dataApiHelpers.select<DbSubtask[]>("subtasks", {
       filters: { task_id: taskId },
@@ -23,7 +22,8 @@ export function useSubtasksPersistence() {
 
   const fetchSubtasksForTasks = useCallback(
     async (taskIds: string[]): Promise<Map<string, Subtask[]>> => {
-      if (!isAuthenticated() || taskIds.length === 0) return new Map();
+      if (taskIds.length === 0) return new Map();
+      // Note: dataApiHelpers.selectWithIn handles auth internally via getArloToken()
 
       const { data, error } = await dataApiHelpers.selectWithIn<DbSubtask[]>(
         "subtasks",
@@ -52,7 +52,7 @@ export function useSubtasksPersistence() {
 
   const createSubtask = useCallback(
     async (taskId: string, title: string, orderIndex?: number): Promise<Subtask | null> => {
-      if (!isAuthenticated()) return null;
+      // Note: dataApiHelpers.insert handles auth internally via getArloToken()
 
       const { data, error } = await dataApiHelpers.insert<DbSubtask>("subtasks", {
         task_id: taskId,
@@ -75,7 +75,7 @@ export function useSubtasksPersistence() {
       id: string,
       updates: Partial<Omit<Subtask, "id" | "taskId" | "createdAt" | "updatedAt">>
     ): Promise<boolean> => {
-      if (!isAuthenticated()) return false;
+      // Note: dataApiHelpers.update handles auth internally via getArloToken()
 
       const dbUpdates: Record<string, unknown> = {};
       if (updates.title !== undefined) dbUpdates.title = updates.title;
@@ -95,7 +95,7 @@ export function useSubtasksPersistence() {
   );
 
   const deleteSubtask = useCallback(async (id: string): Promise<boolean> => {
-    if (!isAuthenticated()) return false;
+    // Note: dataApiHelpers.delete handles auth internally via getArloToken()
 
     const { error } = await dataApiHelpers.delete("subtasks", id);
 
@@ -116,7 +116,7 @@ export function useSubtasksPersistence() {
 
   const reorderSubtasks = useCallback(
     async (subtasks: { id: string; orderIndex: number }[]): Promise<boolean> => {
-      if (!isAuthenticated()) return false;
+      // Note: dataApiHelpers.update handles auth internally via getArloToken()
 
       const results = await Promise.all(
         subtasks.map(({ id, orderIndex }) =>
