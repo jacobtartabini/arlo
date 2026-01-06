@@ -4,7 +4,7 @@ import type {
   Project, 
   DbProject, 
   ProjectStatus,
-  dbToProject 
+  DbTask,
 } from "@/types/productivity";
 import { dbToProject as convertProject } from "@/types/productivity";
 
@@ -23,7 +23,41 @@ export function useProjectsPersistence() {
       return [];
     }
 
-    return data.map(convertProject);
+    // Fetch task counts for each project
+    const projects = data.map(convertProject);
+    
+    // Get all tasks to calculate progress
+    const { data: tasksData } = await dataApiHelpers.select<DbTask[]>('tasks', {});
+    
+    if (tasksData) {
+      const tasksByProject = tasksData.reduce((acc, task) => {
+        if (task.project_id) {
+          if (!acc[task.project_id]) {
+            acc[task.project_id] = { total: 0, completed: 0 };
+          }
+          acc[task.project_id].total++;
+          if (task.done) acc[task.project_id].completed++;
+        }
+        return acc;
+      }, {} as Record<string, { total: number; completed: number }>);
+
+      projects.forEach(project => {
+        const counts = tasksByProject[project.id];
+        if (counts) {
+          project.taskCount = counts.total;
+          project.completedTaskCount = counts.completed;
+          project.progress = counts.total > 0 
+            ? Math.round((counts.completed / counts.total) * 100) 
+            : 0;
+        } else {
+          project.taskCount = 0;
+          project.completedTaskCount = 0;
+          project.progress = 0;
+        }
+      });
+    }
+
+    return projects;
   };
 
   const fetchProject = async (id: string): Promise<Project | null> => {
@@ -39,7 +73,22 @@ export function useProjectsPersistence() {
       return null;
     }
 
-    return convertProject(data[0]);
+    const project = convertProject(data[0]);
+
+    // Fetch task counts
+    const { data: tasksData } = await dataApiHelpers.select<DbTask[]>('tasks', {
+      filters: { project_id: id },
+    });
+    
+    if (tasksData) {
+      project.taskCount = tasksData.length;
+      project.completedTaskCount = tasksData.filter(t => t.done).length;
+      project.progress = tasksData.length > 0 
+        ? Math.round((project.completedTaskCount / tasksData.length) * 100) 
+        : 0;
+    }
+
+    return project;
   };
 
   const createProject = async (
@@ -68,7 +117,12 @@ export function useProjectsPersistence() {
       return null;
     }
 
-    return convertProject(data);
+    const project = convertProject(data);
+    project.taskCount = 0;
+    project.completedTaskCount = 0;
+    project.progress = 0;
+    
+    return project;
   };
 
   const updateProject = async (
