@@ -24,6 +24,7 @@ import { useTasksPersistence } from "@/hooks/useTasksPersistence";
 import { useTimeBlocksPersistence } from "@/hooks/useTimeBlocksPersistence";
 import { useProjectsPersistence } from "@/hooks/useProjectsPersistence";
 import { CreateTaskDialog } from "@/components/projects/CreateTaskDialog";
+import { EditTaskDialog } from "@/components/projects/EditTaskDialog";
 import type { Task, TimeBlock, Project, EnergyLevel } from "@/types/productivity";
 
 interface TodayViewProps {
@@ -56,6 +57,7 @@ export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [editTask, setEditTask] = useState<Task | null>(null);
   const [quickScheduleTask, setQuickScheduleTask] = useState<Task | null>(null);
   const [energySettingsOpen, setEnergySettingsOpen] = useState(false);
 
@@ -123,9 +125,9 @@ export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
     ));
   }, [completeTimeBlock]);
 
-  // Handle quick schedule (tap to create time block)
-  const handleQuickSchedule = useCallback((task: Task) => {
-    setQuickScheduleTask(task);
+  // Handle task click to edit
+  const handleTaskClick = useCallback((task: Task) => {
+    setEditTask(task);
   }, []);
 
   // Handle starting a focus session - navigate to fullscreen focus
@@ -251,13 +253,13 @@ export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
         />
       </div>
 
-      {/* Priority Tasks - with quick schedule on click */}
+      {/* Priority Tasks - click to edit */}
       <PriorityTaskList
         tasks={tasks}
         projects={projects}
         maxTasks={7}
         onToggle={handleToggle}
-        onTaskClick={handleQuickSchedule}
+        onTaskClick={handleTaskClick}
         onViewAll={onViewAllTasks}
       />
 
@@ -294,12 +296,15 @@ export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
         defaultScheduledDate={new Date()}
       />
 
-      {/* Quick Schedule Dialog */}
-      <QuickScheduleDialog
-        open={!!quickScheduleTask}
-        onOpenChange={(open) => !open && setQuickScheduleTask(null)}
-        task={quickScheduleTask}
-        onScheduled={loadData}
+      {/* Edit Task Dialog */}
+      <EditTaskDialog
+        task={editTask}
+        open={!!editTask}
+        onOpenChange={(open) => !open && setEditTask(null)}
+        projects={projects}
+        onUpdated={loadData}
+        onDeleted={loadData}
+        onStartFocus={handleStartFocus}
       />
 
       {/* Energy Settings Dialog */}
