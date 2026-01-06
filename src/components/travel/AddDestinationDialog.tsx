@@ -3,6 +3,7 @@ import { MapPin } from "lucide-react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -107,6 +108,7 @@ export function AddDestinationDialog({ open, onOpenChange, onAdd }: AddDestinati
             <MapPin className="h-5 w-5" />
             Add Destination
           </DialogTitle>
+          <DialogDescription>Where are you traveling? Search for a city or place.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">

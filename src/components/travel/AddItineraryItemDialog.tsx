@@ -4,6 +4,7 @@ import { CalendarIcon, Clock } from "lucide-react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -121,6 +122,7 @@ export function AddItineraryItemDialog({
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add Itinerary Item</DialogTitle>
+          <DialogDescription>Add an activity, flight, lodging, or other event to your trip itinerary.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">

@@ -23,7 +23,9 @@ import { TripBudgetTab } from "@/components/travel/TripBudgetTab";
 import { TripReservationsTab } from "@/components/travel/TripReservationsTab";
 import { TripWeatherWidget } from "@/components/travel/TripWeatherWidget";
 import { TripCurrencyWidget } from "@/components/travel/TripCurrencyWidget";
+import { TripPlanningAssistant } from "@/components/travel/TripPlanningAssistant";
 import { AddDestinationDialog } from "@/components/travel/AddDestinationDialog";
+import { MapProvider } from "@/components/maps/MapProvider";
 import { cn } from "@/lib/utils";
 
 export default function TripDetail() {
@@ -158,307 +160,359 @@ export default function TripDetail() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <div className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-20">
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/travel')}>
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div className="flex-1">
-              <h1 className="text-xl font-bold">{trip.name}</h1>
-              <p className="text-sm text-muted-foreground">
-                {format(trip.startDate, 'MMM d')} - {format(trip.endDate, 'MMM d, yyyy')} · {tripLength} days
-              </p>
+    <MapProvider>
+      <div className="min-h-screen bg-background">
+        {/* Header */}
+        <div className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-20">
+          <div className="max-w-6xl mx-auto px-4 py-4">
+            <div className="flex items-center gap-4">
+              <Button variant="ghost" size="icon" onClick={() => navigate('/travel')}>
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              <div className="flex-1">
+                <h1 className="text-xl font-bold">{trip.name}</h1>
+                <p className="text-sm text-muted-foreground">
+                  {format(trip.startDate, 'MMM d')} - {format(trip.endDate, 'MMM d, yyyy')} · {tripLength} days
+                  {primaryDestination && ` · ${primaryDestination.name}`}
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => {
+                hasLoadedRef.current = false;
+                loadTripData();
+              }}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh
+              </Button>
             </div>
-            <Button variant="outline" size="sm" onClick={() => {
-              hasLoadedRef.current = false;
-              loadTripData();
-            }}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh
-            </Button>
           </div>
         </div>
-      </div>
 
-      <div className="max-w-6xl mx-auto px-4 py-6">
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-6">
-            <TabsTrigger value="overview" className="gap-2">
-              <List className="h-4 w-4" />
-              Overview
-            </TabsTrigger>
-            <TabsTrigger value="itinerary" className="gap-2">
-              <Calendar className="h-4 w-4" />
-              Itinerary
-            </TabsTrigger>
-            <TabsTrigger value="map" className="gap-2">
-              <MapPin className="h-4 w-4" />
-              Map & Places
-            </TabsTrigger>
-            <TabsTrigger value="reservations" className="gap-2">
-              <Plane className="h-4 w-4" />
-              Reservations
-            </TabsTrigger>
-            <TabsTrigger value="budget" className="gap-2">
-              <DollarSign className="h-4 w-4" />
-              Budget
-            </TabsTrigger>
-          </TabsList>
+        <div className="max-w-6xl mx-auto px-4 py-6">
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="mb-6">
+              <TabsTrigger value="overview" className="gap-2">
+                <List className="h-4 w-4" />
+                Overview
+              </TabsTrigger>
+              <TabsTrigger value="itinerary" className="gap-2">
+                <Calendar className="h-4 w-4" />
+                Itinerary
+              </TabsTrigger>
+              <TabsTrigger value="map" className="gap-2">
+                <MapPin className="h-4 w-4" />
+                Places
+              </TabsTrigger>
+              <TabsTrigger value="reservations" className="gap-2">
+                <Plane className="h-4 w-4" />
+                Flights
+              </TabsTrigger>
+              <TabsTrigger value="budget" className="gap-2">
+                <DollarSign className="h-4 w-4" />
+                Budget
+              </TabsTrigger>
+            </TabsList>
 
-          {/* Overview Tab */}
-          <TabsContent value="overview" className="space-y-6">
-            {/* Destinations */}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="text-lg">Destinations</CardTitle>
-                <Button size="sm" variant="outline" onClick={() => setShowAddDestination(true)}>
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add
-                </Button>
-              </CardHeader>
-              <CardContent>
-                {destinations.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">No destinations added yet</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {destinations.map((dest) => (
-                      <Badge key={dest.id} variant="secondary" className="py-1.5 px-3">
-                        <MapPin className="h-3 w-3 mr-1" />
-                        {dest.name}
-                        {dest.currency && dest.currency !== trip.homeCurrency && (
-                          <span className="ml-2 text-xs opacity-70">{dest.currency}</span>
-                        )}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            {/* Overview Tab */}
+            <TabsContent value="overview" className="space-y-6">
+              {/* Planning Assistant */}
+              <TripPlanningAssistant
+                trip={trip}
+                destinations={destinations}
+                itineraryItems={itineraryItems}
+                savedPlaces={savedPlaces}
+                expenses={expenses}
+                onNavigateTab={setActiveTab}
+                onAddDestination={() => setShowAddDestination(true)}
+              />
 
-            {/* Quick Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Card className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-cyan-500/10">
-                    <Calendar className="h-4 w-4 text-cyan-500" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">{itineraryItems.length}</p>
-                    <p className="text-xs text-muted-foreground">Activities</p>
-                  </div>
-                </div>
-              </Card>
-              <Card className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-purple-500/10">
-                    <Bookmark className="h-4 w-4 text-purple-500" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">{savedPlaces.length}</p>
-                    <p className="text-xs text-muted-foreground">Saved Places</p>
-                  </div>
-                </div>
-              </Card>
-              <Card className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-green-500/10">
-                    <DollarSign className="h-4 w-4 text-green-500" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">
-                      ${totalPlanned.toLocaleString()}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Budget</p>
-                  </div>
-                </div>
-              </Card>
-              <Card className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-amber-500/10">
-                    <Clock className="h-4 w-4 text-amber-500" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">{tripLength}</p>
-                    <p className="text-xs text-muted-foreground">Days</p>
-                  </div>
-                </div>
-              </Card>
-            </div>
-
-            {/* Live Utilities */}
-            <div className="grid md:grid-cols-2 gap-4">
-              {primaryDestination && (
-                <TripWeatherWidget
-                  destination={primaryDestination}
-                  tripDates={{ start: trip.startDate, end: trip.endDate }}
-                />
-              )}
-              {primaryDestination?.currency && primaryDestination.currency !== trip.homeCurrency && (
-                <TripCurrencyWidget
-                  fromCurrency={trip.homeCurrency}
-                  toCurrency={primaryDestination.currency}
-                />
-              )}
-            </div>
-
-            {/* Upcoming Items */}
-            {itineraryItems.length > 0 && (
+              {/* Destinations */}
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Upcoming</CardTitle>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle className="text-lg">Destinations</CardTitle>
+                  <Button size="sm" variant="outline" onClick={() => setShowAddDestination(true)}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add
+                  </Button>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  {itineraryItems.slice(0, 5).map(item => (
-                    <div key={item.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50">
-                      <div className={cn(
-                        "p-2 rounded-lg",
-                        item.itemType === 'flight' && "bg-cyan-500/10",
-                        item.itemType === 'lodging' && "bg-purple-500/10",
-                        item.itemType === 'activity' && "bg-green-500/10",
-                        item.itemType === 'restaurant' && "bg-amber-500/10",
-                        item.itemType === 'transit' && "bg-blue-500/10",
-                      )}>
-                        {item.itemType === 'flight' && <Plane className="h-4 w-4 text-cyan-500" />}
-                        {item.itemType === 'lodging' && <MapPin className="h-4 w-4 text-purple-500" />}
-                        {item.itemType === 'activity' && <CheckCircle2 className="h-4 w-4 text-green-500" />}
-                        {item.itemType === 'restaurant' && <MapPin className="h-4 w-4 text-amber-500" />}
-                        {item.itemType === 'transit' && <MapPin className="h-4 w-4 text-blue-500" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">{item.title}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {format(item.startTime, 'MMM d, h:mm a')}
-                          {item.locationName && ` · ${item.locationName}`}
-                        </p>
-                      </div>
-                      {item.confirmationCode && (
-                        <Badge variant="outline" className="text-xs">
-                          {item.confirmationCode}
-                        </Badge>
-                      )}
+                <CardContent>
+                  {destinations.length === 0 ? (
+                    <div className="text-center py-4">
+                      <MapPin className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                      <p className="text-muted-foreground text-sm">Where are you going?</p>
+                      <Button 
+                        variant="link" 
+                        className="mt-1"
+                        onClick={() => setShowAddDestination(true)}
+                      >
+                        Add your first destination
+                      </Button>
                     </div>
-                  ))}
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {destinations.map((dest) => (
+                        <Badge key={dest.id} variant="secondary" className="py-1.5 px-3">
+                          <MapPin className="h-3 w-3 mr-1" />
+                          {dest.name}
+                          {dest.currency && dest.currency !== trip.homeCurrency && (
+                            <span className="ml-2 text-xs opacity-70">{dest.currency}</span>
+                          )}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
-            )}
-          </TabsContent>
 
-          {/* Itinerary Tab */}
-          <TabsContent value="itinerary">
-            <TripItineraryTab
-              tripId={tripId!}
-              tripDays={tripDays}
-              items={itineraryItems}
-              destinations={destinations}
-              onCreateItem={async (type, title, startTime, options) => {
-                const item = await createItineraryItem(tripId!, type, title, startTime, options);
-                if (item) setItineraryItems(prev => [...prev, item].sort((a, b) => 
-                  a.startTime.getTime() - b.startTime.getTime()
-                ));
-                return item;
-              }}
-              onUpdateItem={async (id, updates) => {
-                const success = await updateItineraryItem(id, updates);
-                if (success) {
-                  setItineraryItems(prev => prev.map(i => 
-                    i.id === id ? { ...i, ...updates } : i
-                  ).sort((a, b) => a.startTime.getTime() - b.startTime.getTime()));
-                }
-                return success;
-              }}
-              onDeleteItem={async (id) => {
-                const success = await deleteItineraryItem(id);
-                if (success) {
-                  setItineraryItems(prev => prev.filter(i => i.id !== id));
-                }
-                return success;
-              }}
-            />
-          </TabsContent>
+              {/* Quick Stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <Card className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-cyan-500/10">
+                      <Calendar className="h-4 w-4 text-cyan-500" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{itineraryItems.length}</p>
+                      <p className="text-xs text-muted-foreground">Activities</p>
+                    </div>
+                  </div>
+                </Card>
+                <Card className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-purple-500/10">
+                      <Bookmark className="h-4 w-4 text-purple-500" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{savedPlaces.length}</p>
+                      <p className="text-xs text-muted-foreground">Saved Places</p>
+                    </div>
+                  </div>
+                </Card>
+                <Card className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-green-500/10">
+                      <DollarSign className="h-4 w-4 text-green-500" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">
+                        ${totalPlanned.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Budget</p>
+                    </div>
+                  </div>
+                </Card>
+                <Card className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-amber-500/10">
+                      <Clock className="h-4 w-4 text-amber-500" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{tripLength}</p>
+                      <p className="text-xs text-muted-foreground">Days</p>
+                    </div>
+                  </div>
+                </Card>
+              </div>
 
-          {/* Map & Places Tab */}
-          <TabsContent value="map">
-            <TripMapTab
-              tripId={tripId!}
-              destinations={destinations}
-              savedPlaces={savedPlaces}
-              itineraryItems={itineraryItems}
-              onSavePlace={async (name, lat, lng, options) => {
-                const place = await createSavedPlace(tripId!, name, lat, lng, options);
-                if (place) setSavedPlaces(prev => [place, ...prev]);
-                return place;
-              }}
-              onUpdatePlace={async (id, updates) => {
-                const success = await updateSavedPlace(id, updates);
-                if (success) {
-                  setSavedPlaces(prev => prev.map(p => 
-                    p.id === id ? { ...p, ...updates } : p
-                  ));
-                }
-                return success;
-              }}
-              onDeletePlace={async (id) => {
-                const success = await deleteSavedPlace(id);
-                if (success) setSavedPlaces(prev => prev.filter(p => p.id !== id));
-                return success;
-              }}
-            />
-          </TabsContent>
+              {/* Live Utilities */}
+              <div className="grid md:grid-cols-2 gap-4">
+                {primaryDestination && (
+                  <TripWeatherWidget
+                    destination={primaryDestination}
+                    tripDates={{ start: trip.startDate, end: trip.endDate }}
+                  />
+                )}
+                {primaryDestination?.currency && primaryDestination.currency !== trip.homeCurrency && (
+                  <TripCurrencyWidget
+                    fromCurrency={trip.homeCurrency}
+                    toCurrency={primaryDestination.currency}
+                  />
+                )}
+              </div>
 
-          {/* Reservations Tab */}
-          <TabsContent value="reservations">
-            <TripReservationsTab
-              tripId={tripId!}
-              itineraryItems={itineraryItems}
-              onCreateFromReservation={async (type, title, startTime, options) => {
-                const item = await createItineraryItem(tripId!, type, title, startTime, options);
-                if (item) setItineraryItems(prev => [...prev, item].sort((a, b) => 
-                  a.startTime.getTime() - b.startTime.getTime()
-                ));
-                return item;
-              }}
-            />
-          </TabsContent>
+              {/* Upcoming Items */}
+              {itineraryItems.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Upcoming</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {itineraryItems.slice(0, 5).map(item => (
+                      <div key={item.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50">
+                        <div className={cn(
+                          "p-2 rounded-lg",
+                          item.itemType === 'flight' && "bg-cyan-500/10",
+                          item.itemType === 'lodging' && "bg-purple-500/10",
+                          item.itemType === 'activity' && "bg-green-500/10",
+                          item.itemType === 'restaurant' && "bg-amber-500/10",
+                          item.itemType === 'transit' && "bg-blue-500/10",
+                        )}>
+                          {item.itemType === 'flight' && <Plane className="h-4 w-4 text-cyan-500" />}
+                          {item.itemType === 'lodging' && <MapPin className="h-4 w-4 text-purple-500" />}
+                          {item.itemType === 'activity' && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                          {item.itemType === 'restaurant' && <MapPin className="h-4 w-4 text-amber-500" />}
+                          {item.itemType === 'transit' && <MapPin className="h-4 w-4 text-blue-500" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{item.title}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {format(item.startTime, 'MMM d, h:mm a')}
+                            {item.locationName && ` · ${item.locationName}`}
+                          </p>
+                        </div>
+                        {item.confirmationCode && (
+                          <Badge variant="outline" className="text-xs">
+                            {item.confirmationCode}
+                          </Badge>
+                        )}
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
 
-          {/* Budget Tab */}
-          <TabsContent value="budget">
-            <TripBudgetTab
-              tripId={tripId!}
-              expenses={expenses}
-              homeCurrency={trip.homeCurrency}
-              destinationCurrency={primaryDestination?.currency}
-              onCreateExpense={async (category, description, amount, options) => {
-                const expense = await createExpense(tripId!, category, description, amount, options);
-                if (expense) setExpenses(prev => [expense, ...prev]);
-                return expense;
-              }}
-              onUpdateExpense={async (id, updates) => {
-                const success = await updateExpense(id, updates);
-                if (success) {
-                  setExpenses(prev => prev.map(e => 
-                    e.id === id ? { ...e, ...updates } : e
-                  ));
-                }
-                return success;
-              }}
-              onDeleteExpense={async (id) => {
-                const success = await deleteExpense(id);
-                if (success) setExpenses(prev => prev.filter(e => e.id !== id));
-                return success;
-              }}
-            />
-          </TabsContent>
-        </Tabs>
+            {/* Itinerary Tab */}
+            <TabsContent value="itinerary">
+              <TripItineraryTab
+                tripId={tripId!}
+                tripDays={tripDays}
+                items={itineraryItems}
+                destinations={destinations}
+                onCreateItem={async (type, title, startTime, options) => {
+                  const item = await createItineraryItem(tripId!, type, title, startTime, options);
+                  if (item) {
+                    setItineraryItems(prev => [...prev, item].sort((a, b) => 
+                      a.startTime.getTime() - b.startTime.getTime()
+                    ));
+                    // Auto-add to budget if cost is specified
+                    if (options?.cost) {
+                      const categoryMap: Record<string, string> = {
+                        flight: 'flights',
+                        lodging: 'lodging',
+                        activity: 'activities',
+                        restaurant: 'food',
+                        transit: 'transport',
+                      };
+                      const category = categoryMap[type] || 'miscellaneous';
+                      await createExpense(tripId!, category as any, title, options.cost, {
+                        currency: trip.homeCurrency,
+                        isPlanned: true,
+                        itineraryItemId: item.id,
+                      });
+                    }
+                  }
+                  return item;
+                }}
+                onUpdateItem={async (id, updates) => {
+                  const success = await updateItineraryItem(id, updates);
+                  if (success) {
+                    setItineraryItems(prev => prev.map(i => 
+                      i.id === id ? { ...i, ...updates } : i
+                    ).sort((a, b) => a.startTime.getTime() - b.startTime.getTime()));
+                  }
+                  return success;
+                }}
+                onDeleteItem={async (id) => {
+                  const success = await deleteItineraryItem(id);
+                  if (success) {
+                    setItineraryItems(prev => prev.filter(i => i.id !== id));
+                  }
+                  return success;
+                }}
+              />
+            </TabsContent>
+
+            {/* Map & Places Tab */}
+            <TabsContent value="map">
+              <TripMapTab
+                tripId={tripId!}
+                destinations={destinations}
+                savedPlaces={savedPlaces}
+                itineraryItems={itineraryItems}
+                onSavePlace={async (name, lat, lng, options) => {
+                  const place = await createSavedPlace(tripId!, name, lat, lng, options);
+                  if (place) setSavedPlaces(prev => [place, ...prev]);
+                  return place;
+                }}
+                onUpdatePlace={async (id, updates) => {
+                  const success = await updateSavedPlace(id, updates);
+                  if (success) {
+                    setSavedPlaces(prev => prev.map(p => 
+                      p.id === id ? { ...p, ...updates } : p
+                    ));
+                  }
+                  return success;
+                }}
+                onDeletePlace={async (id) => {
+                  const success = await deleteSavedPlace(id);
+                  if (success) setSavedPlaces(prev => prev.filter(p => p.id !== id));
+                  return success;
+                }}
+              />
+            </TabsContent>
+
+            {/* Reservations Tab */}
+            <TabsContent value="reservations">
+              <TripReservationsTab
+                tripId={tripId!}
+                itineraryItems={itineraryItems}
+                onCreateFromReservation={async (type, title, startTime, options) => {
+                  const item = await createItineraryItem(tripId!, type, title, startTime, options);
+                  if (item) {
+                    setItineraryItems(prev => [...prev, item].sort((a, b) => 
+                      a.startTime.getTime() - b.startTime.getTime()
+                    ));
+                    // Auto-add to budget for flights
+                    if (type === 'flight' && options?.cost) {
+                      await createExpense(tripId!, 'flights', title, options.cost, {
+                        currency: trip.homeCurrency,
+                        isPlanned: true,
+                        itineraryItemId: item.id,
+                      });
+                    }
+                  }
+                  return item;
+                }}
+              />
+            </TabsContent>
+
+            {/* Budget Tab */}
+            <TabsContent value="budget">
+              <TripBudgetTab
+                tripId={tripId!}
+                expenses={expenses}
+                homeCurrency={trip.homeCurrency}
+                destinationCurrency={primaryDestination?.currency}
+                onCreateExpense={async (category, description, amount, options) => {
+                  const expense = await createExpense(tripId!, category, description, amount, options);
+                  if (expense) setExpenses(prev => [expense, ...prev]);
+                  return expense;
+                }}
+                onUpdateExpense={async (id, updates) => {
+                  const success = await updateExpense(id, updates);
+                  if (success) {
+                    setExpenses(prev => prev.map(e => 
+                      e.id === id ? { ...e, ...updates } : e
+                    ));
+                  }
+                  return success;
+                }}
+                onDeleteExpense={async (id) => {
+                  const success = await deleteExpense(id);
+                  if (success) setExpenses(prev => prev.filter(e => e.id !== id));
+                  return success;
+                }}
+              />
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        <AddDestinationDialog
+          open={showAddDestination}
+          onOpenChange={setShowAddDestination}
+          onAdd={handleAddDestination}
+        />
       </div>
-
-      <AddDestinationDialog
-        open={showAddDestination}
-        onOpenChange={setShowAddDestination}
-        onAdd={handleAddDestination}
-      />
-    </div>
+    </MapProvider>
   );
 }
