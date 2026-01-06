@@ -5,7 +5,7 @@ import {
   errorResponse 
 } from '../_shared/arloAuth.ts'
 
-const GOOGLE_PLACES_API_KEY = Deno.env.get("GOOGLE_PLACES_API_KEY");
+const GOOGLE_PLACES_API_KEY = Deno.env.get("VITE_GOOGLE_MAPS_API_KEY");
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -17,7 +17,7 @@ Deno.serve(async (req) => {
 
   try {
     if (!GOOGLE_PLACES_API_KEY) {
-      console.error("[places-autocomplete] GOOGLE_PLACES_API_KEY not configured");
+      console.error("[places-autocomplete] VITE_GOOGLE_MAPS_API_KEY not configured");
       return errorResponse(req, "Places API not configured", 500);
     }
 

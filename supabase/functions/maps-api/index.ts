@@ -1,6 +1,6 @@
 import { verifyArloJWT, handleCorsOptions, jsonResponse, unauthorizedResponse, errorResponse } from '../_shared/arloAuth.ts';
 
-const GOOGLE_MAPS_API_KEY = Deno.env.get('GOOGLE_PLACES_API_KEY'); // Use same key for all Maps Platform APIs
+const GOOGLE_MAPS_API_KEY = Deno.env.get('VITE_GOOGLE_MAPS_API_KEY');
 
 Deno.serve(async (req) => {
   // Handle CORS preflight
@@ -22,7 +22,7 @@ Deno.serve(async (req) => {
   }
 
   if (!GOOGLE_MAPS_API_KEY) {
-    console.error('[maps-api] GOOGLE_PLACES_API_KEY not configured');
+    console.error('[maps-api] VITE_GOOGLE_MAPS_API_KEY not configured');
     return errorResponse(req, 'Maps API not configured', 500);
   }
 
