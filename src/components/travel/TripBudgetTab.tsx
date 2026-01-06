@@ -12,6 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -290,6 +291,7 @@ export function TripBudgetTab({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Expense</DialogTitle>
+            <DialogDescription>Add a planned budget item or actual expense to track your spending.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
