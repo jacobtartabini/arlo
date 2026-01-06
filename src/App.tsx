@@ -39,6 +39,7 @@ import Habits from "./pages/modules/Habits";
 import Inbox from "./pages/Inbox";
 import ArloMaps from "./pages/ArloMaps";
 import MorningView from "./pages/MorningView";
+import FocusSession from "./pages/FocusSession";
 import { NotificationMonitor } from "./components/NotificationMonitor";
 import { MorningWakeupScheduler } from "./components/MorningWakeupScheduler";
 
@@ -178,6 +179,11 @@ const App = () => (
                   <Route path="/morning" element={
                     <ProtectedRoute>
                       <MorningView />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/focus" element={
+                    <ProtectedRoute>
+                      <FocusSession />
                     </ProtectedRoute>
                   } />
 

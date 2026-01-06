@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +45,7 @@ function getCurrentEnergyLevel(): EnergyLevel {
 }
 
 export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
+  const navigate = useNavigate();
   const { fetchTasks, toggleTask } = useTasksPersistence();
   const { fetchTimeBlocksForDate, completeTimeBlock } = useTimeBlocksPersistence();
   const { fetchProjects } = useProjectsPersistence();
@@ -126,10 +128,10 @@ export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
     setQuickScheduleTask(task);
   }, []);
 
-  // Handle starting a focus session
+  // Handle starting a focus session - navigate to fullscreen focus
   const handleStartFocus = useCallback((task: Task) => {
-    setQuickScheduleTask(task);
-  }, []);
+    navigate(`/focus?taskId=${task.id}&duration=${task.timeEstimateMinutes || 25}`);
+  }, [navigate]);
 
   const greeting = getGreeting();
   const GreetingIcon = greeting.icon;
