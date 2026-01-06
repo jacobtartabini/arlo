@@ -1,13 +1,12 @@
 import { useCallback } from "react";
 import { dataApiHelpers } from "@/lib/data-api";
-import { isAuthenticated } from "@/lib/arloAuth";
 import type { Project, DbProject, ProjectStatus, DbTask } from "@/types/productivity";
 import { dbToProject as convertProject } from "@/types/productivity";
 
 export function useProjectsPersistence() {
   const fetchProjects = useCallback(
     async (status?: ProjectStatus): Promise<Project[]> => {
-      if (!isAuthenticated()) return [];
+      // Note: dataApiHelpers.select handles auth internally via getArloToken()
 
       const filters = status ? { status } : undefined;
 
@@ -65,7 +64,7 @@ export function useProjectsPersistence() {
   );
 
   const fetchProject = useCallback(async (id: string): Promise<Project | null> => {
-    if (!isAuthenticated()) return null;
+    // Note: dataApiHelpers.select handles auth internally via getArloToken()
 
     const { data, error } = await dataApiHelpers.select<DbProject[]>("projects", {
       filters: { id },

@@ -1,14 +1,13 @@
 import { useCallback } from "react";
 import { dataApiHelpers } from "@/lib/data-api";
-import { isAuthenticated } from "@/lib/arloAuth";
 import type { TimeBlock, DbTimeBlock, BlockType } from "@/types/productivity";
 import { dbToTimeBlock } from "@/types/productivity";
-import { startOfDay, endOfDay, format } from "date-fns";
+import { startOfDay, endOfDay } from "date-fns";
 
 export function useTimeBlocksPersistence() {
   const fetchTimeBlocksForDate = useCallback(
     async (date: Date): Promise<TimeBlock[]> => {
-      if (!isAuthenticated()) return [];
+      // Note: dataApiHelpers.select handles auth internally via getArloToken()
 
       const start = startOfDay(date).toISOString();
       const end = endOfDay(date).toISOString();
@@ -37,7 +36,7 @@ export function useTimeBlocksPersistence() {
 
   const fetchTimeBlocksForTask = useCallback(
     async (taskId: string): Promise<TimeBlock[]> => {
-      if (!isAuthenticated()) return [];
+      // Note: dataApiHelpers.select handles auth internally via getArloToken()
 
       const { data, error } = await dataApiHelpers.select<DbTimeBlock[]>("time_blocks", {
         filters: { task_id: taskId },
@@ -65,7 +64,7 @@ export function useTimeBlocksPersistence() {
         notes?: string;
       }
     ): Promise<TimeBlock | null> => {
-      if (!isAuthenticated()) return null;
+      // Note: dataApiHelpers.insert handles auth internally via getArloToken()
 
       const { data, error } = await dataApiHelpers.insert<DbTimeBlock>("time_blocks", {
         start_time: startTime.toISOString(),
@@ -91,7 +90,7 @@ export function useTimeBlocksPersistence() {
       id: string,
       updates: Partial<Omit<TimeBlock, "id" | "createdAt" | "updatedAt">>
     ): Promise<boolean> => {
-      if (!isAuthenticated()) return false;
+      // Note: dataApiHelpers.update handles auth internally via getArloToken()
 
       const dbUpdates: Record<string, unknown> = {};
       if (updates.taskId !== undefined) dbUpdates.task_id = updates.taskId;
@@ -117,7 +116,7 @@ export function useTimeBlocksPersistence() {
   );
 
   const deleteTimeBlock = useCallback(async (id: string): Promise<boolean> => {
-    if (!isAuthenticated()) return false;
+    // Note: dataApiHelpers.delete handles auth internally via getArloToken()
 
     const { error } = await dataApiHelpers.delete("time_blocks", id);
 
