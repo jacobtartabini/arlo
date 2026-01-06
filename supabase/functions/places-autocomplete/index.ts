@@ -5,7 +5,8 @@ import {
   errorResponse 
 } from '../_shared/arloAuth.ts'
 
-const GOOGLE_PLACES_API_KEY = Deno.env.get("VITE_GOOGLE_MAPS_API_KEY");
+// Prefer server-side key without referrer restrictions, fallback to frontend key
+const GOOGLE_PLACES_API_KEY = Deno.env.get("GOOGLE_PLACES_API_KEY") || Deno.env.get("VITE_GOOGLE_MAPS_API_KEY");
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
