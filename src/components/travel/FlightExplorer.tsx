@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { 
   Plane, Search, Clock, DollarSign, Star, Bookmark,
-  AlertCircle, Loader2, ChevronDown, Filter, X, Hotel, MapPin
+  AlertCircle, Loader2, ChevronDown, Filter, X, Hotel, MapPin,
+  ExternalLink, Calendar, ArrowRight, Users, Bed, ChevronRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Separator } from "@/components/ui/separator";
 import { getArloToken } from "@/lib/arloAuth";
 import { FlightSearchResult, TripSavedFlight, HotelSearchResult } from "@/types/travel";
 import { cn } from "@/lib/utils";
@@ -37,6 +39,38 @@ interface FlightExplorerProps {
   onSelectFlight: (flight: FlightSearchResult) => Promise<void>;
   onSaveHotel?: (hotel: HotelSearchResult) => Promise<void>;
 }
+
+// Airline code to name mapping
+const AIRLINE_NAMES: Record<string, string> = {
+  'AA': 'American Airlines',
+  'UA': 'United Airlines',
+  'DL': 'Delta Air Lines',
+  'WN': 'Southwest Airlines',
+  'B6': 'JetBlue Airways',
+  'AS': 'Alaska Airlines',
+  'NK': 'Spirit Airlines',
+  'F9': 'Frontier Airlines',
+  'G4': 'Allegiant Air',
+  'HA': 'Hawaiian Airlines',
+  'BA': 'British Airways',
+  'AF': 'Air France',
+  'LH': 'Lufthansa',
+  'KL': 'KLM',
+  'EK': 'Emirates',
+  'QR': 'Qatar Airways',
+  'SQ': 'Singapore Airlines',
+  'CX': 'Cathay Pacific',
+  'JL': 'Japan Airlines',
+  'NH': 'All Nippon Airways',
+  'QF': 'Qantas',
+  'AC': 'Air Canada',
+  'AM': 'Aeromexico',
+  'IB': 'Iberia',
+  'AZ': 'ITA Airways',
+  'TK': 'Turkish Airlines',
+  'EY': 'Etihad Airways',
+  'VS': 'Virgin Atlantic',
+};
 
 export function FlightExplorer({
   tripId,
@@ -79,6 +113,7 @@ export function FlightExplorer({
   const [error, setError] = useState<string | null>(null);
   const [isConfigured, setIsConfigured] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
+  const [expandedFlights, setExpandedFlights] = useState<Set<string>>(new Set());
 
   // Debounced airport search
   useEffect(() => {
@@ -267,212 +302,352 @@ export function FlightExplorer({
     }
   };
 
+  const formatDate = (isoTime: string) => {
+    try {
+      return format(new Date(isoTime), 'EEE, MMM d');
+    } catch {
+      return isoTime;
+    }
+  };
+
+  const getAirlineName = (code: string) => {
+    return AIRLINE_NAMES[code] || code;
+  };
+
+  const toggleFlightExpanded = (flightId: string) => {
+    setExpandedFlights(prev => {
+      const next = new Set(prev);
+      if (next.has(flightId)) {
+        next.delete(flightId);
+      } else {
+        next.add(flightId);
+      }
+      return next;
+    });
+  };
+
+  // Generate booking links
+  const getGoogleFlightsLink = (flight: FlightSearchResult) => {
+    const dep = depDate.replace(/-/g, '');
+    const ret = retDate ? retDate.replace(/-/g, '') : '';
+    const base = `https://www.google.com/travel/flights?q=flights%20from%20${origin}%20to%20${destination}%20on%20${depDate}`;
+    return base + (retDate ? `%20return%20${retDate}` : '');
+  };
+
+  const getKayakFlightLink = (flight: FlightSearchResult) => {
+    const base = `https://www.kayak.com/flights/${origin}-${destination}/${depDate}`;
+    return base + (retDate ? `/${retDate}` : '') + '?sort=price_a';
+  };
+
+  const getGoogleHotelsLink = (hotel: HotelSearchResult) => {
+    const hotelName = encodeURIComponent(hotel.name);
+    return `https://www.google.com/travel/hotels?q=${hotelName}%20${hotelCityCode}&dates=${checkInDate},${checkOutDate}`;
+  };
+
+  const getBookingLink = (hotel: HotelSearchResult) => {
+    const hotelName = encodeURIComponent(hotel.name);
+    return `https://www.booking.com/searchresults.html?ss=${hotelName}&checkin=${checkInDate}&checkout=${checkOutDate}`;
+  };
+
+  const getHotelsComLink = (hotel: HotelSearchResult) => {
+    const hotelName = encodeURIComponent(hotel.name);
+    return `https://www.hotels.com/search.do?q-destination=${hotelName}&q-check-in=${checkInDate}&q-check-out=${checkOutDate}`;
+  };
+
+  // Calculate nights for hotel
+  const calculateNights = () => {
+    if (!checkInDate || !checkOutDate) return 0;
+    const start = new Date(checkInDate);
+    const end = new Date(checkOutDate);
+    return Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  };
+
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-lg flex items-center gap-2">
-          <Plane className="h-5 w-5" />
-          Explore Travel Options
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'flights' | 'hotels')}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="flights" className="gap-2">
-              <Plane className="h-4 w-4" />
-              Flights
-            </TabsTrigger>
-            <TabsTrigger value="hotels" className="gap-2">
-              <Hotel className="h-4 w-4" />
-              Hotels
-            </TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="flights" className="space-y-4 mt-4">
-            {/* Flight Search Form */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="space-y-1.5 relative">
-                <Label className="text-xs">From</Label>
-                <Input
-                  placeholder="Search city or airport"
-                  value={origin}
-                  onChange={(e) => setOrigin(e.target.value.toUpperCase())}
-                  onFocus={() => originSuggestions.length > 0 && setShowOriginSuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowOriginSuggestions(false), 200)}
-                  className="uppercase"
-                />
-                {showOriginSuggestions && originSuggestions.length > 0 && (
-                  <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
-                    {originSuggestions.map((airport) => (
-                      <button
-                        key={airport.code}
-                        type="button"
-                        className="w-full px-3 py-2 text-left hover:bg-muted transition-colors text-sm"
-                        onMouseDown={() => selectAirport(airport, 'origin')}
-                      >
-                        <span className="font-medium">{airport.code}</span>
-                        <span className="text-muted-foreground ml-2">
-                          {airport.city || airport.name}, {airport.country}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="space-y-1.5 relative">
-                <Label className="text-xs">To</Label>
-                <Input
-                  placeholder="Search city or airport"
-                  value={destination}
-                  onChange={(e) => setDestination(e.target.value.toUpperCase())}
-                  onFocus={() => destSuggestions.length > 0 && setShowDestSuggestions(true)}
-                  onBlur={() => setTimeout(() => setShowDestSuggestions(false), 200)}
-                  className="uppercase"
-                />
-                {showDestSuggestions && destSuggestions.length > 0 && (
-                  <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
-                    {destSuggestions.map((airport) => (
-                      <button
-                        key={airport.code}
-                        type="button"
-                        className="w-full px-3 py-2 text-left hover:bg-muted transition-colors text-sm"
-                        onMouseDown={() => selectAirport(airport, 'destination')}
-                      >
-                        <span className="font-medium">{airport.code}</span>
-                        <span className="text-muted-foreground ml-2">
-                          {airport.city || airport.name}, {airport.country}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Depart</Label>
-                <Input
-                  type="date"
-                  value={depDate}
-                  onChange={(e) => setDepDate(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Return</Label>
-                <Input
-                  type="date"
-                  value={retDate}
-                  onChange={(e) => setRetDate(e.target.value)}
-                />
-              </div>
-            </div>
-
-            {/* Filters Toggle */}
-            <Collapsible open={showFilters} onOpenChange={setShowFilters}>
-              <div className="flex items-center justify-between">
-                <CollapsibleTrigger asChild>
-                  <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground">
-                    <Filter className="h-4 w-4" />
-                    Filters
-                    <ChevronDown className={cn("h-4 w-4 transition-transform", showFilters && "rotate-180")} />
-                  </Button>
-                </CollapsibleTrigger>
-                <Button 
-                  onClick={handleFlightSearch} 
-                  disabled={!origin || !destination || !depDate || isSearching}
-                >
-                  {isSearching ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Searching...
-                    </>
-                  ) : (
-                    <>
-                      <Search className="h-4 w-4 mr-2" />
-                      Search Flights
-                    </>
-                  )}
-                </Button>
-              </div>
-              
-              <CollapsibleContent className="pt-3">
-                <div className="flex flex-wrap gap-4 p-3 rounded-lg bg-muted/50">
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      id="nonstop"
-                      checked={nonstopOnly}
-                      onCheckedChange={setNonstopOnly}
-                    />
-                    <Label htmlFor="nonstop" className="text-sm">Nonstop only</Label>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm">Max price:</Label>
-                    <Input
-                      type="number"
-                      placeholder="Any"
-                      value={maxPrice}
-                      onChange={(e) => setMaxPrice(e.target.value)}
-                      className="w-24"
-                    />
-                  </div>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
-
-            {/* Flight Results */}
+    <div className="space-y-4">
+      {/* Main Tabs - Now More Prominent */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'flights' | 'hotels')} className="w-full">
+        <TabsList className="grid w-full grid-cols-2 h-12">
+          <TabsTrigger value="flights" className="gap-2 text-base">
+            <Plane className="h-5 w-5" />
+            Flights
             {flightResults.length > 0 && (
-              <div className="space-y-3">
+              <Badge variant="secondary" className="ml-1">{flightResults.length}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="hotels" className="gap-2 text-base">
+            <Hotel className="h-5 w-5" />
+            Hotels
+            {hotelResults.length > 0 && (
+              <Badge variant="secondary" className="ml-1">{hotelResults.length}</Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
+        
+        {/* FLIGHTS TAB */}
+        <TabsContent value="flights" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Search className="h-4 w-4" />
+                Search Flights
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Flight Search Form */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="space-y-1.5 relative">
+                  <Label className="text-xs">From</Label>
+                  <Input
+                    placeholder="Search city or airport"
+                    value={origin}
+                    onChange={(e) => setOrigin(e.target.value.toUpperCase())}
+                    onFocus={() => originSuggestions.length > 0 && setShowOriginSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowOriginSuggestions(false), 200)}
+                    className="uppercase"
+                  />
+                  {showOriginSuggestions && originSuggestions.length > 0 && (
+                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
+                      {originSuggestions.map((airport) => (
+                        <button
+                          key={airport.code}
+                          type="button"
+                          className="w-full px-3 py-2 text-left hover:bg-muted transition-colors text-sm"
+                          onMouseDown={() => selectAirport(airport, 'origin')}
+                        >
+                          <span className="font-medium">{airport.code}</span>
+                          <span className="text-muted-foreground ml-2">
+                            {airport.city || airport.name}, {airport.country}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-1.5 relative">
+                  <Label className="text-xs">To</Label>
+                  <Input
+                    placeholder="Search city or airport"
+                    value={destination}
+                    onChange={(e) => setDestination(e.target.value.toUpperCase())}
+                    onFocus={() => destSuggestions.length > 0 && setShowDestSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowDestSuggestions(false), 200)}
+                    className="uppercase"
+                  />
+                  {showDestSuggestions && destSuggestions.length > 0 && (
+                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border rounded-md shadow-lg max-h-48 overflow-y-auto">
+                      {destSuggestions.map((airport) => (
+                        <button
+                          key={airport.code}
+                          type="button"
+                          className="w-full px-3 py-2 text-left hover:bg-muted transition-colors text-sm"
+                          onMouseDown={() => selectAirport(airport, 'destination')}
+                        >
+                          <span className="font-medium">{airport.code}</span>
+                          <span className="text-muted-foreground ml-2">
+                            {airport.city || airport.name}, {airport.country}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Depart</Label>
+                  <Input
+                    type="date"
+                    value={depDate}
+                    onChange={(e) => setDepDate(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Return</Label>
+                  <Input
+                    type="date"
+                    value={retDate}
+                    onChange={(e) => setRetDate(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Filters Toggle */}
+              <Collapsible open={showFilters} onOpenChange={setShowFilters}>
+                <div className="flex items-center justify-between">
+                  <CollapsibleTrigger asChild>
+                    <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground">
+                      <Filter className="h-4 w-4" />
+                      Filters
+                      <ChevronDown className={cn("h-4 w-4 transition-transform", showFilters && "rotate-180")} />
+                    </Button>
+                  </CollapsibleTrigger>
+                  <Button 
+                    onClick={handleFlightSearch} 
+                    disabled={!origin || !destination || !depDate || isSearching}
+                  >
+                    {isSearching ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Searching...
+                      </>
+                    ) : (
+                      <>
+                        <Search className="h-4 w-4 mr-2" />
+                        Search Flights
+                      </>
+                    )}
+                  </Button>
+                </div>
+                
+                <CollapsibleContent className="pt-3">
+                  <div className="flex flex-wrap gap-4 p-3 rounded-lg bg-muted/50">
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        id="nonstop"
+                        checked={nonstopOnly}
+                        onCheckedChange={setNonstopOnly}
+                      />
+                      <Label htmlFor="nonstop" className="text-sm">Nonstop only</Label>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label className="text-sm">Max price:</Label>
+                      <Input
+                        type="number"
+                        placeholder="Any"
+                        value={maxPrice}
+                        onChange={(e) => setMaxPrice(e.target.value)}
+                        className="w-24"
+                      />
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </CardContent>
+          </Card>
+
+          {/* Flight Results */}
+          {flightResults.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">
                   {flightResults.length} flight{flightResults.length !== 1 ? 's' : ''} found
                 </p>
-                
-                {flightResults.map((flight) => (
-                  <div 
-                    key={flight.id}
-                    className={cn(
-                      "p-4 rounded-lg border transition-colors",
-                      isSaved(flight.id) && "border-primary/50 bg-primary/5"
-                    )}
-                  >
+                <p className="text-xs text-muted-foreground">
+                  {formatDate(depDate)} {retDate && `- ${formatDate(retDate)}`}
+                </p>
+              </div>
+              
+              {flightResults.map((flight) => (
+                <Card 
+                  key={flight.id}
+                  className={cn(
+                    "overflow-hidden transition-all",
+                    isSaved(flight.id) && "ring-2 ring-primary/50"
+                  )}
+                >
+                  <CardContent className="p-4">
                     <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-2">
-                          <Badge variant="secondary">{flight.airline}</Badge>
-                          <span className="text-sm text-muted-foreground">{flight.flightNumber}</span>
-                          {flight.stops === 0 && (
-                            <Badge variant="outline" className="text-green-600 border-green-600/30">
+                      {/* Flight Info */}
+                      <div className="flex-1 min-w-0 space-y-3">
+                        {/* Airline & Flight Header */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant="secondary" className="font-semibold">
+                            {flight.airline}
+                          </Badge>
+                          <span className="text-sm font-medium">{getAirlineName(flight.airline)}</span>
+                          <span className="text-xs text-muted-foreground">• {flight.flightNumber}</span>
+                          {flight.stops === 0 ? (
+                            <Badge variant="outline" className="text-green-600 border-green-600/30 bg-green-500/10">
                               Nonstop
                             </Badge>
-                          )}
-                          {flight.stops > 0 && (
-                            <span className="text-xs text-muted-foreground">
+                          ) : (
+                            <Badge variant="outline" className="text-amber-600 border-amber-600/30 bg-amber-500/10">
                               {flight.stops} stop{flight.stops > 1 ? 's' : ''}
-                            </span>
+                            </Badge>
                           )}
                         </div>
                         
-                        <div className="flex items-center gap-4 text-sm">
-                          <div>
-                            <p className="font-semibold">{formatTime(flight.departureTime)}</p>
-                            <p className="text-muted-foreground text-xs">{origin}</p>
+                        {/* Time & Route Display */}
+                        <div className="flex items-center gap-4">
+                          <div className="text-center">
+                            <p className="text-xl font-bold">{formatTime(flight.departureTime)}</p>
+                            <p className="text-sm font-medium">{origin}</p>
+                            <p className="text-xs text-muted-foreground">{formatDate(flight.departureTime)}</p>
                           </div>
-                          <div className="flex-1 flex items-center gap-2 px-2">
-                            <div className="h-px flex-1 bg-border" />
+                          
+                          <div className="flex-1 flex flex-col items-center gap-1 px-2">
                             <div className="flex items-center gap-1 text-xs text-muted-foreground">
                               <Clock className="h-3 w-3" />
                               {formatDuration(flight.duration)}
                             </div>
-                            <div className="h-px flex-1 bg-border" />
+                            <div className="w-full flex items-center gap-1">
+                              <div className="h-px flex-1 bg-border" />
+                              <Plane className="h-3 w-3 text-muted-foreground rotate-90" />
+                              <div className="h-px flex-1 bg-border" />
+                            </div>
+                            {flight.stops > 0 && flight.segments && (
+                              <p className="text-xs text-muted-foreground">
+                                via {flight.segments.slice(0, -1).map(s => s.arrivalAirport).join(', ')}
+                              </p>
+                            )}
                           </div>
-                          <div className="text-right">
-                            <p className="font-semibold">{formatTime(flight.arrivalTime)}</p>
-                            <p className="text-muted-foreground text-xs">{destination}</p>
+                          
+                          <div className="text-center">
+                            <p className="text-xl font-bold">{formatTime(flight.arrivalTime)}</p>
+                            <p className="text-sm font-medium">{destination}</p>
+                            <p className="text-xs text-muted-foreground">{formatDate(flight.arrivalTime)}</p>
                           </div>
                         </div>
+
+                        {/* Expandable Segments */}
+                        {flight.segments && flight.segments.length > 1 && (
+                          <Collapsible 
+                            open={expandedFlights.has(flight.id)} 
+                            onOpenChange={() => toggleFlightExpanded(flight.id)}
+                          >
+                            <CollapsibleTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1">
+                                <ChevronRight className={cn(
+                                  "h-3 w-3 transition-transform",
+                                  expandedFlights.has(flight.id) && "rotate-90"
+                                )} />
+                                View {flight.segments.length} flight segments
+                              </Button>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent className="pt-2">
+                              <div className="space-y-2 pl-2 border-l-2 border-muted">
+                                {flight.segments.map((segment, idx) => (
+                                  <div key={idx} className="pl-3 py-1">
+                                    <div className="flex items-center gap-2 text-sm">
+                                      <Badge variant="outline" className="text-xs">
+                                        {segment.flightNumber}
+                                      </Badge>
+                                      <span className="text-muted-foreground">{getAirlineName(segment.airline)}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-1 text-sm">
+                                      <span className="font-medium">{segment.departureAirport}</span>
+                                      <span className="text-xs text-muted-foreground">{formatTime(segment.departureTime)}</span>
+                                      <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                                      <span className="font-medium">{segment.arrivalAirport}</span>
+                                      <span className="text-xs text-muted-foreground">{formatTime(segment.arrivalTime)}</span>
+                                      <span className="text-xs text-muted-foreground ml-auto">
+                                        {formatDuration(segment.duration)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </CollapsibleContent>
+                          </Collapsible>
+                        )}
                       </div>
                       
-                      <div className="text-right shrink-0">
-                        <p className="text-lg font-bold">${flight.price}</p>
-                        <p className="text-xs text-muted-foreground">{flight.currency}</p>
-                        <div className="flex gap-1 mt-2">
+                      {/* Price & Actions */}
+                      <div className="text-right shrink-0 space-y-2">
+                        <div>
+                          <p className="text-2xl font-bold">${flight.price.toLocaleString()}</p>
+                          <p className="text-xs text-muted-foreground">{flight.currency} • per person</p>
+                        </div>
+                        
+                        <div className="flex flex-col gap-1">
                           {isSaved(flight.id) ? (
                             <Button 
                               size="sm" 
@@ -496,33 +671,64 @@ export function FlightExplorer({
                             </Button>
                           )}
                         </div>
+
+                        {/* Booking Links */}
+                        <Separator className="my-2" />
+                        <div className="space-y-1">
+                          <p className="text-xs text-muted-foreground font-medium">Book on:</p>
+                          <div className="flex flex-col gap-1">
+                            <a 
+                              href={getGoogleFlightsLink(flight)} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary hover:underline flex items-center gap-1"
+                            >
+                              Google Flights <ExternalLink className="h-3 w-3" />
+                            </a>
+                            <a 
+                              href={getKayakFlightLink(flight)} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary hover:underline flex items-center gap-1"
+                            >
+                              Kayak <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
 
-            {/* Saved Flights */}
-            {savedFlights.length > 0 && (
-              <div className="pt-4 border-t">
-                <h4 className="font-medium mb-3 flex items-center gap-2">
+          {/* Saved Flights */}
+          {savedFlights.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
                   <Star className="h-4 w-4 text-amber-500" />
-                  Saved for comparison ({savedFlights.length})
-                </h4>
-                <div className="space-y-2">
-                  {savedFlights.map((saved) => (
-                    <div 
-                      key={saved.id}
-                      className="flex items-center justify-between p-3 rounded-lg border bg-muted/30"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Badge variant="secondary">{saved.flightData.airline}</Badge>
-                        <span className="font-medium">${saved.flightData.price}</span>
-                        <span className="text-sm text-muted-foreground">
-                          {formatDuration(saved.flightData.duration)}
-                        </span>
+                  Saved for Comparison ({savedFlights.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {savedFlights.map((saved) => (
+                  <div 
+                    key={saved.id}
+                    className="flex items-center justify-between p-3 rounded-lg border bg-muted/30"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Badge variant="secondary">{saved.flightData.airline}</Badge>
+                      <div>
+                        <p className="font-medium">{getAirlineName(saved.flightData.airline)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDuration(saved.flightData.duration)} • {saved.flightData.stops === 0 ? 'Nonstop' : `${saved.flightData.stops} stop${saved.flightData.stops > 1 ? 's' : ''}`}
+                        </p>
                       </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-bold text-lg">${saved.flightData.price.toLocaleString()}</span>
                       <div className="flex gap-2">
                         <Button 
                           size="sm" 
@@ -539,139 +745,241 @@ export function FlightExplorer({
                         </Button>
                       </div>
                     </div>
-                  ))}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+        
+        {/* HOTELS TAB */}
+        <TabsContent value="hotels" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Search className="h-4 w-4" />
+                Search Hotels
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Hotel Search Form */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">City Code</Label>
+                  <Input
+                    placeholder="PAR, NYC, TYO..."
+                    value={hotelCityCode}
+                    onChange={(e) => setHotelCityCode(e.target.value.toUpperCase())}
+                    maxLength={3}
+                    className="uppercase"
+                  />
+                  <p className="text-xs text-muted-foreground">Use airport/city code</p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Check-in</Label>
+                  <Input
+                    type="date"
+                    value={checkInDate}
+                    onChange={(e) => setCheckInDate(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Check-out</Label>
+                  <Input
+                    type="date"
+                    value={checkOutDate}
+                    onChange={(e) => setCheckOutDate(e.target.value)}
+                  />
                 </div>
               </div>
-            )}
-          </TabsContent>
-          
-          <TabsContent value="hotels" className="space-y-4 mt-4">
-            {/* Hotel Search Form */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs">City Code</Label>
-                <Input
-                  placeholder="PAR, NYC, TYO..."
-                  value={hotelCityCode}
-                  onChange={(e) => setHotelCityCode(e.target.value.toUpperCase())}
-                  maxLength={3}
-                  className="uppercase"
-                />
-                <p className="text-xs text-muted-foreground">Use airport/city code</p>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Check-in</Label>
-                <Input
-                  type="date"
-                  value={checkInDate}
-                  onChange={(e) => setCheckInDate(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Check-out</Label>
-                <Input
-                  type="date"
-                  value={checkOutDate}
-                  onChange={(e) => setCheckOutDate(e.target.value)}
-                />
-              </div>
-            </div>
 
-            <div className="flex justify-end">
-              <Button 
-                onClick={handleHotelSearch} 
-                disabled={!hotelCityCode || !checkInDate || !checkOutDate || isSearching}
-              >
-                {isSearching ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Searching...
-                  </>
-                ) : (
-                  <>
-                    <Search className="h-4 w-4 mr-2" />
-                    Search Hotels
-                  </>
-                )}
-              </Button>
-            </div>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  {calculateNights() > 0 && `${calculateNights()} night${calculateNights() !== 1 ? 's' : ''}`}
+                </p>
+                <Button 
+                  onClick={handleHotelSearch} 
+                  disabled={!hotelCityCode || !checkInDate || !checkOutDate || isSearching}
+                >
+                  {isSearching ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Searching...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="h-4 w-4 mr-2" />
+                      Search Hotels
+                    </>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
-            {/* Hotel Results */}
-            {hotelResults.length > 0 && (
-              <div className="space-y-3">
+          {/* Hotel Results */}
+          {hotelResults.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">
                   {hotelResults.length} hotel{hotelResults.length !== 1 ? 's' : ''} found
                 </p>
-                
-                {hotelResults.map((hotel) => (
-                  <div 
-                    key={hotel.id}
-                    className="p-4 rounded-lg border hover:bg-muted/30 transition-colors"
-                  >
+                <p className="text-xs text-muted-foreground">
+                  {formatDate(checkInDate)} - {formatDate(checkOutDate)} • {calculateNights()} nights
+                </p>
+              </div>
+              
+              {hotelResults.map((hotel) => (
+                <Card key={hotel.id} className="overflow-hidden">
+                  <CardContent className="p-4">
                     <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-medium">{hotel.name}</h4>
+                      {/* Hotel Info */}
+                      <div className="flex-1 min-w-0 space-y-2">
+                        {/* Name & Rating */}
+                        <div className="flex items-start gap-2 flex-wrap">
+                          <h4 className="font-semibold text-lg">{hotel.name}</h4>
                           {hotel.rating && (
                             <div className="flex items-center gap-0.5">
                               {Array.from({ length: hotel.rating }).map((_, i) => (
-                                <Star key={i} className="h-3 w-3 fill-amber-400 text-amber-400" />
+                                <Star key={i} className="h-4 w-4 fill-amber-400 text-amber-400" />
                               ))}
+                              <span className="text-sm text-muted-foreground ml-1">
+                                {hotel.rating}-star hotel
+                              </span>
                             </div>
                           )}
                         </div>
+                        
+                        {/* Address */}
                         {hotel.address && (
                           <p className="text-sm text-muted-foreground flex items-center gap-1">
-                            <MapPin className="h-3 w-3" />
+                            <MapPin className="h-4 w-4 shrink-0" />
                             {hotel.address}
                           </p>
                         )}
+
+                        {/* Room Offers */}
+                        {hotel.offers && hotel.offers.length > 0 && (
+                          <div className="pt-2 space-y-2">
+                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                              Available Rooms
+                            </p>
+                            <div className="space-y-2">
+                              {hotel.offers.slice(0, 3).map((offer, idx) => (
+                                <div 
+                                  key={offer.id || idx}
+                                  className="p-2 rounded-md bg-muted/50 flex items-center justify-between"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <Bed className="h-4 w-4 text-muted-foreground" />
+                                    <span className="text-sm">
+                                      {offer.roomDescription || 'Standard Room'}
+                                    </span>
+                                  </div>
+                                  {offer.price && (
+                                    <span className="font-semibold">
+                                      ${offer.price.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">{offer.currency}</span>
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Amenities Placeholder */}
+                        <div className="flex items-center gap-2 pt-2 flex-wrap">
+                          <Badge variant="outline" className="text-xs">
+                            <Users className="h-3 w-3 mr-1" />
+                            1 Adult
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            <Calendar className="h-3 w-3 mr-1" />
+                            {calculateNights()} nights
+                          </Badge>
+                        </div>
                       </div>
                       
-                      <div className="text-right shrink-0">
+                      {/* Price & Actions */}
+                      <div className="text-right shrink-0 space-y-2">
                         {hotel.offers && hotel.offers.length > 0 && hotel.offers[0].price && (
-                          <>
-                            <p className="text-lg font-bold">${hotel.offers[0].price}</p>
-                            <p className="text-xs text-muted-foreground">{hotel.offers[0].currency}</p>
-                          </>
+                          <div>
+                            <p className="text-xs text-muted-foreground">from</p>
+                            <p className="text-2xl font-bold">${hotel.offers[0].price.toLocaleString()}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {hotel.offers[0].currency} total • ${Math.round(hotel.offers[0].price / calculateNights())}/night
+                            </p>
+                          </div>
                         )}
+                        
                         {onSaveHotel && (
                           <Button 
                             size="sm" 
                             variant="outline"
-                            className="mt-2"
                             onClick={() => onSaveHotel(hotel)}
                           >
                             <Bookmark className="h-3 w-3 mr-1" />
                             Save
                           </Button>
                         )}
+
+                        {/* Booking Links */}
+                        <Separator className="my-2" />
+                        <div className="space-y-1">
+                          <p className="text-xs text-muted-foreground font-medium">Book on:</p>
+                          <div className="flex flex-col gap-1">
+                            <a 
+                              href={getGoogleHotelsLink(hotel)} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary hover:underline flex items-center gap-1"
+                            >
+                              Google Hotels <ExternalLink className="h-3 w-3" />
+                            </a>
+                            <a 
+                              href={getBookingLink(hotel)} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary hover:underline flex items-center gap-1"
+                            >
+                              Booking.com <ExternalLink className="h-3 w-3" />
+                            </a>
+                            <a 
+                              href={getHotelsComLink(hotel)} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary hover:underline flex items-center gap-1"
+                            >
+                              Hotels.com <ExternalLink className="h-3 w-3" />
+                            </a>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
-        {/* Error/Info Messages */}
-        {error && (
-          <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
-            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-            {error}
-          </div>
-        )}
+      {/* Error/Info Messages */}
+      {error && (
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+          <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+          {error}
+        </div>
+      )}
 
-        {!isConfigured && (
-          <div className="p-4 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 text-sm">
-            <p className="font-medium">Search unavailable</p>
-            <p className="mt-1 opacity-80">
-              The Amadeus API is not configured. You can still manually add items to your itinerary.
-            </p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      {!isConfigured && (
+        <div className="p-4 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 text-sm">
+          <p className="font-medium">Search unavailable</p>
+          <p className="mt-1 opacity-80">
+            The Amadeus API is not configured. You can still manually add items to your itinerary.
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
