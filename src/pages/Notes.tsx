@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { PanelLeftClose, PanelLeft, LogIn, Loader2, Download, Share2, FileUp } from "lucide-react";
+import { PanelLeftClose, PanelLeft, LogIn, Loader2, Download, Share2 } from "lucide-react";
 import { NotesSidebar } from "@/components/notes/NotesSidebar";
 import { NoteCanvas } from "@/components/notes/NoteCanvas";
 import { PageNoteEditor } from "@/components/notes/PageNoteEditor";
@@ -12,6 +12,7 @@ import { CreateFolderDialog } from "@/components/notes/CreateFolderDialog";
 import type { Note, NoteType, PageMode } from "@/types/notes";
 import { useNotesPersistence } from "@/hooks/useNotesPersistence";
 import { toast } from "sonner";
+import { generatePdfFromElement, downloadBlob, sharePdf } from "@/lib/notes-pdf";
 
 // Handle PDF file import from share target
 async function handleSharedFile(): Promise<File | null> {
@@ -42,7 +43,8 @@ export default function Notes() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
-
+  const [isExporting, setIsExporting] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
   const {
     notes,
     folders,
@@ -218,36 +220,80 @@ export default function Notes() {
     [selectedNote, saveNote]
   );
 
-  // Export note as PDF (using browser print)
-  const handleExportPdf = useCallback(() => {
-    if (!selectedNote) return;
-    
-    // For now, use print dialog which allows saving as PDF
-    window.print();
-    toast.success("Use 'Save as PDF' in the print dialog");
+  // Generate PDF from current note content
+  const generateNotePdf = useCallback(async (): Promise<Blob | null> => {
+    if (!selectedNote || !contentRef.current) return null;
+
+    // Find the page content element (exclude toolbars)
+    const pageContainer = contentRef.current.querySelector('[data-note-content="true"]') as HTMLElement;
+    if (!pageContainer) {
+      console.error('Could not find note content element');
+      return null;
+    }
+
+    try {
+      const blob = await generatePdfFromElement(pageContainer, {
+        title: selectedNote.title,
+        format: 'a4',
+        orientation: 'portrait',
+      });
+      return blob;
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      return null;
+    }
   }, [selectedNote]);
 
-  // Native share
+  // Export note as PDF - direct download
+  const handleExportPdf = useCallback(async () => {
+    if (!selectedNote) return;
+    
+    setIsExporting(true);
+    try {
+      const blob = await generateNotePdf();
+      if (blob) {
+        const filename = `${selectedNote.title.replace(/[^a-z0-9]/gi, '_')}.pdf`;
+        downloadBlob(blob, filename);
+        toast.success("PDF exported successfully");
+      } else {
+        // Fallback to print
+        window.print();
+        toast.success("Use 'Save as PDF' in the print dialog");
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      // Fallback to print
+      window.print();
+      toast.success("Use 'Save as PDF' in the print dialog");
+    } finally {
+      setIsExporting(false);
+    }
+  }, [selectedNote, generateNotePdf]);
+
+  // Native share - share as PDF file
   const handleShare = useCallback(async () => {
     if (!selectedNote) return;
     
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: selectedNote.title,
-          text: `Check out my note: ${selectedNote.title}`,
-        });
-      } catch (err) {
-        // User cancelled or error
-        if ((err as Error).name !== 'AbortError') {
-          toast.error("Failed to share");
+    setIsExporting(true);
+    try {
+      const blob = await generateNotePdf();
+      if (blob) {
+        const shared = await sharePdf(blob, selectedNote.title);
+        if (shared) {
+          toast.success("Note shared as PDF");
         }
+      } else {
+        toast.error("Could not generate PDF for sharing");
       }
-    } else {
-      // Fallback - copy link to clipboard
-      toast.info("Share is not supported on this device");
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        console.error('Share error:', err);
+        toast.error("Failed to share");
+      }
+    } finally {
+      setIsExporting(false);
     }
-  }, [selectedNote]);
+  }, [selectedNote, generateNotePdf]);
 
   // Loading state
   if (isLoading) {
@@ -343,16 +389,22 @@ export default function Notes() {
                   size="icon"
                   className="h-8 w-8 rounded-lg"
                   onClick={handleExportPdf}
+                  disabled={isExporting}
                   title="Export as PDF"
                 >
-                  <Download className="h-4 w-4" />
+                  {isExporting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 rounded-lg"
                   onClick={handleShare}
-                  title="Share"
+                  disabled={isExporting}
+                  title="Share as PDF"
                 >
                   <Share2 className="h-4 w-4" />
                 </Button>
@@ -362,7 +414,7 @@ export default function Notes() {
         </header>
 
         {/* Editor area */}
-        <div className="flex-1 relative">
+        <div className="flex-1 relative" ref={contentRef}>
           {selectedNote ? (
             selectedNote.noteType === "page" ? (
               <PageNoteEditor

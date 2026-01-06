@@ -77,15 +77,8 @@ export function useNotesPersistence() {
   const [isLoading, setIsLoading] = useState(true);
   const { isAuthenticated } = useAuth();
 
-  // Fetch notes and folders
+  // Fetch notes and folders - bypass isAuthenticated check to allow async token resolution
   const fetchNotes = useCallback(async () => {
-    if (!isAuthenticated) {
-      setNotes([]);
-      setFolders([]);
-      setIsLoading(false);
-      return;
-    }
-
     try {
       setIsLoading(true);
 
@@ -100,6 +93,8 @@ export function useNotesPersistence() {
 
       if (notesResult.error) {
         console.error('Error fetching notes:', notesResult.error);
+        setNotes([]);
+        setFolders([]);
       } else if (notesResult.data) {
         const transformedNotes = notesResult.data.map(dbToNote);
         // Sort: pinned first, then by updated_at
@@ -117,16 +112,16 @@ export function useNotesPersistence() {
       }
     } catch (error) {
       console.error('Error in fetchNotes:', error);
+      setNotes([]);
+      setFolders([]);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchNotes();
-    }
-  }, [fetchNotes, isAuthenticated]);
+    fetchNotes();
+  }, [fetchNotes]);
 
   // Sort helper
   const sortNotes = (notesList: Note[]): Note[] => {
@@ -136,13 +131,8 @@ export function useNotesPersistence() {
     });
   };
 
-  // Create a new note
+  // Create a new note - bypass synchronous isAuthenticated check
   const createNote = useCallback(async (overrides: Partial<Note> = {}): Promise<Note | null> => {
-    if (!isAuthenticated) {
-      toast.error('Please log in to create notes');
-      return null;
-    }
-
     const newNote: Partial<Note> = {
       title: 'Untitled Note',
       noteType: 'canvas',
@@ -176,15 +166,16 @@ export function useNotesPersistence() {
     }
   }, []);
 
-  // Save/update a note
+  // Save/update a note - bypass synchronous isAuthenticated check
   const saveNote = useCallback(async (note: Note): Promise<boolean> => {
-    if (!isAuthenticated) return false;
-
+    // Update local state with new updatedAt timestamp
+    const updatedNote = { ...note, updatedAt: new Date().toISOString() };
+    
     // Optimistic update
-    setNotes(prev => sortNotes(prev.map(n => n.id === note.id ? note : n)));
+    setNotes(prev => sortNotes(prev.map(n => n.id === note.id ? updatedNote : n)));
 
     try {
-      const dbData = noteToDb(note);
+      const dbData = noteToDb(updatedNote);
       const { error } = await dataApiHelpers.update('notes', note.id, dbData);
 
       if (error) {
@@ -202,20 +193,20 @@ export function useNotesPersistence() {
     }
   }, [fetchNotes]);
 
-  // Delete a note
+  // Delete a note - bypass synchronous isAuthenticated check
   const deleteNote = useCallback(async (noteId: string): Promise<boolean> => {
-    if (!isAuthenticated) return false;
-
     // Optimistic update
-    const previousNotes = notes;
-    setNotes(prev => prev.filter(n => n.id !== noteId));
+    setNotes(prev => {
+      const filtered = prev.filter(n => n.id !== noteId);
+      return filtered;
+    });
 
     try {
       const { error } = await dataApiHelpers.delete('notes', noteId);
 
       if (error) {
         console.error('Error deleting note:', error);
-        setNotes(previousNotes);
+        await fetchNotes(); // Revert by refetching
         toast.error('Failed to delete note');
         return false;
       }
@@ -223,45 +214,65 @@ export function useNotesPersistence() {
       return true;
     } catch (error) {
       console.error('Error in deleteNote:', error);
-      setNotes(previousNotes);
+      await fetchNotes();
       return false;
     }
-  }, [notes]);
+  }, [fetchNotes]);
 
-  // Duplicate a note
+  // Duplicate a note - use functional state to get latest notes
   const duplicateNote = useCallback(async (noteId: string): Promise<Note | null> => {
-    const original = notes.find(n => n.id === noteId);
-    if (!original || !isAuthenticated) return null;
+    // Get the note from current state reactively
+    let original: Note | undefined;
+    setNotes(prev => {
+      original = prev.find(n => n.id === noteId);
+      return prev; // No change, just reading
+    });
+    
+    if (!original) return null;
 
     return createNote({
       ...original,
       title: `${original.title} (Copy)`,
       pinned: false,
     });
-  }, [notes, createNote]);
+  }, [createNote]);
 
-  // Toggle pin
+  // Toggle pin - use functional state update pattern
   const togglePinNote = useCallback(async (noteId: string): Promise<boolean> => {
-    const note = notes.find(n => n.id === noteId);
-    if (!note || !isAuthenticated) return false;
+    let noteToUpdate: Note | undefined;
+    
+    setNotes(prev => {
+      noteToUpdate = prev.find(n => n.id === noteId);
+      return prev;
+    });
 
-    const updatedNote = { ...note, pinned: !note.pinned };
+    if (!noteToUpdate) return false;
+
+    const updatedNote = { ...noteToUpdate, pinned: !noteToUpdate.pinned };
     return saveNote(updatedNote);
-  }, [notes, saveNote]);
+  }, [saveNote]);
 
-  // Rename note
+  // Rename note - use functional state update pattern for reliable access
   const renameNote = useCallback(async (noteId: string, title: string): Promise<boolean> => {
-    const note = notes.find(n => n.id === noteId);
-    if (!note || !isAuthenticated) return false;
+    let noteToUpdate: Note | undefined;
+    
+    // Get fresh note reference from state
+    setNotes(prev => {
+      noteToUpdate = prev.find(n => n.id === noteId);
+      return prev;
+    });
 
-    const updatedNote = { ...note, title };
+    if (!noteToUpdate) {
+      console.error('Note not found for rename:', noteId);
+      return false;
+    }
+
+    const updatedNote = { ...noteToUpdate, title };
     return saveNote(updatedNote);
-  }, [notes, saveNote]);
+  }, [saveNote]);
 
-  // Create folder
+  // Create folder - bypass synchronous isAuthenticated check
   const createFolder = useCallback(async (name: string, color: string = '#3b82f6'): Promise<NoteFolder | null> => {
-    if (!isAuthenticated) return null;
-
     try {
       const { data, error } = await dataApiHelpers.insert<DbNoteFolder>('note_folders', { name, color });
 
@@ -280,10 +291,8 @@ export function useNotesPersistence() {
     }
   }, []);
 
-  // Delete folder
+  // Delete folder - bypass synchronous isAuthenticated check
   const deleteFolder = useCallback(async (folderId: string): Promise<boolean> => {
-    if (!isAuthenticated) return false;
-
     try {
       // First, remove folder reference from notes
       await dataApiHelpers.updateWhere('notes', { folder_id: folderId }, { folder_id: null });
