@@ -49,7 +49,7 @@ export default function Productivity() {
   const [activeTab, setActiveTab] = useState<"today" | "week" | "schedule" | "projects" | "tasks">("today");
 
   useEffect(() => {
-    document.title = "Productivity – Arlo";
+    document.title = "Arlo";
   }, []);
 
   const loadTasks = useCallback(async () => {
