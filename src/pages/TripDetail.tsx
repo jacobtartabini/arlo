@@ -1,10 +1,10 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { format, differenceInDays, eachDayOfInterval, isSameDay } from "date-fns";
+import { format, differenceInDays, eachDayOfInterval } from "date-fns";
 import {
   ArrowLeft, Plane, MapPin, Calendar, DollarSign, 
-  List, FileText, Settings, Plus, Cloud, RefreshCw,
-  Bookmark, Clock, CheckCircle2, AlertCircle
+  List, Plus, RefreshCw,
+  Bookmark, Clock, CheckCircle2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -12,9 +12,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useTravelPersistence } from "@/hooks/useTravelPersistence";
+import { useAuth } from "@/providers/AuthProvider";
 import { 
   Trip, TripDestination, TripItineraryItem, TripSavedPlace, 
-  TripExpense, WeatherForecast 
+  TripExpense 
 } from "@/types/travel";
 import { TripItineraryTab } from "@/components/travel/TripItineraryTab";
 import { TripMapTab } from "@/components/travel/TripMapTab";
@@ -28,6 +29,7 @@ import { cn } from "@/lib/utils";
 export default function TripDetail() {
   const { tripId } = useParams<{ tripId: string }>();
   const navigate = useNavigate();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
   const {
     fetchTrip,
     fetchDestinations,
@@ -54,6 +56,9 @@ export default function TripDetail() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
   const [showAddDestination, setShowAddDestination] = useState(false);
+  
+  // Track if we've already loaded to prevent duplicate fetches
+  const hasLoadedRef = useRef(false);
 
   useEffect(() => {
     document.title = "Arlo";
@@ -80,11 +85,22 @@ export default function TripDetail() {
     } finally {
       setIsLoading(false);
     }
-  }, [tripId, fetchTrip, fetchDestinations, fetchItineraryItems, fetchSavedPlaces, fetchExpenses]);
+  }, [tripId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Load data once when authenticated
   useEffect(() => {
-    loadTripData();
-  }, [loadTripData]);
+    if (isAuthenticated && tripId && !hasLoadedRef.current) {
+      hasLoadedRef.current = true;
+      loadTripData();
+    } else if (!authLoading && !isAuthenticated) {
+      setIsLoading(false);
+    }
+  }, [isAuthenticated, authLoading, tripId, loadTripData]);
+
+  // Reset loaded ref when tripId changes
+  useEffect(() => {
+    hasLoadedRef.current = false;
+  }, [tripId]);
 
   if (isLoading) {
     return (
@@ -119,7 +135,6 @@ export default function TripDetail() {
 
   // Calculate budget summary
   const totalPlanned = expenses.filter(e => e.isPlanned).reduce((sum, e) => sum + e.amount, 0);
-  const totalActual = expenses.filter(e => !e.isPlanned).reduce((sum, e) => sum + e.amount, 0);
 
   const handleAddDestination = async (
     name: string,
@@ -157,7 +172,10 @@ export default function TripDetail() {
                 {format(trip.startDate, 'MMM d')} - {format(trip.endDate, 'MMM d, yyyy')} · {tripLength} days
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={loadTripData}>
+            <Button variant="outline" size="sm" onClick={() => {
+              hasLoadedRef.current = false;
+              loadTripData();
+            }}>
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh
             </Button>
@@ -206,7 +224,7 @@ export default function TripDetail() {
                   <p className="text-muted-foreground text-sm">No destinations added yet</p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
-                    {destinations.map((dest, i) => (
+                    {destinations.map((dest) => (
                       <Badge key={dest.id} variant="secondary" className="py-1.5 px-3">
                         <MapPin className="h-3 w-3 mr-1" />
                         {dest.name}

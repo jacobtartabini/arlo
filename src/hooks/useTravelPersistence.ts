@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { dataApiHelpers } from '@/lib/data-api';
 import {
   Trip,
@@ -5,7 +6,6 @@ import {
   TripItineraryItem,
   TripSavedPlace,
   TripExpense,
-  TripReservation,
   DbTrip,
   DbTripDestination,
   DbTripItineraryItem,
@@ -19,14 +19,13 @@ import {
   ItineraryItemType,
   PlaceCollection,
   ExpenseCategory,
-  ReservationType,
   TripStatus,
 } from '@/types/travel';
 import { format } from 'date-fns';
 
 export function useTravelPersistence() {
   // ============ TRIPS ============
-  const fetchTrips = async (status?: TripStatus): Promise<Trip[]> => {
+  const fetchTrips = useCallback(async (status?: TripStatus): Promise<Trip[]> => {
     try {
       const filters = status ? { status } : undefined;
       const { data, error } = await dataApiHelpers.select<DbTrip[]>('trips', {
@@ -39,9 +38,9 @@ export function useTravelPersistence() {
       console.error('[useTravelPersistence] fetchTrips error:', e);
       return [];
     }
-  };
+  }, []);
 
-  const fetchTrip = async (id: string): Promise<Trip | null> => {
+  const fetchTrip = useCallback(async (id: string): Promise<Trip | null> => {
     try {
       const { data, error } = await dataApiHelpers.select<DbTrip[]>('trips', {
         filters: { id },
@@ -52,9 +51,9 @@ export function useTravelPersistence() {
       console.error('[useTravelPersistence] fetchTrip error:', e);
       return null;
     }
-  };
+  }, []);
 
-  const createTrip = async (
+  const createTrip = useCallback(async (
     name: string,
     startDate: Date,
     endDate: Date,
@@ -80,9 +79,9 @@ export function useTravelPersistence() {
       console.error('[useTravelPersistence] createTrip error:', e);
       return null;
     }
-  };
+  }, []);
 
-  const updateTrip = async (
+  const updateTrip = useCallback(async (
     id: string,
     updates: Partial<Omit<Trip, 'id' | 'createdAt' | 'updatedAt'>>
   ): Promise<boolean> => {
@@ -104,9 +103,9 @@ export function useTravelPersistence() {
       console.error('[useTravelPersistence] updateTrip error:', e);
       return false;
     }
-  };
+  }, []);
 
-  const deleteTrip = async (id: string): Promise<boolean> => {
+  const deleteTrip = useCallback(async (id: string): Promise<boolean> => {
     try {
       const { error } = await dataApiHelpers.delete('trips', id);
       return !error;
@@ -114,10 +113,10 @@ export function useTravelPersistence() {
       console.error('[useTravelPersistence] deleteTrip error:', e);
       return false;
     }
-  };
+  }, []);
 
   // ============ DESTINATIONS ============
-  const fetchDestinations = async (tripId: string): Promise<TripDestination[]> => {
+  const fetchDestinations = useCallback(async (tripId: string): Promise<TripDestination[]> => {
     try {
       const { data, error } = await dataApiHelpers.select<DbTripDestination[]>('trip_destinations', {
         filters: { trip_id: tripId },
@@ -129,9 +128,9 @@ export function useTravelPersistence() {
       console.error('[useTravelPersistence] fetchDestinations error:', e);
       return [];
     }
-  };
+  }, []);
 
-  const createDestination = async (
+  const createDestination = useCallback(async (
     tripId: string,
     name: string,
     options?: {
@@ -166,9 +165,9 @@ export function useTravelPersistence() {
       console.error('[useTravelPersistence] createDestination error:', e);
       return null;
     }
-  };
+  }, []);
 
-  const deleteDestination = async (id: string): Promise<boolean> => {
+  const deleteDestination = useCallback(async (id: string): Promise<boolean> => {
     try {
       const { error } = await dataApiHelpers.delete('trip_destinations', id);
       return !error;
@@ -176,10 +175,10 @@ export function useTravelPersistence() {
       console.error('[useTravelPersistence] deleteDestination error:', e);
       return false;
     }
-  };
+  }, []);
 
   // ============ ITINERARY ITEMS ============
-  const fetchItineraryItems = async (tripId: string): Promise<TripItineraryItem[]> => {
+  const fetchItineraryItems = useCallback(async (tripId: string): Promise<TripItineraryItem[]> => {
     try {
       const { data, error } = await dataApiHelpers.select<DbTripItineraryItem[]>('trip_itinerary_items', {
         filters: { trip_id: tripId },
@@ -191,9 +190,9 @@ export function useTravelPersistence() {
       console.error('[useTravelPersistence] fetchItineraryItems error:', e);
       return [];
     }
-  };
+  }, []);
 
-  const createItineraryItem = async (
+  const createItineraryItem = useCallback(async (
     tripId: string,
     itemType: ItineraryItemType,
     title: string,
@@ -244,9 +243,9 @@ export function useTravelPersistence() {
       console.error('[useTravelPersistence] createItineraryItem error:', e);
       return null;
     }
-  };
+  }, []);
 
-  const updateItineraryItem = async (
+  const updateItineraryItem = useCallback(async (
     id: string,
     updates: Partial<Omit<TripItineraryItem, 'id' | 'tripId' | 'createdAt' | 'updatedAt'>>
   ): Promise<boolean> => {
@@ -277,9 +276,9 @@ export function useTravelPersistence() {
       console.error('[useTravelPersistence] updateItineraryItem error:', e);
       return false;
     }
-  };
+  }, []);
 
-  const deleteItineraryItem = async (id: string): Promise<boolean> => {
+  const deleteItineraryItem = useCallback(async (id: string): Promise<boolean> => {
     try {
       const { error } = await dataApiHelpers.delete('trip_itinerary_items', id);
       return !error;
@@ -287,10 +286,10 @@ export function useTravelPersistence() {
       console.error('[useTravelPersistence] deleteItineraryItem error:', e);
       return false;
     }
-  };
+  }, []);
 
   // ============ SAVED PLACES ============
-  const fetchSavedPlaces = async (tripId: string): Promise<TripSavedPlace[]> => {
+  const fetchSavedPlaces = useCallback(async (tripId: string): Promise<TripSavedPlace[]> => {
     try {
       const { data, error } = await dataApiHelpers.select<DbTripSavedPlace[]>('trip_saved_places', {
         filters: { trip_id: tripId },
@@ -302,9 +301,9 @@ export function useTravelPersistence() {
       console.error('[useTravelPersistence] fetchSavedPlaces error:', e);
       return [];
     }
-  };
+  }, []);
 
-  const createSavedPlace = async (
+  const createSavedPlace = useCallback(async (
     tripId: string,
     name: string,
     latitude: number,
@@ -339,9 +338,9 @@ export function useTravelPersistence() {
       console.error('[useTravelPersistence] createSavedPlace error:', e);
       return null;
     }
-  };
+  }, []);
 
-  const updateSavedPlace = async (
+  const updateSavedPlace = useCallback(async (
     id: string,
     updates: Partial<Omit<TripSavedPlace, 'id' | 'tripId' | 'createdAt'>>
   ): Promise<boolean> => {
@@ -356,9 +355,9 @@ export function useTravelPersistence() {
       console.error('[useTravelPersistence] updateSavedPlace error:', e);
       return false;
     }
-  };
+  }, []);
 
-  const deleteSavedPlace = async (id: string): Promise<boolean> => {
+  const deleteSavedPlace = useCallback(async (id: string): Promise<boolean> => {
     try {
       const { error } = await dataApiHelpers.delete('trip_saved_places', id);
       return !error;
@@ -366,10 +365,10 @@ export function useTravelPersistence() {
       console.error('[useTravelPersistence] deleteSavedPlace error:', e);
       return false;
     }
-  };
+  }, []);
 
   // ============ EXPENSES ============
-  const fetchExpenses = async (tripId: string): Promise<TripExpense[]> => {
+  const fetchExpenses = useCallback(async (tripId: string): Promise<TripExpense[]> => {
     try {
       const { data, error } = await dataApiHelpers.select<DbTripExpense[]>('trip_expenses', {
         filters: { trip_id: tripId },
@@ -381,9 +380,9 @@ export function useTravelPersistence() {
       console.error('[useTravelPersistence] fetchExpenses error:', e);
       return [];
     }
-  };
+  }, []);
 
-  const createExpense = async (
+  const createExpense = useCallback(async (
     tripId: string,
     category: ExpenseCategory,
     description: string,
@@ -416,9 +415,9 @@ export function useTravelPersistence() {
       console.error('[useTravelPersistence] createExpense error:', e);
       return null;
     }
-  };
+  }, []);
 
-  const updateExpense = async (
+  const updateExpense = useCallback(async (
     id: string,
     updates: Partial<Omit<TripExpense, 'id' | 'tripId' | 'createdAt'>>
   ): Promise<boolean> => {
@@ -439,9 +438,9 @@ export function useTravelPersistence() {
       console.error('[useTravelPersistence] updateExpense error:', e);
       return false;
     }
-  };
+  }, []);
 
-  const deleteExpense = async (id: string): Promise<boolean> => {
+  const deleteExpense = useCallback(async (id: string): Promise<boolean> => {
     try {
       const { error } = await dataApiHelpers.delete('trip_expenses', id);
       return !error;
@@ -449,7 +448,7 @@ export function useTravelPersistence() {
       console.error('[useTravelPersistence] deleteExpense error:', e);
       return false;
     }
-  };
+  }, []);
 
   return {
     // Trips
