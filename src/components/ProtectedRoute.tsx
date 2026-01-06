@@ -14,8 +14,15 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   // Attempt to verify auth on mount if not already authenticated
   useEffect(() => {
     if (!isAuthenticated && !isLoading && !hasAttemptedVerify) {
+      if (import.meta.env.DEV) {
+        console.log('[ProtectedRoute] verifyAuth() start');
+      }
       setHasAttemptedVerify(true);
-      verifyAuth();
+      verifyAuth().finally(() => {
+        if (import.meta.env.DEV) {
+          console.log('[ProtectedRoute] verifyAuth() done');
+        }
+      });
     }
   }, [isAuthenticated, isLoading, hasAttemptedVerify, verifyAuth]);
 

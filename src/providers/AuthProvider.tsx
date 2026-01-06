@@ -93,9 +93,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const verifyAuth = useCallback(async (): Promise<boolean> => {
     setAuthState(prev => ({ ...prev, isLoading: true, error: null }));
 
+    // Hard watchdog so the UI can't spin forever if the network stack stalls
+    const VERIFY_TIMEOUT_MS = 12_000;
+
     try {
-      const token = await getArloToken();
-      
+      const token = await Promise.race([
+        getArloToken(),
+        new Promise<string | null>((resolve) => {
+          setTimeout(() => resolve(null), VERIFY_TIMEOUT_MS);
+        }),
+      ]);
+
       if (token) {
         const identity = getIdentity();
         const userKey = identity?.user ?? null;
