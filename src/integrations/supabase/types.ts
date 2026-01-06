@@ -1214,6 +1214,92 @@ export type Database = {
         }
         Relationships: []
       }
+      project_links: {
+        Row: {
+          created_at: string
+          id: string
+          link_type: string
+          project_id: string
+          title: string
+          url: string
+          user_id: string | null
+          user_key: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          link_type?: string
+          project_id: string
+          title: string
+          url: string
+          user_id?: string | null
+          user_key?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          link_type?: string
+          project_id?: string
+          title?: string
+          url?: string
+          user_id?: string | null
+          user_key?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_links_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projects: {
+        Row: {
+          color: string | null
+          created_at: string
+          description: string | null
+          icon: string | null
+          id: string
+          name: string
+          start_date: string | null
+          status: string
+          target_date: string | null
+          updated_at: string
+          user_id: string | null
+          user_key: string | null
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name: string
+          start_date?: string | null
+          status?: string
+          target_date?: string | null
+          updated_at?: string
+          user_id?: string | null
+          user_key?: string | null
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          description?: string | null
+          icon?: string | null
+          id?: string
+          name?: string
+          start_date?: string | null
+          status?: string
+          target_date?: string | null
+          updated_at?: string
+          user_id?: string | null
+          user_key?: string | null
+        }
+        Relationships: []
+      }
       reward_redemptions: {
         Row: {
           id: string
@@ -1374,6 +1460,50 @@ export type Database = {
           },
         ]
       }
+      subtasks: {
+        Row: {
+          created_at: string
+          done: boolean
+          id: string
+          order_index: number
+          task_id: string
+          title: string
+          updated_at: string
+          user_id: string | null
+          user_key: string | null
+        }
+        Insert: {
+          created_at?: string
+          done?: boolean
+          id?: string
+          order_index?: number
+          task_id: string
+          title: string
+          updated_at?: string
+          user_id?: string | null
+          user_key?: string | null
+        }
+        Update: {
+          created_at?: string
+          done?: boolean
+          id?: string
+          order_index?: number
+          task_id?: string
+          title?: string
+          updated_at?: string
+          user_id?: string | null
+          user_key?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subtasks_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
           category: string | null
@@ -1381,8 +1511,13 @@ export type Database = {
           description: string | null
           done: boolean
           due_date: string | null
+          energy_level: string | null
           id: string
+          order_index: number | null
           priority: number
+          project_id: string | null
+          scheduled_date: string | null
+          time_estimate_minutes: number | null
           title: string
           updated_at: string
           user_id: string | null
@@ -1394,8 +1529,13 @@ export type Database = {
           description?: string | null
           done?: boolean
           due_date?: string | null
+          energy_level?: string | null
           id?: string
+          order_index?: number | null
           priority?: number
+          project_id?: string | null
+          scheduled_date?: string | null
+          time_estimate_minutes?: number | null
           title: string
           updated_at?: string
           user_id?: string | null
@@ -1407,14 +1547,90 @@ export type Database = {
           description?: string | null
           done?: boolean
           due_date?: string | null
+          energy_level?: string | null
           id?: string
+          order_index?: number | null
           priority?: number
+          project_id?: string | null
+          scheduled_date?: string | null
+          time_estimate_minutes?: number | null
           title?: string
           updated_at?: string
           user_id?: string | null
           user_key?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tasks_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      time_blocks: {
+        Row: {
+          actual_duration_minutes: number | null
+          block_type: string
+          calendar_event_id: string | null
+          created_at: string
+          end_time: string
+          id: string
+          is_completed: boolean
+          notes: string | null
+          start_time: string
+          task_id: string | null
+          updated_at: string
+          user_id: string | null
+          user_key: string | null
+        }
+        Insert: {
+          actual_duration_minutes?: number | null
+          block_type?: string
+          calendar_event_id?: string | null
+          created_at?: string
+          end_time: string
+          id?: string
+          is_completed?: boolean
+          notes?: string | null
+          start_time: string
+          task_id?: string | null
+          updated_at?: string
+          user_id?: string | null
+          user_key?: string | null
+        }
+        Update: {
+          actual_duration_minutes?: number | null
+          block_type?: string
+          calendar_event_id?: string | null
+          created_at?: string
+          end_time?: string
+          id?: string
+          is_completed?: boolean
+          notes?: string | null
+          start_time?: string
+          task_id?: string | null
+          updated_at?: string
+          user_id?: string | null
+          user_key?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "time_blocks_calendar_event_id_fkey"
+            columns: ["calendar_event_id"]
+            isOneToOne: false
+            referencedRelation: "calendar_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "time_blocks_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       us_holidays: {
         Row: {

@@ -37,7 +37,9 @@ const ALLOWED_TABLES = [
   'creation_projects', 'creation_assets', 'creation_scene_state',
   'calendar_integrations', 'calendar_integrations_safe', 'google_calendar_selections',
   'inbox_accounts', 'inbox_accounts_safe', 'inbox_threads', 'inbox_messages', 
-  'inbox_drafts', 'inbox_sync_state'
+  'inbox_drafts', 'inbox_sync_state',
+  // Productivity system tables
+  'projects', 'subtasks', 'time_blocks', 'project_links'
 ]
 
 // Fields that should be encrypted when stored
