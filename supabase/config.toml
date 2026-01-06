@@ -44,3 +44,9 @@ verify_jwt = false
 
 [functions.inbox-send]
 verify_jwt = false
+
+[functions.drive-auth]
+verify_jwt = false
+
+[functions.drive-api]
+verify_jwt = false
