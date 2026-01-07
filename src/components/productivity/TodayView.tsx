@@ -18,7 +18,7 @@ import { format } from "date-fns";
 import { CurrentTimeBlock } from "./CurrentTimeBlock";
 import { FocusSuggestion } from "./FocusSuggestion";
 import { PriorityTaskList } from "./PriorityTaskList";
-import { QuickScheduleDialog } from "./QuickScheduleDialog";
+import { QuickTaskInput } from "./QuickTaskInput";
 import { EnergySettings, getEnergyForHour } from "./EnergySettings";
 import { useTasksPersistence } from "@/hooks/useTasksPersistence";
 import { useTimeBlocksPersistence } from "@/hooks/useTimeBlocksPersistence";
@@ -173,6 +173,12 @@ export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
 
   return (
     <div className="space-y-6">
+      {/* Quick Task Input - Top Priority for Low Friction */}
+      <QuickTaskInput 
+        onTaskCreated={loadData}
+        defaultScheduledDate={new Date()}
+      />
+
       {/* Today Header */}
       <Card className="relative overflow-hidden border-border/60 bg-gradient-to-br from-primary/5 via-card/80 to-card/80 p-6">
         <div className="absolute inset-0 opacity-30" aria-hidden>
@@ -231,7 +237,7 @@ export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
                 className="gap-1.5"
               >
                 <Plus className="h-4 w-4" />
-                Add Task
+                More Options
               </Button>
             </div>
           </div>

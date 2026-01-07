@@ -5,16 +5,17 @@
 
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
+import { useState, useCallback, memo } from "react";
 import { 
   Check, Plus, FileText, MapPin, Plane, Flame, Moon,
   Sparkles, Clock, FolderOpen, Navigation, Calendar,
-  Zap, Upload, PenLine, Shield, Monitor, Palette
+  Zap, Upload, PenLine, Shield, Monitor, Palette, Loader2, Send, Circle
 } from "lucide-react";
 import { GoogleMap, useJsApiLoader } from "@react-google-maps/api";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow, differenceInDays } from "date-fns";
+import { Input } from "@/components/ui/input";
 import type { ModuleSize } from "@/lib/app-navigation";
-import { useCallback, memo } from "react";
 
 interface MiniContentProps {
   moduleId: string;
@@ -42,6 +43,8 @@ interface MiniContentProps {
     connectedDevices: number;
   };
   onClick?: (e: React.MouseEvent) => void;
+  onTaskToggle?: (taskId: string, done: boolean) => void;
+  onTaskCreate?: (title: string) => Promise<boolean>;
 }
 
 // Animated progress ring with glow effect
@@ -150,68 +153,197 @@ function StatBadge({
   );
 }
 
-// Mini task list for Today module with visual priority indicators
-function TodayMiniContent({ data, size }: { data: MiniContentProps["data"]; size: ModuleSize }) {
+// Interactive task list for Today module - can add and complete tasks
+function TodayMiniContent({ 
+  data, 
+  size, 
+  onTaskToggle,
+  onTaskCreate,
+}: { 
+  data: MiniContentProps["data"]; 
+  size: ModuleSize;
+  onTaskToggle?: (taskId: string, done: boolean) => void;
+  onTaskCreate?: (title: string) => Promise<boolean>;
+}) {
   const isPrimary = size === "primary";
   const isTertiary = size === "tertiary";
-  const tasks = data.todayTasks.slice(0, isTertiary ? 2 : isPrimary ? 4 : 3);
+  const tasks = data.todayTasks.slice(0, isTertiary ? 2 : isPrimary ? 5 : 3);
   const completedCount = data.tasksCompletedToday;
   const totalToday = data.tasksDueToday;
+  
+  const [isAdding, setIsAdding] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleToggle = useCallback((e: React.MouseEvent, taskId: string, currentDone: boolean) => {
+    e.stopPropagation();
+    onTaskToggle?.(taskId, !currentDone);
+  }, [onTaskToggle]);
+
+  const handleAddClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsAdding(true);
+  }, []);
+
+  const handleSubmit = useCallback(async (e: React.MouseEvent | React.KeyboardEvent) => {
+    e.stopPropagation();
+    if (!newTaskTitle.trim() || isSubmitting || !onTaskCreate) return;
+    
+    setIsSubmitting(true);
+    const success = await onTaskCreate(newTaskTitle.trim());
+    setIsSubmitting(false);
+    
+    if (success) {
+      setNewTaskTitle("");
+      setIsAdding(false);
+    }
+  }, [newTaskTitle, isSubmitting, onTaskCreate]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleSubmit(e);
+    } else if (e.key === "Escape") {
+      e.stopPropagation();
+      setNewTaskTitle("");
+      setIsAdding(false);
+    }
+  }, [handleSubmit]);
 
   return (
-    <div className={cn("flex", isPrimary ? "gap-4" : "gap-3")}>
-      {/* Progress ring */}
-      <ProgressRing 
-        progress={totalToday > 0 ? (completedCount / totalToday) * 100 : 0}
-        size={isPrimary ? 48 : isTertiary ? 32 : 40}
-        strokeWidth={isPrimary ? 4 : 3}
-        color="primary"
-        showGlow
-      >
-        <div className="flex flex-col items-center">
-          <span className={cn(
-            "font-semibold text-foreground leading-none",
+    <div className={cn("flex flex-col", isPrimary ? "gap-3" : "gap-2")}>
+      {/* Top row: Progress ring and stats */}
+      <div className={cn("flex items-center", isPrimary ? "gap-4" : "gap-3")}>
+        <ProgressRing 
+          progress={totalToday > 0 ? (completedCount / totalToday) * 100 : 0}
+          size={isPrimary ? 44 : isTertiary ? 28 : 36}
+          strokeWidth={isPrimary ? 4 : 3}
+          color="primary"
+          showGlow
+        >
+          <div className="flex flex-col items-center">
+            <span className={cn(
+              "font-semibold text-foreground leading-none",
+              isPrimary ? "text-sm" : "text-[10px]"
+            )}>
+              {completedCount}
+            </span>
+            <span className="text-[7px] text-muted-foreground/60">/{totalToday}</span>
+          </div>
+        </ProgressRing>
+
+        <div className="flex-1 min-w-0">
+          <p className={cn(
+            "font-medium text-foreground",
             isPrimary ? "text-sm" : "text-xs"
           )}>
-            {completedCount}
-          </span>
-          <span className="text-[8px] text-muted-foreground/60">/{totalToday}</span>
+            {completedCount === totalToday && totalToday > 0 
+              ? "All done! 🎉" 
+              : `${totalToday - completedCount} tasks left`}
+          </p>
+          <p className="text-[10px] text-muted-foreground/60">
+            {completedCount > 0 && `${completedCount} completed today`}
+          </p>
         </div>
-      </ProgressRing>
+      </div>
 
-      {/* Task list */}
-      <div className="flex-1 min-w-0 space-y-1">
-        {tasks.length === 0 ? (
-          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/60 py-1">
-            <Sparkles className="w-3 h-3" />
-            <span>All clear!</span>
-          </div>
-        ) : (
-          tasks.map((task, i) => (
+      {/* Task list with checkboxes */}
+      {!isTertiary && tasks.length > 0 && (
+        <div className="space-y-1">
+          {tasks.map((task, i) => (
             <motion.div
               key={task.id}
               initial={{ opacity: 0, x: -6 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.04 }}
-              className="flex items-center gap-1.5 group/task"
+              transition={{ delay: i * 0.03 }}
+              className="flex items-center gap-2 group/task"
             >
-              {/* Priority indicator */}
+              {/* Clickable checkbox */}
+              <button
+                onClick={(e) => handleToggle(e, task.id, task.done)}
+                className={cn(
+                  "w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-all",
+                  task.done 
+                    ? "bg-primary border-primary" 
+                    : "border-muted-foreground/30 hover:border-primary/60 group-hover/task:border-primary/40"
+                )}
+              >
+                {task.done && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
+              </button>
+              
+              {/* Priority dot */}
               <div className={cn(
                 "w-1 h-3 rounded-full shrink-0",
                 task.priority >= 3 ? "bg-destructive/60" :
                 task.priority >= 2 ? "bg-amber-500/60" :
                 "bg-muted-foreground/20"
               )} />
+              
               <span className={cn(
-                "text-[10px] truncate leading-tight",
+                "text-[10px] truncate leading-tight flex-1",
                 task.done ? "text-muted-foreground/40 line-through" : "text-foreground/80"
               )}>
                 {task.title}
               </span>
             </motion.div>
-          ))
-        )}
-      </div>
+          ))}
+        </div>
+      )}
+
+      {/* Quick add input */}
+      {!isTertiary && (
+        isAdding ? (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            className="flex items-center gap-1.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Input
+              autoFocus
+              value={newTaskTitle}
+              onChange={(e) => setNewTaskTitle(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Task name..."
+              className="h-7 text-[10px] px-2 border-primary/40 focus-visible:ring-1"
+              disabled={isSubmitting}
+            />
+            <button
+              onClick={handleSubmit}
+              disabled={!newTaskTitle.trim() || isSubmitting}
+              className={cn(
+                "w-7 h-7 rounded-md flex items-center justify-center transition-colors shrink-0",
+                newTaskTitle.trim() 
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90" 
+                  : "bg-muted text-muted-foreground"
+              )}
+            >
+              {isSubmitting ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Send className="w-3 h-3" />
+              )}
+            </button>
+          </motion.div>
+        ) : (
+          <motion.button
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            onClick={handleAddClick}
+            className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors text-[10px] font-medium text-primary w-full justify-center"
+          >
+            <Plus className="w-3 h-3" />
+            Add task
+          </motion.button>
+        )
+      )}
+
+      {/* Tertiary: Simple add button */}
+      {isTertiary && tasks.length === 0 && (
+        <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground/60">
+          <Sparkles className="w-3 h-3" />
+          <span>All clear!</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -830,14 +962,14 @@ function CreationMiniContent({ size }: { size: ModuleSize }) {
   );
 }
 
-export function ModuleMiniContent({ moduleId, size, data, onClick }: MiniContentProps) {
+export function ModuleMiniContent({ moduleId, size, data, onClick, onTaskToggle, onTaskCreate }: MiniContentProps) {
   const isTertiary = size === "tertiary";
   const isMaps = moduleId === "maps";
 
   const content = (() => {
     switch (moduleId) {
       case "productivity":
-        return <TodayMiniContent data={data} size={size} />;
+        return <TodayMiniContent data={data} size={size} onTaskToggle={onTaskToggle} onTaskCreate={onTaskCreate} />;
       case "habits":
         return <HabitsMiniContent data={data} size={size} />;
       case "notes":

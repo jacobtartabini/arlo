@@ -34,9 +34,11 @@ interface ModuleTileProps {
   onClick: () => void;
   sizeClass?: ModuleSize;
   dashboardData: DashboardData;
+  onTaskToggle?: (taskId: string, done: boolean) => void;
+  onTaskCreate?: (title: string) => Promise<boolean>;
 }
 
-export function ModuleTile({ module, onClick, sizeClass, dashboardData }: ModuleTileProps) {
+export function ModuleTile({ module, onClick, sizeClass, dashboardData, onTaskToggle, onTaskCreate }: ModuleTileProps) {
   const Icon = module.icon;
   const size = sizeClass || module.size;
   const isPrimary = size === "primary";
@@ -108,6 +110,8 @@ export function ModuleTile({ module, onClick, sizeClass, dashboardData }: Module
                 moduleId={module.id}
                 size={size}
                 data={data}
+                onTaskToggle={onTaskToggle}
+                onTaskCreate={onTaskCreate}
               />
             </div>
           )}
