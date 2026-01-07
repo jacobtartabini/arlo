@@ -16,14 +16,14 @@ serve(async (req) => {
   try {
     // Verify JWT
     const authResult = await verifyArloJWT(req);
-    if (!authResult.valid || !authResult.userKey) {
+    if (!authResult.authenticated || !authResult.userId) {
       return new Response(
         JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const userKey = authResult.userKey;
+    const userKey = authResult.userId;
     const { text, voiceId, model } = await req.json();
 
     if (!text) {
