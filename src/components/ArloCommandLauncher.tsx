@@ -288,6 +288,17 @@ const ArloCommandLauncher = () => {
           activeElement.isContentEditable) &&
         !containerRef.current?.contains(activeElement);
 
+      // Cmd+Option+K - Open directly to chat mode
+      if ((e.metaKey || e.ctrlKey) && e.altKey && e.key === "k") {
+        e.preventDefault();
+        setOpen(true);
+        setSearchQuery("");
+        setSelectedIndex(0);
+        setSearchScope("chat");
+        return;
+      }
+
+      // Cmd+K - Open normally
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         if (open) {
@@ -417,7 +428,7 @@ const ArloCommandLauncher = () => {
             animate={{
               x: "-50%",
               width: open ? (isExpanded ? "32rem" : "40rem") : "28rem",
-              borderRadius: open ? (isExpanded ? 16 : 24) : 24,
+              borderRadius: open && isExpanded ? 16 : 24,
               scale: open && searchScope !== "all" && !hasTyped ? 1.01 : 1,
             }}
             transition={{
