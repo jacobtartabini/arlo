@@ -8,22 +8,16 @@ import MorningWakeupSettings from '@/components/settings/MorningWakeupSettings';
 import DriveIntegrations from '@/components/settings/DriveIntegrations';
 import DashboardVisibilitySettings from '@/components/settings/DashboardVisibilitySettings';
 import VoiceSettings from '@/components/settings/VoiceSettings';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { z } from 'zod';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { 
   Settings as SettingsIcon, 
   Palette, 
-  Bot, 
-  Shield, 
-  Server, 
   Bell,
-  Cpu,
   LogIn,
   Plug,
   ChevronDown,
@@ -33,18 +27,6 @@ import {
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-
-// Validation schema for connection settings
-const connectionSettingsSchema = z.object({
-  apiEndpoint: z.string()
-    .max(255, 'API endpoint must be less than 255 characters')
-    .refine(
-      (val) => !val || val.startsWith('http://') || val.startsWith('https://'),
-      'API endpoint must be a valid HTTP/HTTPS URL'
-    ),
-  apiToken: z.string()
-    .max(500, 'API token must be less than 500 characters'),
-});
 
 interface SettingsSectionProps {
   icon: React.ElementType;
@@ -116,16 +98,14 @@ function SettingToggle({ label, description, checked, onCheckedChange }: Setting
 }
 
 export default function Settings() {
-  const { config, setConfig, status, isConnected } = useArlo();
+  const { isConnected } = useArlo();
   const { settings, isLoading, isAuthenticated, updateSettings } = useUserSettings();
   const navigate = useNavigate();
-  const [validationErrors, setValidationErrors] = useState<{ apiEndpoint?: string; apiToken?: string }>({});
-  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // SEO
   useEffect(() => {
     document.title = "Settings – Arlo";
-    const desc = "Configure Arlo AI settings including appearance, privacy, notifications, and system preferences.";
+    const desc = "Configure Arlo settings including appearance, notifications, and integrations.";
     let meta = document.querySelector('meta[name="description"]') as HTMLMetaElement | null;
     if (!meta) {
       meta = document.createElement("meta");
@@ -134,34 +114,6 @@ export default function Settings() {
     }
     if (meta) meta.content = desc;
   }, []);
-
-  const handleSaveConnectionConfig = async () => {
-    const result = connectionSettingsSchema.safeParse({
-      apiEndpoint: config.apiEndpoint,
-      apiToken: config.apiToken,
-    });
-
-    if (!result.success) {
-      const errors: { apiEndpoint?: string; apiToken?: string } = {};
-      result.error.errors.forEach((err) => {
-        if (err.path[0] === 'apiEndpoint') errors.apiEndpoint = err.message;
-        if (err.path[0] === 'apiToken') errors.apiToken = err.message;
-      });
-      setValidationErrors(errors);
-      toast.error('Please fix validation errors');
-      return;
-    }
-
-    setValidationErrors({});
-    
-    if (isAuthenticated && settings) {
-      await updateSettings({
-        api_endpoint: config.apiEndpoint,
-        api_token: config.apiToken,
-      });
-    }
-    toast.success('Connection settings saved');
-  };
 
   const handleSettingToggle = async (key: keyof typeof settings, value: boolean) => {
     if (!isAuthenticated) {
@@ -313,174 +265,6 @@ export default function Settings() {
               </div>
             </div>
           </SettingsSection>
-
-          {/* AI Assistant */}
-          <SettingsSection 
-            icon={Bot} 
-            title="AI Assistant" 
-            description="Arlo behavior preferences"
-          >
-            <div className="space-y-1">
-              <SettingToggle
-                label="Voice Responses"
-                description="Enable audio responses from Arlo"
-                checked={settings?.voice_responses_enabled ?? true}
-                onCheckedChange={(checked) => handleSettingToggle('voice_responses_enabled', checked)}
-              />
-              <SettingToggle
-                label="Proactive Suggestions"
-                description="Show contextual suggestions"
-                checked={settings?.proactive_suggestions_enabled ?? true}
-                onCheckedChange={(checked) => handleSettingToggle('proactive_suggestions_enabled', checked)}
-              />
-              <SettingToggle
-                label="Learning Mode"
-                description="Allow Arlo to learn from interactions"
-                checked={settings?.learning_mode_enabled ?? true}
-                onCheckedChange={(checked) => handleSettingToggle('learning_mode_enabled', checked)}
-              />
-            </div>
-          </SettingsSection>
-
-          {/* Privacy */}
-          <SettingsSection 
-            icon={Shield} 
-            title="Privacy & Security" 
-            description="Data and encryption settings"
-          >
-            <div className="space-y-1">
-              <SettingToggle
-                label="Data Collection"
-                description="Allow usage data collection"
-                checked={settings?.data_collection_enabled ?? true}
-                onCheckedChange={(checked) => handleSettingToggle('data_collection_enabled', checked)}
-              />
-              <SettingToggle
-                label="Analytics"
-                description="Help improve Arlo with analytics"
-                checked={settings?.analytics_enabled ?? true}
-                onCheckedChange={(checked) => handleSettingToggle('analytics_enabled', checked)}
-              />
-              <SettingToggle
-                label="End-to-End Encryption"
-                description="Encrypt all communications"
-                checked={settings?.encryption_enabled ?? true}
-                onCheckedChange={(checked) => handleSettingToggle('encryption_enabled', checked)}
-              />
-            </div>
-          </SettingsSection>
-
-          {/* Advanced - Connection Settings */}
-          <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-            <CollapsibleTrigger className="w-full">
-              <div className={cn(
-                "flex items-center justify-between p-4 rounded-xl transition-all duration-200",
-                "bg-card/50 backdrop-blur-sm border border-border/30 hover:bg-card/70",
-                advancedOpen && "rounded-b-none border-b-0"
-              )}>
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-muted/30">
-                    <Server className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                  <div className="text-left">
-                    <h3 className="text-sm font-medium text-muted-foreground">Advanced</h3>
-                    {!advancedOpen && (
-                      <p className="text-xs text-muted-foreground/70">Connection and system settings</p>
-                    )}
-                  </div>
-                </div>
-                <ChevronDown className={cn(
-                  "h-4 w-4 text-muted-foreground transition-transform duration-200",
-                  advancedOpen && "rotate-180"
-                )} />
-              </div>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <div className={cn(
-                "p-4 pt-3 rounded-b-xl border border-t-0 border-border/30",
-                "bg-card/30 backdrop-blur-sm space-y-4"
-              )}>
-                <div className="grid grid-cols-1 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="endpoint" className="text-xs">API Endpoint</Label>
-                    <Input
-                      id="endpoint"
-                      placeholder="http://100.64.0.1:8080"
-                      value={config.apiEndpoint}
-                      onChange={(e) => {
-                        setConfig({ ...config, apiEndpoint: e.target.value });
-                        if (validationErrors.apiEndpoint) {
-                          setValidationErrors(prev => ({ ...prev, apiEndpoint: undefined }));
-                        }
-                      }}
-                      maxLength={255}
-                      className={cn(
-                        "bg-background/60 h-9 text-sm",
-                        validationErrors.apiEndpoint && "border-destructive"
-                      )}
-                    />
-                    {validationErrors.apiEndpoint && (
-                      <p className="text-xs text-destructive">{validationErrors.apiEndpoint}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="token" className="text-xs">API Token</Label>
-                    <Input
-                      id="token"
-                      type="password"
-                      placeholder="Enter your API token"
-                      value={config.apiToken}
-                      onChange={(e) => {
-                        setConfig({ ...config, apiToken: e.target.value });
-                        if (validationErrors.apiToken) {
-                          setValidationErrors(prev => ({ ...prev, apiToken: undefined }));
-                        }
-                      }}
-                      maxLength={500}
-                      className={cn(
-                        "bg-background/60 h-9 text-sm",
-                        validationErrors.apiToken && "border-destructive"
-                      )}
-                    />
-                    {validationErrors.apiToken && (
-                      <p className="text-xs text-destructive">{validationErrors.apiToken}</p>
-                    )}
-                  </div>
-                </div>
-
-                {status && (
-                  <div className="p-3 rounded-lg bg-muted/10 border border-border/20">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Cpu className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span className="text-xs font-medium text-muted-foreground">System Status</span>
-                    </div>
-                    <div className="grid grid-cols-4 gap-2 text-center">
-                      <div>
-                        <div className="text-sm font-semibold text-primary">{Math.floor(status.uptime / 3600)}h</div>
-                        <div className="text-[10px] text-muted-foreground">Uptime</div>
-                      </div>
-                      <div>
-                        <div className="text-sm font-semibold text-primary">{status.memory}%</div>
-                        <div className="text-[10px] text-muted-foreground">Memory</div>
-                      </div>
-                      <div>
-                        <div className="text-sm font-semibold text-primary">{status.cpu}%</div>
-                        <div className="text-[10px] text-muted-foreground">CPU</div>
-                      </div>
-                      <div>
-                        <div className="text-sm font-semibold text-primary">{status.modules.length}</div>
-                        <div className="text-[10px] text-muted-foreground">Modules</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <Button onClick={handleSaveConnectionConfig} size="sm" className="w-full">
-                  Save Connection Settings
-                </Button>
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
         </div>
       </div>
     </div>
