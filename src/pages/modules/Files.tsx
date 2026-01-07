@@ -326,8 +326,6 @@ export default function Files() {
           </div>
         </header>
 
-        {/* File Conversion Section */}
-        <FileConversionSection />
 
         {/* Main Content */}
         <div className="flex gap-6">
@@ -579,6 +577,9 @@ export default function Files() {
             />
           )}
         </div>
+
+        {/* File Conversion - Secondary tool */}
+        <FileConversionSection />
       </div>
     </div>
   );
