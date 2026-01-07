@@ -4,20 +4,44 @@ import { type Module, type ModuleSize } from "@/lib/app-navigation";
 import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ModuleMiniContent } from "@/components/dashboard/ModuleMiniContent";
-import { useDashboardData } from "@/hooks/useDashboardData";
+
+interface DashboardData {
+  todayTasks: { id: string; title: string; done: boolean; priority: number }[];
+  tasksCompletedToday: number;
+  tasksDueToday: number;
+  habitsCompletedToday: number;
+  totalHabitsToday: number;
+  currentStreak: number;
+  totalXp: number;
+  recentNotes: { id: string; title: string; updatedAt: Date }[];
+  totalNotes: number;
+  notesThisWeek: number;
+  monthlySpending: number;
+  monthlyBudget: number;
+  recentTransactions: { id: string; name: string; amount: number }[];
+  recentPlaces: { id: string; name: string; address?: string }[];
+  savedPlacesCount: number;
+  userLocation?: { lat: number; lng: number } | null;
+  upcomingTrips: { id: string; name: string; startDate: Date }[];
+  activityScore: number;
+  sleepHours: number;
+  connectedDevices: number;
+  isLoading: boolean;
+}
 
 interface ModuleTileProps {
   module: Module;
   onClick: () => void;
   sizeClass?: ModuleSize;
+  dashboardData: DashboardData;
 }
 
-export function ModuleTile({ module, onClick, sizeClass }: ModuleTileProps) {
+export function ModuleTile({ module, onClick, sizeClass, dashboardData }: ModuleTileProps) {
   const Icon = module.icon;
   const size = sizeClass || module.size;
   const isPrimary = size === "primary";
   const isTertiary = size === "tertiary";
-  const { refresh, isLoading, ...dashboardData } = useDashboardData();
+  const { isLoading, ...data } = dashboardData;
 
   return (
     <motion.div
@@ -82,7 +106,7 @@ export function ModuleTile({ module, onClick, sizeClass }: ModuleTileProps) {
             <ModuleMiniContent
               moduleId={module.id}
               size={size}
-              data={dashboardData}
+              data={data}
             />
           )}
 
