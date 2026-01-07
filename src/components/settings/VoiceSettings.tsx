@@ -6,29 +6,27 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Mic, Volume2, Wand2 } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Mic, Volume2, Wand2, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
-export default function VoiceSettings() {
+interface VoiceSettingsProps {
+  embedded?: boolean;
+}
+
+export default function VoiceSettings({ embedded = false }: VoiceSettingsProps) {
   const { settings, isLoading, updateSettings } = useVoiceSettings();
   const [localApiKey, setLocalApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
+  const [ttsOpen, setTtsOpen] = useState(false);
 
   if (isLoading) {
     return (
-      <Card className="bg-background/40 backdrop-blur-md border border-border/30">
-        <CardHeader>
-          <Skeleton className="h-6 w-48" />
-          <Skeleton className="h-4 w-72 mt-2" />
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {[1, 2, 3, 4].map((j) => (
-              <Skeleton key={j} className="h-20 w-full" />
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <div className="space-y-3">
+        <Skeleton className="h-20 w-full rounded-lg" />
+        <Skeleton className="h-12 w-full rounded-lg" />
+      </div>
     );
   }
 
@@ -56,9 +54,142 @@ export default function VoiceSettings() {
     await updateSettings({ silence_timeout_ms: ms });
   };
 
-  const handleSaveWakeWord = async (phrase: string) => {
-    await updateSettings({ wake_word_phrase: phrase });
-  };
+  const isHandsFreeEnabled = Boolean(settings?.voice_mode_enabled && settings?.wake_word_enabled);
+
+  const content = (
+    <div className="space-y-4">
+      {/* Primary Toggle - Hands-Free Mode */}
+      <div className={cn(
+        "p-4 rounded-lg border transition-all",
+        isHandsFreeEnabled 
+          ? "bg-primary/5 border-primary/20" 
+          : "bg-muted/10 border-border/20"
+      )}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Wand2 className={cn(
+              "h-4 w-4",
+              isHandsFreeEnabled ? "text-primary" : "text-muted-foreground"
+            )} />
+            <div className="space-y-0.5">
+              <Label className="text-sm font-medium">Hands-Free Voice Mode</Label>
+              <p className="text-xs text-muted-foreground">
+                Say "Hey Arlo" to start
+              </p>
+            </div>
+          </div>
+          <Switch
+            checked={isHandsFreeEnabled}
+            onCheckedChange={async (checked) => {
+              await updateSettings({ 
+                voice_mode_enabled: checked,
+                wake_word_enabled: checked,
+              });
+            }}
+          />
+        </div>
+        
+        {isHandsFreeEnabled && (
+          <div className="mt-3 pt-3 border-t border-border/20">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+              Listening for wake word
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Auto-send Toggle */}
+      <div className="flex items-center justify-between py-2">
+        <div className="space-y-0.5">
+          <Label className="text-sm font-medium">Auto-send on Silence</Label>
+          <p className="text-xs text-muted-foreground">Send after you stop speaking</p>
+        </div>
+        <Switch
+          checked={settings?.auto_send_on_silence ?? true}
+          onCheckedChange={(checked) => handleToggle('auto_send_on_silence', checked)}
+        />
+      </div>
+
+      {/* TTS Settings - Collapsible */}
+      <Collapsible open={ttsOpen} onOpenChange={setTtsOpen}>
+        <CollapsibleTrigger className="w-full">
+          <div className="flex items-center justify-between py-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <div className="flex items-center gap-2">
+              <Volume2 className="h-3.5 w-3.5" />
+              <span>Text-to-Speech Settings</span>
+            </div>
+            <ChevronDown className={cn(
+              "h-3.5 w-3.5 transition-transform",
+              ttsOpen && "rotate-180"
+            )} />
+          </div>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="pt-3 space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="voice-id" className="text-xs">Voice ID</Label>
+                <Input
+                  id="voice-id"
+                  placeholder="Voice ID"
+                  defaultValue={settings?.cartesia_voice_id || ''}
+                  onBlur={(e) => handleSaveVoiceId(e.target.value)}
+                  className="bg-background/60 h-8 text-xs font-mono"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="silence-timeout" className="text-xs">Silence Timeout (ms)</Label>
+                <Input
+                  id="silence-timeout"
+                  type="number"
+                  placeholder="1500"
+                  defaultValue={settings?.silence_timeout_ms || 1500}
+                  onBlur={(e) => handleSaveSilenceTimeout(parseInt(e.target.value) || 1500)}
+                  className="bg-background/60 h-8 text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">
+                Custom API Key (optional)
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  type={showApiKey ? 'text' : 'password'}
+                  placeholder={settings?.cartesia_api_key ? '••••••••' : 'Cartesia API key'}
+                  value={localApiKey}
+                  onChange={(e) => setLocalApiKey(e.target.value)}
+                  className="bg-background/60 h-8 text-xs flex-1"
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2 text-xs"
+                  onClick={() => setShowApiKey(!showApiKey)}
+                >
+                  {showApiKey ? 'Hide' : 'Show'}
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-8 px-3 text-xs"
+                  onClick={handleSaveApiKey}
+                  disabled={!localApiKey.trim()}
+                >
+                  Save
+                </Button>
+              </div>
+            </div>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+  );
+
+  if (embedded) {
+    return content;
+  }
 
   return (
     <Card className="bg-background/40 backdrop-blur-md border border-border/30">
@@ -71,135 +202,8 @@ export default function VoiceSettings() {
           Configure voice input, text-to-speech, and wake word settings
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Hands-Free Voice Mode - Primary Toggle */}
-        <div className="space-y-4 p-4 rounded-lg bg-primary/5 border border-primary/20">
-          <div className="flex items-center justify-between">
-            <div className="space-y-1">
-              <Label className="text-sm font-medium flex items-center gap-2">
-                <Wand2 className="h-4 w-4 text-primary" />
-                Hands-Free Voice Mode
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Always-on voice assistant with ambient feedback. Say "Hey Arlo" to start.
-              </p>
-            </div>
-            <Switch
-              checked={Boolean(settings?.voice_mode_enabled && settings?.wake_word_enabled)}
-              onCheckedChange={async (checked) => {
-                await updateSettings({ 
-                  voice_mode_enabled: checked,
-                  wake_word_enabled: checked,
-                });
-              }}
-            />
-          </div>
-          
-          {settings?.voice_mode_enabled && settings?.wake_word_enabled && (
-            <div className="pt-3 border-t border-border/20 space-y-3">
-              <p className="text-xs text-muted-foreground">
-                ✓ Wake word detection active while Arlo is open<br />
-                ✓ Ambient edge glow shows listening/thinking/speaking states<br />
-                ✓ Responses are spoken aloud via Cartesia TTS<br />
-                ✓ Stay on your current page — no interruptions
-              </p>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                <span className="text-muted-foreground">Listening for "Hey Arlo"</span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Advanced Settings */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
-            <div className="space-y-1">
-              <Label className="text-sm font-medium">Auto-send on Silence</Label>
-              <p className="text-xs text-muted-foreground">Send after you stop speaking</p>
-            </div>
-            <Switch
-              checked={settings?.auto_send_on_silence ?? true}
-              onCheckedChange={(checked) => handleToggle('auto_send_on_silence', checked)}
-            />
-          </div>
-
-          <div className="space-y-2 p-4 rounded-lg bg-muted/20 border border-border/20">
-            <Label htmlFor="silence-timeout" className="text-xs">Silence Timeout (ms)</Label>
-            <Input
-              id="silence-timeout"
-              type="number"
-              placeholder="1500"
-              defaultValue={settings?.silence_timeout_ms || 1500}
-              onBlur={(e) => handleSaveSilenceTimeout(parseInt(e.target.value) || 1500)}
-              className="bg-background/60"
-            />
-            <p className="text-xs text-muted-foreground">How long to wait before sending</p>
-          </div>
-        </div>
-
-        {/* TTS Settings */}
-        <div className="space-y-4 p-4 rounded-lg bg-muted/20 border border-border/20">
-          <div className="flex items-center gap-2">
-            <Volume2 className="h-4 w-4 text-primary" />
-            <Label className="text-sm font-medium">Text-to-Speech (Cartesia)</Label>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="voice-id" className="text-xs">Voice ID</Label>
-              <Input
-                id="voice-id"
-                placeholder="Voice ID"
-                defaultValue={settings?.cartesia_voice_id || ''}
-                onBlur={(e) => handleSaveVoiceId(e.target.value)}
-                className="bg-background/60 font-mono text-xs"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="silence-timeout" className="text-xs">Silence Timeout (ms)</Label>
-              <Input
-                id="silence-timeout"
-                type="number"
-                placeholder="1500"
-                defaultValue={settings?.silence_timeout_ms || 1500}
-                onBlur={(e) => handleSaveSilenceTimeout(parseInt(e.target.value) || 1500)}
-                className="bg-background/60"
-              />
-            </div>
-          </div>
-
-          {/* Custom API Key (optional) */}
-          <div className="space-y-2 pt-2 border-t border-border/20">
-            <Label className="text-xs text-muted-foreground">
-              Custom API Key (optional - leave blank to use default)
-            </Label>
-            <div className="flex gap-2">
-              <Input
-                type={showApiKey ? 'text' : 'password'}
-                placeholder={settings?.cartesia_api_key ? '••••••••••••' : 'Enter Cartesia API key'}
-                value={localApiKey}
-                onChange={(e) => setLocalApiKey(e.target.value)}
-                className="bg-background/60 flex-1"
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowApiKey(!showApiKey)}
-              >
-                {showApiKey ? 'Hide' : 'Show'}
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleSaveApiKey}
-                disabled={!localApiKey.trim()}
-              >
-                Save
-              </Button>
-            </div>
-          </div>
-        </div>
+      <CardContent>
+        {content}
       </CardContent>
     </Card>
   );

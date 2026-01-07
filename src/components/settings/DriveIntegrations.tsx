@@ -33,7 +33,11 @@ async function invokeWithAuth(functionName: string, body: Record<string, unknown
   });
 }
 
-export default function DriveIntegrations() {
+interface DriveIntegrationsProps {
+  embedded?: boolean;
+}
+
+export default function DriveIntegrations({ embedded = false }: DriveIntegrationsProps) {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const {
     isLoading,
@@ -158,6 +162,9 @@ export default function DriveIntegrations() {
   };
 
   if (isLoading && accounts.length === 0) {
+    if (embedded) {
+      return <Skeleton className="h-20 w-full rounded-lg" />;
+    }
     return (
       <Card className="bg-background/40 backdrop-blur-md border border-border/30">
         <CardHeader>
@@ -171,29 +178,19 @@ export default function DriveIntegrations() {
     );
   }
 
-  return (
-    <Card className="bg-background/40 backdrop-blur-md border border-border/30">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <HardDrive className="h-5 w-5 text-primary" />
-          Cloud Storage
-        </CardTitle>
-        <CardDescription>
-          Connect your cloud storage accounts to access files across all your drives
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Connected Accounts */}
-        {accounts.map((account) => (
-          <div 
-            key={account.id}
-            className="p-4 rounded-lg border bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/50 dark:border-emerald-800/30"
-          >
-            <div className="flex items-start justify-between">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center shadow-sm">
-                  <svg viewBox="0 0 87.3 78" className="w-6 h-6">
-                    <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
+  const content = (
+    <div className="space-y-4">
+      {/* Connected Accounts */}
+      {accounts.map((account) => (
+        <div 
+          key={account.id}
+          className="p-4 rounded-lg border bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/50 dark:border-emerald-800/30"
+        >
+          <div className="flex items-start justify-between">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center shadow-sm">
+                <svg viewBox="0 0 87.3 78" className="w-6 h-6">
+                  <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da"/>
                     <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47"/>
                     <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 11.5z" fill="#ea4335"/>
                     <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d"/>
@@ -300,6 +297,26 @@ export default function DriveIntegrations() {
             </Button>
           </div>
         </div>
+      </div>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
+  return (
+    <Card className="bg-background/40 backdrop-blur-md border border-border/30">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <HardDrive className="h-5 w-5 text-primary" />
+          Cloud Storage
+        </CardTitle>
+        <CardDescription>
+          Connect your cloud storage accounts to access files across all your drives
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {content}
       </CardContent>
     </Card>
   );
