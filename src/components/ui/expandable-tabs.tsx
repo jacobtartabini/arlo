@@ -15,10 +15,19 @@ export interface Separator {
   type: "separator";
 }
 
-export type TabItem = Tab | Separator;
+export interface CustomElement {
+  type: "custom";
+  render: () => React.ReactNode;
+}
+
+export type TabItem = Tab | Separator | CustomElement;
 
 function isSeparator(item: TabItem): item is Separator {
   return "type" in item && item.type === "separator";
+}
+
+function isCustomElement(item: TabItem): item is CustomElement {
+  return "type" in item && item.type === "custom";
 }
 
 interface ExpandableTabsProps {
@@ -88,6 +97,10 @@ export function ExpandableTabs({
       {tabs.map((tab, index) => {
         if (isSeparator(tab)) {
           return <SeparatorComponent key={`separator-${index}`} />;
+        }
+
+        if (isCustomElement(tab)) {
+          return <React.Fragment key={`custom-${index}`}>{tab.render()}</React.Fragment>;
         }
 
         const Icon = tab.icon;
