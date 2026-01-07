@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { useUserSettings } from "@/providers/UserSettingsProvider";
 import { ModuleTile } from "@/components/ModuleTile";
 import type { ModuleLayout } from "@/types/settings";
+import { useDashboardData } from "@/hooks/useDashboardData";
 
 type GestureEventType = Event & { scale: number };
 
@@ -95,6 +96,9 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
   const hasInitializedRecenter = useRef(false);
   
   const { settings } = useUserSettings();
+  
+  // Fetch dashboard data once at canvas level for all tiles
+  const dashboardData = useDashboardData();
   
   const visibleModules = useMemo(() => {
     return APP_MODULES.filter(module => {
@@ -485,6 +489,7 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
                     module={module}
                     onClick={() => handleModuleClick(module)}
                     sizeClass={module.size}
+                    dashboardData={dashboardData}
                   />
                 </motion.div>
               );

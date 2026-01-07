@@ -11,6 +11,7 @@ import { motion } from "framer-motion";
 import { ModuleTile } from "./ModuleTile";
 import { useNavigate } from "react-router-dom";
 import { APP_MODULES, type Module } from "@/lib/app-navigation";
+import { useDashboardData } from "@/hooks/useDashboardData";
 
 type GestureEventType = Event & {
   scale: number;
@@ -177,6 +178,7 @@ export function BentoGrid({ onScaleChange, scale: controlledScale, recenterSigna
   const pinchStartScale = useRef(1);
   const isPinchingRef = useRef(false);
   const navigate = useNavigate();
+  const dashboardData = useDashboardData();
   const [layoutConfig, setLayoutConfig] = useState<LayoutConfig>(() =>
     typeof window !== "undefined" ? getLayoutConfig(window.innerWidth) : getLayoutConfig(1440)
   );
@@ -626,7 +628,7 @@ export function BentoGrid({ onScaleChange, scale: controlledScale, recenterSigna
                   maxWidth: "100%"
                 }}
               >
-                <ModuleTile module={module} onClick={() => handleModuleClick(module)} />
+                <ModuleTile module={module} onClick={() => handleModuleClick(module)} dashboardData={dashboardData} />
               </motion.div>
             );
           })}
