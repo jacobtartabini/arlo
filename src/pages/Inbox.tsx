@@ -9,7 +9,7 @@ import {
   Settings2,
   Send,
   Paperclip,
-  ChevronLeft,
+  ArrowLeft,
   MoreHorizontal,
   MessageCircle,
   Users,
@@ -244,7 +244,7 @@ function ReadingPane({
             className="md:hidden h-8 w-8"
             onClick={onBack}
           >
-            <ChevronLeft className="h-5 w-5" />
+            <ArrowLeft className="h-5 w-5" />
           </Button>
           
           <div className="flex-1 min-w-0">
@@ -539,6 +539,17 @@ export default function Inbox() {
       {/* Floating sidebar navigation */}
       <div className="hidden md:flex flex-col w-56 flex-shrink-0">
         <div className="glass-module rounded-2xl p-3 flex flex-col h-full">
+          {/* Back to dashboard button */}
+          <div className="px-2 mb-3">
+            <button
+              type="button"
+              onClick={() => navigate("/")}
+              className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/50 px-3 py-1 text-xs font-medium text-muted-foreground transition hover:border-border hover:bg-background/80 hover:text-foreground"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" /> Back to dashboard
+            </button>
+          </div>
+          
           {/* Sidebar header */}
           <div className="px-3 py-2 mb-2">
             <h2 className="font-semibold text-lg">Inbox</h2>
@@ -585,18 +596,6 @@ export default function Inbox() {
               })}
             </div>
           </ScrollArea>
-          
-          {/* Back to dashboard */}
-          <div className="pt-2 mt-2 border-t border-border/50">
-            <Button 
-              variant="ghost" 
-              className="w-full justify-start text-muted-foreground hover:text-foreground"
-              onClick={() => navigate('/')}
-            >
-              <ChevronLeft className="h-4 w-4 mr-2" />
-              Dashboard
-            </Button>
-          </div>
         </div>
       </div>
       
