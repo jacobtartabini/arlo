@@ -6,7 +6,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { dataApiHelpers } from "@/lib/data-api";
 import { useAuth } from "@/providers/AuthProvider";
+import { useTasksPersistence } from "@/hooks/useTasksPersistence";
 import { isToday, parseISO, startOfDay, isThisWeek } from "date-fns";
+import { toast } from "@/hooks/use-toast";
 
 interface DashboardData {
   // Productivity/Today
@@ -75,6 +77,7 @@ const DEFAULT_DATA: DashboardData = {
 export function useDashboardData() {
   const [data, setData] = useState<DashboardData>(DEFAULT_DATA);
   const { isAuthenticated } = useAuth();
+  const { createTask, toggleTask } = useTasksPersistence();
 
   const fetchData = useCallback(async () => {
     if (!isAuthenticated) {
@@ -121,22 +124,24 @@ export function useDashboardData() {
       const today = startOfDay(new Date());
       const todayStr = today.toISOString().split("T")[0];
 
-      // Process tasks
+      // Process tasks - get all tasks for today (both done and not done for display)
       const tasks = tasksResult.data || [];
-      const todayTasks = tasks
-        .filter((t: any) => !t.done && t.scheduled_date === todayStr)
-        .slice(0, 3)
+      const todayScheduledTasks = tasks.filter(
+        (t: any) => t.scheduled_date === todayStr
+      );
+      const todayTasks = todayScheduledTasks
+        .slice(0, 6) // Show more tasks for interactivity
         .map((t: any) => ({
           id: t.id,
           title: t.title,
           done: t.done,
           priority: t.priority || 0,
         }));
-      const tasksCompletedToday = tasks.filter(
-        (t: any) => t.done && t.completed_at && isToday(parseISO(t.completed_at))
+      const tasksCompletedToday = todayScheduledTasks.filter(
+        (t: any) => t.done
       ).length;
-      const tasksDueToday = tasks.filter(
-        (t: any) => !t.done && t.scheduled_date === todayStr
+      const tasksDueToday = todayScheduledTasks.filter(
+        (t: any) => !t.done
       ).length;
 
       // Process habits
@@ -232,5 +237,62 @@ export function useDashboardData() {
     fetchData();
   }, [fetchData]);
 
-  return { ...data, refresh: fetchData };
+  // Handler for toggling a task from the dashboard
+  const handleTaskToggle = useCallback(async (taskId: string, done: boolean) => {
+    // Optimistic update
+    setData(prev => ({
+      ...prev,
+      todayTasks: prev.todayTasks.map(t => 
+        t.id === taskId ? { ...t, done } : t
+      ),
+      tasksCompletedToday: prev.tasksCompletedToday + (done ? 1 : -1),
+      tasksDueToday: prev.tasksDueToday + (done ? -1 : 1),
+    }));
+
+    const success = await toggleTask(taskId, done);
+    if (!success) {
+      // Revert on failure
+      setData(prev => ({
+        ...prev,
+        todayTasks: prev.todayTasks.map(t => 
+          t.id === taskId ? { ...t, done: !done } : t
+        ),
+        tasksCompletedToday: prev.tasksCompletedToday + (done ? -1 : 1),
+        tasksDueToday: prev.tasksDueToday + (done ? 1 : -1),
+      }));
+    }
+  }, [toggleTask]);
+
+  // Handler for creating a task from the dashboard
+  const handleTaskCreate = useCallback(async (title: string): Promise<boolean> => {
+    const task = await createTask(title, {
+      scheduledDate: new Date(),
+      priority: 3,
+      energyLevel: "medium",
+    });
+
+    if (task) {
+      // Add the new task to the list
+      setData(prev => ({
+        ...prev,
+        todayTasks: [
+          { id: task.id, title: task.title, done: false, priority: task.priority },
+          ...prev.todayTasks,
+        ].slice(0, 6),
+        tasksDueToday: prev.tasksDueToday + 1,
+      }));
+      toast({ title: "Task added", description: `"${title}" created` });
+      return true;
+    } else {
+      toast({ title: "Failed to create task", variant: "destructive" });
+      return false;
+    }
+  }, [createTask]);
+
+  return { 
+    ...data, 
+    refresh: fetchData,
+    onTaskToggle: handleTaskToggle,
+    onTaskCreate: handleTaskCreate,
+  };
 }
