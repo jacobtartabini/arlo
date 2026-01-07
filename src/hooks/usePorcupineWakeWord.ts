@@ -7,9 +7,9 @@ interface UsePorcupineWakeWordOptions {
   enabled?: boolean;
 }
 
-// Porcupine model - loaded from CDN (v4 for compatibility with Hey Arlo model)
+// Porcupine model - loaded from public/ for CSP compatibility
 const PORCUPINE_MODEL = {
-  publicPath: 'https://cdn.jsdelivr.net/npm/@picovoice/porcupine-web@4.0/dist/porcupine_params.pv',
+  publicPath: '/porcupine_params.pv',
   forceWrite: false,
 };
 
