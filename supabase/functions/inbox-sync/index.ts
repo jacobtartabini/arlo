@@ -20,8 +20,8 @@ async function refreshAccessToken(
   provider: InboxProvider, 
   refreshToken: string
 ): Promise<{ access_token: string; expires_in: number } | null> {
-  const clientIdEnv = provider === 'gmail' ? 'GOOGLE_CLIENT_ID' : 'MICROSOFT_CLIENT_ID';
-  const clientSecretEnv = provider === 'gmail' ? 'GOOGLE_CLIENT_SECRET' : 'MICROSOFT_CLIENT_SECRET';
+  const clientIdEnv = provider === 'gmail' ? 'GMAIL_CLIENT_ID' : 'MICROSOFT_CLIENT_ID';
+  const clientSecretEnv = provider === 'gmail' ? 'GMAIL_CLIENT_SECRET' : 'MICROSOFT_CLIENT_SECRET';
   
   const clientId = Deno.env.get(clientIdEnv);
   const clientSecret = Deno.env.get(clientSecretEnv);
