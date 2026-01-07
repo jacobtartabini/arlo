@@ -5,6 +5,8 @@ import { MapCanvas } from '@/components/maps/MapCanvas';
 import { MapFloatingSearch } from '@/components/maps/MapFloatingSearch';
 import { MapFloatingControls } from '@/components/maps/MapFloatingControls';
 import { MapBottomSheet } from '@/components/maps/MapBottomSheet';
+import { MapFloatingPanel } from '@/components/maps/MapFloatingPanel';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useMapsPersistence } from '@/hooks/useMapsPersistence';
 import { useGeolocation } from '@/hooks/useGeolocation';
 import type { 
@@ -20,6 +22,7 @@ const DEFAULT_CENTER: LatLng = { lat: 37.7749, lng: -122.4194 };
 const DEFAULT_ZOOM = 14;
 
 export default function ArloMaps() {
+  const isMobile = useIsMobile();
   // Map state
   const [center, setCenter] = useState<LatLng>(DEFAULT_CENTER);
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
@@ -285,31 +288,58 @@ export default function ArloMaps() {
           )}
         </AnimatePresence>
 
-        {/* Bottom Sheet - Floating, rounded, elegant */}
-        <MapBottomSheet
-          state={sheetState}
-          onStateChange={handleSheetStateChange}
-          mode={mode}
-          selectedPlace={selectedPlace}
-          searchResults={searchResults}
-          routes={routes}
-          selectedRouteIndex={selectedRouteIndex}
-          navigation={navigation}
-          smartSuggestions={mapsPersistence.getSmartSuggestions()}
-          recentSearches={mapsPersistence.recentSearches}
-          homePlace={mapsPersistence.homePlace}
-          workPlace={mapsPersistence.workPlace}
-          incidents={mapsPersistence.incidents}
-          currentLocation={geolocation.position}
-          onPlaceSelect={handlePlaceSelect}
-          onGetDirections={handleGetDirections}
-          onRouteSelect={setSelectedRouteIndex}
-          onStartNavigation={() => routes[selectedRouteIndex] && handleStartNavigation(routes[selectedRouteIndex])}
-          onEndNavigation={handleEndNavigation}
-          onReportIncident={mapsPersistence.reportIncident}
-          onVoteIncident={mapsPersistence.voteIncident}
-          onSavePlace={mapsPersistence.savePlace}
-        />
+        {/* Floating Panel (Desktop) / Bottom Sheet (Mobile) */}
+        {isMobile ? (
+          <MapBottomSheet
+            state={sheetState}
+            onStateChange={handleSheetStateChange}
+            mode={mode}
+            selectedPlace={selectedPlace}
+            searchResults={searchResults}
+            routes={routes}
+            selectedRouteIndex={selectedRouteIndex}
+            navigation={navigation}
+            smartSuggestions={mapsPersistence.getSmartSuggestions()}
+            recentSearches={mapsPersistence.recentSearches}
+            homePlace={mapsPersistence.homePlace}
+            workPlace={mapsPersistence.workPlace}
+            incidents={mapsPersistence.incidents}
+            currentLocation={geolocation.position}
+            onPlaceSelect={handlePlaceSelect}
+            onGetDirections={handleGetDirections}
+            onRouteSelect={setSelectedRouteIndex}
+            onStartNavigation={() => routes[selectedRouteIndex] && handleStartNavigation(routes[selectedRouteIndex])}
+            onEndNavigation={handleEndNavigation}
+            onReportIncident={mapsPersistence.reportIncident}
+            onVoteIncident={mapsPersistence.voteIncident}
+            onSavePlace={mapsPersistence.savePlace}
+          />
+        ) : (
+          <MapFloatingPanel
+            state={sheetState}
+            onStateChange={handleSheetStateChange}
+            mode={mode}
+            selectedPlace={selectedPlace}
+            searchResults={searchResults}
+            routes={routes}
+            selectedRouteIndex={selectedRouteIndex}
+            navigation={navigation}
+            smartSuggestions={mapsPersistence.getSmartSuggestions()}
+            recentSearches={mapsPersistence.recentSearches}
+            homePlace={mapsPersistence.homePlace}
+            workPlace={mapsPersistence.workPlace}
+            incidents={mapsPersistence.incidents}
+            currentLocation={geolocation.position}
+            onPlaceSelect={handlePlaceSelect}
+            onGetDirections={handleGetDirections}
+            onRouteSelect={setSelectedRouteIndex}
+            onStartNavigation={() => routes[selectedRouteIndex] && handleStartNavigation(routes[selectedRouteIndex])}
+            onEndNavigation={handleEndNavigation}
+            onReportIncident={mapsPersistence.reportIncident}
+            onVoteIncident={mapsPersistence.voteIncident}
+            onSavePlace={mapsPersistence.savePlace}
+          />
+        )}
       </div>
     </MapProvider>
   );
