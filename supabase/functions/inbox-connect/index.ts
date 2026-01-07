@@ -1,20 +1,43 @@
-import { verifyArloJWT, handleCorsOptions, jsonResponse, unauthorizedResponse, errorResponse } from '../_shared/arloAuth.ts';
+import { 
+  verifyArloJWT, 
+  handleCorsOptions, 
+  validateOrigin,
+  jsonResponse, 
+  unauthorizedResponse, 
+  errorResponse 
+} from '../_shared/arloAuth.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { encrypt } from '../_shared/encryption.ts';
+import { 
+  createOAuthNonce, 
+  validateAndConsumeNonce,
+  encodeOAuthState,
+  decodeOAuthState,
+  cleanupExpiredNonces
+} from '../_shared/oauthNonce.ts';
 
 type InboxProvider = 'gmail' | 'outlook' | 'teams' | 'whatsapp' | 'telegram' | 'instagram' | 'linkedin';
 
 interface ConnectRequest {
-  provider: InboxProvider;
+  action?: 'get_auth_url' | 'exchange_code';
+  provider?: InboxProvider;
+  code?: string;
+  state?: string;
 }
 
 // OAuth configuration per provider
 const OAUTH_CONFIG: Record<string, {
   authUrl: string;
+  tokenUrl: string;
+  userInfoUrl: string;
   scopes: string[];
   clientIdEnv: string;
   clientSecretEnv: string;
 }> = {
   gmail: {
     authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    userInfoUrl: 'https://www.googleapis.com/oauth2/v2/userinfo',
     scopes: [
       'https://www.googleapis.com/auth/gmail.readonly',
       'https://www.googleapis.com/auth/gmail.send',
@@ -22,11 +45,13 @@ const OAUTH_CONFIG: Record<string, {
       'https://www.googleapis.com/auth/userinfo.email',
       'https://www.googleapis.com/auth/userinfo.profile',
     ],
-    clientIdEnv: 'GOOGLE_CLIENT_ID',
-    clientSecretEnv: 'GOOGLE_CLIENT_SECRET',
+    clientIdEnv: 'GMAIL_CLIENT_ID',
+    clientSecretEnv: 'GMAIL_CLIENT_SECRET',
   },
   outlook: {
     authUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
+    tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+    userInfoUrl: 'https://graph.microsoft.com/v1.0/me',
     scopes: [
       'openid',
       'profile',
@@ -41,6 +66,8 @@ const OAUTH_CONFIG: Record<string, {
   },
   teams: {
     authUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',
+    tokenUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/token',
+    userInfoUrl: 'https://graph.microsoft.com/v1.0/me',
     scopes: [
       'openid',
       'profile',
@@ -55,32 +82,189 @@ const OAUTH_CONFIG: Record<string, {
   },
 };
 
+// Redirect to app URL (same pattern as Google Calendar OAuth)
+const REDIRECT_URI = 'https://arlo.jacobtartabini.com/settings';
+
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+function getSupabaseClient() {
+  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+}
+
 Deno.serve(async (req) => {
   // Handle CORS
   if (req.method === 'OPTIONS') {
     return handleCorsOptions(req);
   }
 
+  // Validate origin for non-preflight requests
+  const originError = validateOrigin(req);
+  if (originError) return originError;
+
   try {
-    // Verify JWT using shared Arlo auth (same as calendar functions)
+    // All actions require JWT authentication (same as google-calendar-auth)
     const authResult = await verifyArloJWT(req);
     
-    // Return specific error messages for auth failures
     if (!authResult.authenticated) {
       const errorMessage = authResult.error || 'Authentication required';
       console.error(`[inbox-connect] Auth failed: ${errorMessage}`);
       return unauthorizedResponse(req, errorMessage);
     }
     
-    // userId is derived from JWT.sub (user's email/identity)
     if (!authResult.userId) {
       console.error('[inbox-connect] Auth succeeded but no userId in JWT sub claim');
       return unauthorizedResponse(req, 'Invalid token: missing user identity');
     }
 
     const userKey = authResult.userId;
-    const { provider }: ConnectRequest = await req.json();
+    const body: ConnectRequest = await req.json();
+    const { action, provider, code, state } = body;
 
+    const supabase = getSupabaseClient();
+
+    // Periodically clean up expired nonces
+    await cleanupExpiredNonces();
+
+    // Handle exchange_code action (Step 2 of OAuth flow)
+    if (action === 'exchange_code') {
+      if (!code || !state) {
+        return errorResponse(req, 'Missing code or state', 400);
+      }
+
+      // Decode and validate the nonce from state
+      const decoded = decodeOAuthState(state);
+      const { nonce, provider: stateProvider } = decoded;
+      
+      if (!nonce || !stateProvider) {
+        console.error('[inbox-connect] Invalid state format');
+        return errorResponse(req, 'Invalid OAuth state', 400);
+      }
+
+      // Validate and consume the nonce (single-use)
+      const nonceResult = await validateAndConsumeNonce(nonce, `inbox_${stateProvider}`);
+      
+      if (!nonceResult.valid) {
+        console.error('[inbox-connect] Nonce validation failed:', nonceResult.error);
+        return errorResponse(req, nonceResult.error || 'Invalid or expired OAuth session', 400);
+      }
+
+      // CRITICAL: Verify the JWT user matches the nonce user
+      if (nonceResult.userId !== userKey) {
+        console.error('[inbox-connect] User mismatch - nonce user:', nonceResult.userId, 'JWT user:', userKey);
+        return errorResponse(req, 'OAuth session mismatch', 400);
+      }
+
+      const oauthConfig = OAUTH_CONFIG[stateProvider];
+      if (!oauthConfig) {
+        return errorResponse(req, `Unknown provider: ${stateProvider}`, 400);
+      }
+
+      const clientId = Deno.env.get(oauthConfig.clientIdEnv);
+      const clientSecret = Deno.env.get(oauthConfig.clientSecretEnv);
+
+      if (!clientId || !clientSecret) {
+        console.error(`[inbox-connect] Missing credentials for ${stateProvider}`);
+        return errorResponse(req, `${stateProvider} OAuth is not configured`, 503);
+      }
+
+      // Exchange code for tokens
+      const tokenResponse = await fetch(oauthConfig.tokenUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          code,
+          redirect_uri: REDIRECT_URI,
+          grant_type: 'authorization_code',
+        }),
+      });
+
+      if (!tokenResponse.ok) {
+        const errorText = await tokenResponse.text();
+        console.error(`[inbox-connect] Token exchange failed:`, errorText);
+        return errorResponse(req, 'Could not exchange authorization code', 400);
+      }
+
+      const tokens = await tokenResponse.json();
+
+      if (tokens.error) {
+        console.error('[inbox-connect] Token error:', tokens);
+        return errorResponse(req, tokens.error_description || tokens.error, 400);
+      }
+
+      const { access_token, refresh_token, expires_in, scope } = tokens;
+
+      console.log(`[inbox-connect] Got tokens for ${stateProvider}`);
+
+      // Get user info
+      const userInfoResponse = await fetch(oauthConfig.userInfoUrl, {
+        headers: { Authorization: `Bearer ${access_token}` },
+      });
+
+      let userEmail = '';
+      let userName = '';
+
+      if (userInfoResponse.ok) {
+        const userInfo = await userInfoResponse.json();
+        
+        if (stateProvider === 'gmail') {
+          userEmail = userInfo.email || '';
+          userName = userInfo.name || userInfo.email || 'Gmail Account';
+        } else {
+          userEmail = userInfo.mail || userInfo.userPrincipalName || '';
+          userName = userInfo.displayName || userInfo.mail || 'Microsoft Account';
+        }
+      }
+
+      console.log(`[inbox-connect] User info: ${userName} (${userEmail})`);
+
+      // Encrypt tokens
+      const encryptedAccessToken = await encrypt(access_token);
+      const encryptedRefreshToken = refresh_token ? await encrypt(refresh_token) : null;
+
+      // Calculate token expiration
+      const tokenExpiresAt = new Date(Date.now() + (expires_in || 3600) * 1000).toISOString();
+
+      // Parse scopes
+      const scopeArray = scope ? scope.split(' ') : [];
+
+      // Upsert account
+      const { data, error: dbError } = await supabase
+        .from('inbox_accounts')
+        .upsert({
+          user_key: userKey,
+          provider: stateProvider,
+          account_email: userEmail,
+          account_name: userName,
+          account_id: userEmail || `${stateProvider}-${Date.now()}`,
+          access_token: encryptedAccessToken,
+          refresh_token: encryptedRefreshToken,
+          token_expires_at: tokenExpiresAt,
+          scopes: scopeArray,
+          enabled: true,
+        }, {
+          onConflict: 'user_key,provider,account_id',
+        })
+        .select()
+        .single();
+
+      if (dbError) {
+        console.error('[inbox-connect] Database error:', dbError);
+        return errorResponse(req, 'Failed to save account', 500);
+      }
+
+      console.log(`[inbox-connect] Account saved: ${data.id}`);
+      return jsonResponse(req, { 
+        success: true, 
+        provider: stateProvider, 
+        email: userEmail, 
+        name: userName 
+      });
+    }
+
+    // Handle get_auth_url action (Step 1 of OAuth flow) - also handles legacy call without action
     if (!provider) {
       return errorResponse(req, 'Provider is required', 400);
     }
@@ -97,29 +281,26 @@ Deno.serve(async (req) => {
         return errorResponse(req, `${provider} OAuth is not configured. Please add ${oauthConfig.clientIdEnv} to secrets.`, 503);
       }
 
-      // Generate state with user info for callback
-      const state = btoa(JSON.stringify({
-        userKey,
-        provider,
-        timestamp: Date.now(),
-      }));
+      // Create a secure nonce bound to this user
+      const nonce = await createOAuthNonce(userKey, `inbox_${provider}`);
+      
+      // Encode state with nonce (not user ID - more secure)
+      const encodedState = encodeOAuthState(nonce, provider);
 
       // Build OAuth URL
-      const redirectUri = `${Deno.env.get('SUPABASE_URL')}/functions/v1/inbox-oauth-callback`;
-      
       const params = new URLSearchParams({
         client_id: clientId,
-        redirect_uri: redirectUri,
+        redirect_uri: REDIRECT_URI,
         response_type: 'code',
         scope: oauthConfig.scopes.join(' '),
-        state,
+        state: encodedState,
         access_type: 'offline',
         prompt: 'consent',
       });
 
       const oauthUrl = `${oauthConfig.authUrl}?${params.toString()}`;
 
-      console.log(`[inbox-connect] Generated OAuth URL for ${provider}`);
+      console.log(`[inbox-connect] Generated OAuth URL with nonce for ${provider}`);
 
       return jsonResponse(req, {
         oauth_url: oauthUrl,

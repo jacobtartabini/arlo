@@ -14,17 +14,29 @@ import {
   Loader2,
   AlertCircle,
   Plus,
-  Cloud
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { DriveAccount } from '@/types/files';
 import { formatFileSize } from '@/types/files';
+import { supabase } from '@/integrations/supabase/client';
+import { getAuthHeaders } from '@/lib/arloAuth';
+
+// Helper to invoke edge functions with auth (same pattern as CalendarIntegrations)
+async function invokeWithAuth(functionName: string, body: Record<string, unknown>) {
+  const headers = await getAuthHeaders();
+  if (!headers) {
+    throw new Error('Authentication required');
+  }
+  return supabase.functions.invoke(functionName, {
+    body,
+    headers: headers as Record<string, string>,
+  });
+}
 
 export default function DriveIntegrations() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const {
     isLoading,
-    getAuthUrl,
     listAccounts,
     disconnectAccount,
     syncFiles,
@@ -39,6 +51,20 @@ export default function DriveIntegrations() {
     if (!authLoading && isAuthenticated) {
       loadAccounts();
     }
+
+    // Check for Google Drive OAuth callback (same pattern as CalendarIntegrations)
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('drive_callback') === 'true') {
+      const code = params.get('code');
+      const state = params.get('state');
+      
+      if (code && state) {
+        handleDriveCallback(code, state);
+      }
+      
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
   }, [authLoading, isAuthenticated]);
 
   const loadAccounts = async () => {
@@ -46,36 +72,40 @@ export default function DriveIntegrations() {
     setAccounts(data);
   };
 
+  // Handle OAuth callback - exchange code for tokens with JWT auth
+  const handleDriveCallback = async (code: string, state: string) => {
+    setIsConnecting(true);
+    
+    try {
+      const { data, error } = await invokeWithAuth('drive-auth', {
+        action: 'exchange_code',
+        code,
+        state,
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast.success(`Connected ${data.email || 'Google Drive'}`);
+      loadAccounts();
+    } catch (error: any) {
+      toast.error('Failed to connect Google Drive: ' + error.message);
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
   const handleConnect = async () => {
     setIsConnecting(true);
     try {
-      const url = await getAuthUrl();
-      if (url) {
-        // Open OAuth popup
-        const popup = window.open(url, 'drive-auth', 'width=600,height=700,popup=true');
-        
-        // Listen for success message
-        const handleMessage = (event: MessageEvent) => {
-          if (event.data?.type === 'drive-auth-success') {
-            toast.success(`Connected ${event.data.email}`);
-            loadAccounts();
-            popup?.close();
-            setIsConnecting(false);
-          } else if (event.data?.type === 'drive-auth-error') {
-            toast.error(`Connection failed: ${event.data.error}`);
-            popup?.close();
-            setIsConnecting(false);
-          }
-          window.removeEventListener('message', handleMessage);
-        };
-        
-        window.addEventListener('message', handleMessage);
-        
-        // Timeout fallback
-        setTimeout(() => {
-          window.removeEventListener('message', handleMessage);
-          setIsConnecting(false);
-        }, 120000);
+      const { data, error } = await invokeWithAuth('drive-auth', { action: 'get_auth_url' });
+      
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      
+      if (data?.oauth_url) {
+        // Redirect to OAuth (same pattern as Calendar - full page redirect)
+        window.location.href = data.oauth_url + '&state_param=drive_callback';
       } else {
         setIsConnecting(false);
       }

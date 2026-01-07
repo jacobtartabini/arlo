@@ -1,13 +1,28 @@
-import { verifyArloJWT, handleCorsOptions, jsonResponse, unauthorizedResponse, errorResponse } from '../_shared/arloAuth.ts';
+import { 
+  verifyArloJWT, 
+  handleCorsOptions, 
+  validateOrigin,
+  jsonResponse, 
+  unauthorizedResponse, 
+  errorResponse 
+} from '../_shared/arloAuth.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { encrypt, decrypt, isEncrypted } from '../_shared/encryption.ts';
-import { createOAuthNonce, validateAndConsumeNonce } from '../_shared/oauthNonce.ts';
+import { 
+  createOAuthNonce, 
+  validateAndConsumeNonce,
+  encodeOAuthState,
+  decodeOAuthState,
+  cleanupExpiredNonces
+} from '../_shared/oauthNonce.ts';
 
 const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_DRIVE_CLIENT_ID') || Deno.env.get('GOOGLE_CLIENT_ID');
 const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_DRIVE_CLIENT_SECRET') || Deno.env.get('GOOGLE_CLIENT_SECRET');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const REDIRECT_URI = `${SUPABASE_URL}/functions/v1/drive-auth`;
+
+// Redirect to app URL (same pattern as Google Calendar OAuth)
+const REDIRECT_URI = 'https://arlo.jacobtartabini.com/settings';
 
 interface DriveAuthRequest {
   action: 'get_auth_url' | 'exchange_code' | 'disconnect' | 'list_accounts' | 'refresh_token';
@@ -88,44 +103,94 @@ Deno.serve(async (req) => {
     return handleCorsOptions(req);
   }
 
-  // Check for OAuth callback (GET request with code)
-  if (req.method === 'GET') {
-    const url = new URL(req.url);
-    const code = url.searchParams.get('code');
-    const state = url.searchParams.get('state');
-    const error = url.searchParams.get('error');
+  // Validate origin for non-preflight requests
+  const originError = validateOrigin(req);
+  if (originError) return originError;
 
-    if (error) {
-      console.error('[drive-auth] OAuth error:', error);
-      return new Response(`
-        <html>
-          <body>
-            <script>
-              window.opener?.postMessage({ type: 'drive-auth-error', error: '${error}' }, '*');
-              window.close();
-            </script>
-            <p>Authentication failed: ${error}. You can close this window.</p>
-          </body>
-        </html>
-      `, { headers: { 'Content-Type': 'text/html' } });
+  try {
+    // All actions require JWT authentication (same as google-calendar-auth)
+    const authResult = await verifyArloJWT(req);
+    
+    if (!authResult.authenticated || !authResult.userId) {
+      console.error('[drive-auth] Auth failed:', authResult.error);
+      return unauthorizedResponse(req, authResult.error || 'Authentication required');
     }
 
-    if (code && state) {
-      try {
-        // Parse state to get user info
-        const stateData = JSON.parse(atob(state));
-        const { userKey, nonce } = stateData;
+    const userKey = authResult.userId;
+    const body: DriveAuthRequest = await req.json();
+    const { action } = body;
 
-        if (!userKey) {
-          throw new Error('Invalid state: missing userKey');
+    console.log(`[drive-auth] User ${userKey} action: ${action}`);
+
+    const supabase = getSupabaseClient();
+
+    // Periodically clean up expired nonces
+    await cleanupExpiredNonces();
+
+    switch (action) {
+      // Step 1: Generate OAuth URL with secure nonce (same pattern as google-calendar-auth)
+      case 'get_auth_url': {
+        if (!GOOGLE_CLIENT_ID) {
+          return errorResponse(req, 'Google Drive is not configured. Please add GOOGLE_DRIVE_CLIENT_ID to secrets.', 503);
         }
 
-        const supabase = getSupabaseClient();
+        // Create a secure nonce bound to this user
+        const nonce = await createOAuthNonce(userKey, 'google_drive');
+        
+        // Encode state with nonce (not user ID - more secure)
+        const encodedState = encodeOAuthState(nonce, 'google_drive');
 
-        // Verify nonce
+        const params = new URLSearchParams({
+          client_id: GOOGLE_CLIENT_ID,
+          redirect_uri: REDIRECT_URI,
+          response_type: 'code',
+          scope: [
+            'https://www.googleapis.com/auth/drive',
+            'https://www.googleapis.com/auth/documents',
+            'https://www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/presentations',
+            'https://www.googleapis.com/auth/userinfo.email',
+            'https://www.googleapis.com/auth/userinfo.profile',
+          ].join(' '),
+          state: encodedState,
+          access_type: 'offline',
+          prompt: 'consent',
+        });
+
+        const oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+
+        console.log('[drive-auth] Generated auth URL with nonce for user_key:', userKey);
+        return jsonResponse(req, { oauth_url: oauthUrl });
+      }
+
+      // Step 2: Exchange code for tokens - SECURED WITH NONCE VALIDATION (same as google-calendar-auth)
+      case 'exchange_code': {
+        const { code, state } = body;
+
+        if (!code || !state) {
+          return errorResponse(req, 'Missing code or state', 400);
+        }
+
+        // Decode and validate the nonce from state
+        const { nonce, provider } = decodeOAuthState(state);
+        
+        if (!nonce || provider !== 'google_drive') {
+          console.error('[drive-auth] Invalid state format');
+          return errorResponse(req, 'Invalid OAuth state', 400);
+        }
+
+        // Validate and consume the nonce (single-use)
         const nonceResult = await validateAndConsumeNonce(nonce, 'google_drive');
+        
         if (!nonceResult.valid) {
-          throw new Error('Invalid or expired nonce');
+          console.error('[drive-auth] Nonce validation failed:', nonceResult.error);
+          return errorResponse(req, nonceResult.error || 'Invalid or expired OAuth session', 400);
+        }
+
+        // CRITICAL: Verify the JWT user matches the nonce user
+        if (nonceResult.userId !== userKey) {
+          console.error('[drive-auth] User mismatch - nonce user:', nonceResult.userId, 'JWT user:', userKey);
+          return errorResponse(req, 'OAuth session mismatch', 400);
         }
 
         // Exchange code for tokens
@@ -144,15 +209,20 @@ Deno.serve(async (req) => {
         if (!tokenResponse.ok) {
           const errText = await tokenResponse.text();
           console.error('[drive-auth] Token exchange failed:', errText);
-          throw new Error('Failed to exchange code for tokens');
+          return errorResponse(req, 'Failed to exchange code for tokens', 400);
         }
 
         const tokens = await tokenResponse.json();
+
+        if (tokens.error) {
+          console.error('[drive-auth] Token error:', tokens);
+          return errorResponse(req, tokens.error_description || tokens.error, 400);
+        }
         
         // Get user info
         const userInfo = await getUserInfo(tokens.access_token);
         if (!userInfo) {
-          throw new Error('Failed to get user info');
+          return errorResponse(req, 'Failed to get user info', 500);
         }
 
         // Get storage quota
@@ -185,96 +255,11 @@ Deno.serve(async (req) => {
 
         if (upsertError) {
           console.error('[drive-auth] Failed to save account:', upsertError);
-          throw new Error('Failed to save account');
+          return errorResponse(req, 'Failed to save account', 500);
         }
 
         console.log(`[drive-auth] Successfully connected Google Drive for ${userInfo.email}`);
-
-        return new Response(`
-          <html>
-            <body>
-              <script>
-                window.opener?.postMessage({ 
-                  type: 'drive-auth-success', 
-                  email: '${userInfo.email}',
-                  name: '${userInfo.name}'
-                }, '*');
-                window.close();
-              </script>
-              <p>Successfully connected ${userInfo.email}! You can close this window.</p>
-            </body>
-          </html>
-        `, { headers: { 'Content-Type': 'text/html' } });
-
-      } catch (err) {
-        console.error('[drive-auth] Callback error:', err);
-        return new Response(`
-          <html>
-            <body>
-              <script>
-                window.opener?.postMessage({ type: 'drive-auth-error', error: '${err instanceof Error ? err.message : 'Unknown error'}' }, '*');
-                window.close();
-              </script>
-              <p>Authentication failed. You can close this window.</p>
-            </body>
-          </html>
-        `, { headers: { 'Content-Type': 'text/html' } });
-      }
-    }
-  }
-
-  try {
-    // Verify JWT for POST requests
-    const authResult = await verifyArloJWT(req);
-    
-    if (!authResult.authenticated || !authResult.userId) {
-      console.error('[drive-auth] Auth failed:', authResult.error);
-      return unauthorizedResponse(req, authResult.error || 'Authentication required');
-    }
-
-    const userKey = authResult.userId;
-    const body: DriveAuthRequest = await req.json();
-    const { action } = body;
-
-    console.log(`[drive-auth] User ${userKey} action: ${action}`);
-
-    const supabase = getSupabaseClient();
-
-    switch (action) {
-      case 'get_auth_url': {
-        if (!GOOGLE_CLIENT_ID) {
-          return errorResponse(req, 'Google Drive is not configured. Please add GOOGLE_DRIVE_CLIENT_ID to secrets.', 503);
-        }
-
-        // Create nonce for CSRF protection
-        const nonce = await createOAuthNonce(userKey, 'google_drive');
-
-        const state = btoa(JSON.stringify({
-          userKey,
-          nonce,
-          timestamp: Date.now(),
-        }));
-
-        const params = new URLSearchParams({
-          client_id: GOOGLE_CLIENT_ID,
-          redirect_uri: REDIRECT_URI,
-          response_type: 'code',
-          scope: [
-            'https://www.googleapis.com/auth/drive',
-            'https://www.googleapis.com/auth/documents',
-            'https://www.googleapis.com/auth/spreadsheets',
-            'https://www.googleapis.com/auth/presentations',
-            'https://www.googleapis.com/auth/userinfo.email',
-            'https://www.googleapis.com/auth/userinfo.profile',
-          ].join(' '),
-          state,
-          access_type: 'offline',
-          prompt: 'consent',
-        });
-
-        const oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-
-        return jsonResponse(req, { oauth_url: oauthUrl });
+        return jsonResponse(req, { success: true, email: userInfo.email, name: userInfo.name });
       }
 
       case 'list_accounts': {
