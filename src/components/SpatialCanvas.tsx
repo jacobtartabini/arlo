@@ -34,29 +34,23 @@ const SIZE_DIMENSIONS: Record<'small' | 'medium' | 'large', { width: number; hei
   large: { width: 7, height: 6 },
 };
 
-// Get default layout for a module based on priority
-function getDefaultModuleLayout(module: Module, index: number): ModuleLayout {
-  if (module.priority === 'center') {
-    return index === 0 
-      ? { x: -4, y: -5, size: 'large' }
-      : { x: 4, y: -4, size: 'large' };
-  } else if (module.priority === 'inner') {
-    const positions = [
-      { x: -5, y: 2, size: 'medium' as const },
-      { x: 1, y: 2, size: 'medium' as const },
-      { x: 7, y: 2, size: 'medium' as const },
-    ];
-    return positions[index] || { x: 0, y: 0, size: 'medium' };
-  } else {
-    const positions = [
-      { x: -7, y: -2, size: 'small' as const },
-      { x: 10, y: -3, size: 'small' as const },
-      { x: 11, y: 1, size: 'small' as const },
-      { x: -8, y: 5, size: 'small' as const },
-      { x: 6, y: 6, size: 'small' as const },
-    ];
-    return positions[index] || { x: 0, y: 0, size: 'small' };
-  }
+// Default layouts matching the user's preferred configuration
+const DEFAULT_MODULE_LAYOUTS: Record<string, ModuleLayout> = {
+  productivity: { x: -4, y: -4, size: 'large' },
+  habits: { x: 4, y: -1, size: 'medium' },
+  notes: { x: -12, y: 0, size: 'large' },
+  finance: { x: -10, y: -5, size: 'medium' },
+  maps: { x: 0, y: 4, size: 'large' },
+  travel: { x: -14, y: -4, size: 'small' },
+  files: { x: 4, y: -6, size: 'medium' },
+  creation: { x: 10, y: 0, size: 'small' },
+  health: { x: -4, y: 3, size: 'small' },
+  security: { x: 10, y: -4, size: 'small' },
+};
+
+// Get default layout for a module
+function getDefaultModuleLayout(module: Module): ModuleLayout {
+  return DEFAULT_MODULE_LAYOUTS[module.id] || { x: 0, y: 0, size: 'medium' };
 }
 
 // Convert grid-based layout to pixel positions
@@ -124,8 +118,7 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
       if (saved) {
         positions.set(module.id, layoutToPixels(saved));
       } else {
-        const priorityIndex = byPriority[module.priority].indexOf(module);
-        const defaultLayout = getDefaultModuleLayout(module, priorityIndex);
+        const defaultLayout = getDefaultModuleLayout(module);
         positions.set(module.id, layoutToPixels(defaultLayout));
       }
     });
