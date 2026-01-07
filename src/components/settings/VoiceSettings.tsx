@@ -72,58 +72,70 @@ export default function VoiceSettings() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Voice Mode Toggle */}
+        {/* Hands-Free Voice Mode - Primary Toggle */}
+        <div className="space-y-4 p-4 rounded-lg bg-primary/5 border border-primary/20">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <Label className="text-sm font-medium flex items-center gap-2">
+                <Wand2 className="h-4 w-4 text-primary" />
+                Hands-Free Voice Mode
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Always-on voice assistant with ambient feedback. Say "Hey Arlo" to start.
+              </p>
+            </div>
+            <Switch
+              checked={Boolean(settings?.voice_mode_enabled && settings?.wake_word_enabled)}
+              onCheckedChange={async (checked) => {
+                await updateSettings({ 
+                  voice_mode_enabled: checked,
+                  wake_word_enabled: checked,
+                });
+              }}
+            />
+          </div>
+          
+          {settings?.voice_mode_enabled && settings?.wake_word_enabled && (
+            <div className="pt-3 border-t border-border/20 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                ✓ Wake word detection active while Arlo is open<br />
+                ✓ Ambient edge glow shows listening/thinking/speaking states<br />
+                ✓ Responses are spoken aloud via Cartesia TTS<br />
+                ✓ Stay on your current page — no interruptions
+              </p>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                <span className="text-muted-foreground">Listening for "Hey Arlo"</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Advanced Settings */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
             <div className="space-y-1">
-              <Label className="text-sm font-medium">Voice Mode</Label>
-              <p className="text-xs text-muted-foreground">Enable voice input globally</p>
-            </div>
-            <Switch
-              checked={settings?.voice_mode_enabled ?? false}
-              onCheckedChange={(checked) => handleToggle('voice_mode_enabled', checked)}
-            />
-          </div>
-
-          <div className="flex items-center justify-between p-4 rounded-lg bg-muted/20 border border-border/20">
-            <div className="space-y-1">
               <Label className="text-sm font-medium">Auto-send on Silence</Label>
-              <p className="text-xs text-muted-foreground">Send message when you stop speaking</p>
+              <p className="text-xs text-muted-foreground">Send after you stop speaking</p>
             </div>
             <Switch
               checked={settings?.auto_send_on_silence ?? true}
               onCheckedChange={(checked) => handleToggle('auto_send_on_silence', checked)}
             />
           </div>
-        </div>
 
-        {/* Wake Word Settings */}
-        <div className="space-y-4 p-4 rounded-lg bg-muted/20 border border-border/20">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Wand2 className="h-4 w-4 text-primary" />
-              <Label className="text-sm font-medium">Wake Word</Label>
-            </div>
-            <Switch
-              checked={settings?.wake_word_enabled ?? false}
-              onCheckedChange={(checked) => handleToggle('wake_word_enabled', checked)}
+          <div className="space-y-2 p-4 rounded-lg bg-muted/20 border border-border/20">
+            <Label htmlFor="silence-timeout" className="text-xs">Silence Timeout (ms)</Label>
+            <Input
+              id="silence-timeout"
+              type="number"
+              placeholder="1500"
+              defaultValue={settings?.silence_timeout_ms || 1500}
+              onBlur={(e) => handleSaveSilenceTimeout(parseInt(e.target.value) || 1500)}
+              className="bg-background/60"
             />
+            <p className="text-xs text-muted-foreground">How long to wait before sending</p>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Activate voice mode by saying the wake phrase when Arlo is in the foreground
-          </p>
-          {settings?.wake_word_enabled && (
-            <div className="space-y-2">
-              <Label htmlFor="wake-phrase" className="text-xs">Wake Phrase</Label>
-              <Input
-                id="wake-phrase"
-                placeholder="Hey Arlo"
-                defaultValue={settings?.wake_word_phrase || 'Hey Arlo'}
-                onBlur={(e) => handleSaveWakeWord(e.target.value)}
-                className="bg-background/60"
-              />
-            </div>
-          )}
         </div>
 
         {/* TTS Settings */}
