@@ -1,15 +1,15 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { PorcupineWorker, BuiltInKeyword } from '@picovoice/porcupine-web';
-import { supabase } from '@/integrations/supabase/client';
+import { PorcupineWorker } from '@picovoice/porcupine-web';
+import { getAuthHeaders } from '@/lib/arloAuth';
 
 interface UsePorcupineWakeWordOptions {
   onWakeWordDetected: () => void;
   enabled?: boolean;
 }
 
-// Porcupine model - loaded from CDN
+// Porcupine model - loaded from CDN (v4 for compatibility with Hey Arlo model)
 const PORCUPINE_MODEL = {
-  publicPath: 'https://cdn.jsdelivr.net/npm/@picovoice/porcupine-web@3.0/dist/porcupine_params.pv',
+  publicPath: 'https://cdn.jsdelivr.net/npm/@picovoice/porcupine-web@4.0/dist/porcupine_params.pv',
   forceWrite: false,
 };
 
@@ -57,12 +57,30 @@ export function usePorcupineWakeWord({ onWakeWordDetected, enabled = false }: Us
     setError(null);
 
     try {
-      // Fetch the AccessKey from the edge function
-      const { data: keyData, error: keyError } = await supabase.functions.invoke('porcupine-key');
+      // Fetch the AccessKey from the edge function with proper auth headers
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const headers = await getAuthHeaders();
       
-      if (keyError || !keyData?.accessKey) {
-        throw new Error('Failed to get Picovoice access key');
+      const response = await fetch(`${supabaseUrl}/functions/v1/porcupine-key`, {
+        method: 'POST',
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to get Picovoice key: ${response.status}`);
       }
+
+      const keyData = await response.json();
+      
+      if (!keyData?.accessKey) {
+        throw new Error('No access key returned from server');
+      }
+
+      console.log('[Porcupine] Got access key, initializing...');
 
       // Request microphone access
       const stream = await navigator.mediaDevices.getUserMedia({ 
