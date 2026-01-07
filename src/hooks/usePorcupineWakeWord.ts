@@ -28,12 +28,13 @@ export function usePorcupineWakeWord({ onWakeWordDetected, enabled = false }: Us
   const porcupineRef = useRef<PorcupineWorker | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
 
   const cleanup = useCallback(() => {
-    if (processorRef.current) {
-      processorRef.current.disconnect();
-      processorRef.current = null;
+    if (workletNodeRef.current) {
+      workletNodeRef.current.disconnect();
+      workletNodeRef.current.port.close();
+      workletNodeRef.current = null;
     }
     if (audioContextRef.current) {
       audioContextRef.current.close();
@@ -102,46 +103,44 @@ export function usePorcupineWakeWord({ onWakeWordDetected, enabled = false }: Us
         PORCUPINE_MODEL
       );
 
-      // Set up audio processing
+      // Set up audio processing with AudioWorklet
       const sampleRate = porcupineRef.current.sampleRate;
+      const frameLength = porcupineRef.current.frameLength;
       audioContextRef.current = new AudioContext({ sampleRate });
+      
+      // Load the AudioWorklet processor module
+      await audioContextRef.current.audioWorklet.addModule('/porcupine-processor.js');
+      
       const source = audioContextRef.current.createMediaStreamSource(stream);
       
-      // Buffer audio frames for Porcupine
-      const frameLength = porcupineRef.current.frameLength;
-      let audioBuffer: number[] = [];
+      // Create AudioWorkletNode with frame length option
+      workletNodeRef.current = new AudioWorkletNode(
+        audioContextRef.current,
+        'porcupine-processor',
+        {
+          processorOptions: { frameLength }
+        }
+      );
       
-      // Use ScriptProcessor for audio processing
-      processorRef.current = audioContextRef.current.createScriptProcessor(512, 1, 1);
-      
-      processorRef.current.onaudioprocess = (event) => {
+      // Handle messages from the worklet (audio frames)
+      workletNodeRef.current.port.onmessage = (event) => {
         if (!porcupineRef.current) return;
         
-        const inputData = event.inputBuffer.getChannelData(0);
-        
-        // Convert Float32Array to Int16 and buffer
-        for (let i = 0; i < inputData.length; i++) {
-          audioBuffer.push(Math.max(-32768, Math.min(32767, Math.round(inputData[i] * 32768))));
-        }
-        
-        // Process complete frames
-        while (audioBuffer.length >= frameLength) {
-          const frame = new Int16Array(audioBuffer.slice(0, frameLength));
-          audioBuffer = audioBuffer.slice(frameLength);
-          
+        if (event.data.type === 'frame') {
           try {
-            porcupineRef.current.process(frame);
+            porcupineRef.current.process(event.data.data);
           } catch (e) {
             console.error('[Porcupine] Process error:', e);
           }
         }
       };
 
-      source.connect(processorRef.current);
-      processorRef.current.connect(audioContextRef.current.destination);
+      source.connect(workletNodeRef.current);
+      // Connect to destination to keep the worklet running
+      workletNodeRef.current.connect(audioContextRef.current.destination);
 
       setIsListening(true);
-      console.log('[Porcupine] Wake word detection started');
+      console.log('[Porcupine] Wake word detection started with AudioWorklet');
     } catch (e) {
       console.error('[Porcupine] Initialization error:', e);
       setError(e instanceof Error ? e.message : 'Failed to initialize wake word detection');
