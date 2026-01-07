@@ -29,6 +29,7 @@ export function useHandsFreeVoice() {
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
   
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -318,10 +319,15 @@ export function useHandsFreeVoice() {
     }
   }, [voiceState, startVoiceSession]);
 
-  // Wake word detection - always active when hands-free mode is enabled and not in active session
+  // Toggle mute - pauses wake word detection
+  const toggleMute = useCallback(() => {
+    setIsMuted(prev => !prev);
+  }, []);
+
+  // Wake word detection - always active when hands-free mode is enabled, not in active session, and not muted
   const { isListening: isWakeWordListening, isInitializing, error: wakeWordError } = usePorcupineWakeWord({
     onWakeWordDetected: startVoiceSession,
-    enabled: isHandsFreeEnabled && !isSessionActive,
+    enabled: isHandsFreeEnabled && !isSessionActive && !isMuted,
   });
 
   // Pass through wake word errors
@@ -349,12 +355,14 @@ export function useHandsFreeVoice() {
     isInitializing,
     transcript,
     error,
+    isMuted,
     
     // Computed
     isHandsFreeEnabled,
     
     // Actions
     handleInterruption,
+    toggleMute,
     
     // Settings
     settings,

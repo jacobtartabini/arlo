@@ -6,7 +6,7 @@ import {
   type FormEvent,
 } from "react";
 import { motion } from "framer-motion";
-import { Check, ChevronDown, Scan } from "lucide-react";
+import { Check, ChevronDown, Scan, Mic, MicOff } from "lucide-react";
 import { badgeVariants } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useVoiceState } from "@/providers/VoiceStateProvider";
 import { cn } from "@/lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 const PRESET_ZOOM_LEVELS = [50, 75, 100, 125, 150, 175, 200];
 
@@ -40,7 +41,7 @@ export function StatusChip({
   onRecenter,
   onCustomZoomSubmit,
 }: StatusChipProps) {
-  const { voiceState, isSessionActive, isWakeWordListening, isHandsFreeEnabled } = useVoiceState();
+  const { voiceState, isSessionActive, isWakeWordListening, isHandsFreeEnabled, isMuted, toggleMute } = useVoiceState();
   const [isChipInteracting, setIsChipInteracting] = useState(false);
   const [isZoomMenuOpen, setIsZoomMenuOpen] = useState(false);
   const [customZoom, setCustomZoom] = useState(String(Math.round(gridScale * 100)));
@@ -50,6 +51,10 @@ export function StatusChip({
 
   // Determine status dot color based on voice state
   const getStatusDotColor = () => {
+    if (isMuted) {
+      return 'bg-muted-foreground/50'; // Muted state
+    }
+    
     if (!isHandsFreeEnabled) {
       return 'bg-emerald-500'; // Default online state
     }
@@ -77,6 +82,10 @@ export function StatusChip({
 
   // Get status text based on voice state
   const getStatusText = () => {
+    if (isMuted) {
+      return 'Muted';
+    }
+    
     if (!isHandsFreeEnabled) {
       return 'Arlo Online';
     }
@@ -100,6 +109,11 @@ export function StatusChip({
     
     return 'Arlo Online';
   };
+
+  const handleMuteClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    toggleMute();
+  }, [toggleMute]);
 
   const handleChipEnter = useCallback(() => {
     setIsChipInteracting(true);
@@ -189,7 +203,7 @@ export function StatusChip({
         <span className="flex items-center gap-1.5 relative">
           <motion.span 
             className={cn("h-1.5 w-1.5 rounded-full", getStatusDotColor())}
-            animate={isSessionActive || isWakeWordListening ? {
+            animate={!isMuted && (isSessionActive || isWakeWordListening) ? {
               scale: [1, 1.3, 1],
               opacity: [1, 0.8, 1],
             } : {}}
@@ -201,9 +215,10 @@ export function StatusChip({
           />
           {isChipExpanded ? (
             <span className={cn(
-              isSessionActive && voiceState === 'listening' && 'text-green-500',
-              isSessionActive && voiceState === 'thinking' && 'text-amber-500',
-              isSessionActive && voiceState === 'speaking' && 'text-blue-500',
+              isMuted && 'text-muted-foreground/50',
+              isSessionActive && voiceState === 'listening' && !isMuted && 'text-green-500',
+              isSessionActive && voiceState === 'thinking' && !isMuted && 'text-amber-500',
+              isSessionActive && voiceState === 'speaking' && !isMuted && 'text-blue-500',
             )}>
               {getStatusText()}
             </span>
@@ -215,6 +230,34 @@ export function StatusChip({
         {/* Expanded controls */}
         {isChipExpanded && (
           <div className="flex items-center gap-2">
+            {/* Mute button - only show when hands-free is enabled */}
+            {isHandsFreeEnabled && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex h-6 w-6 items-center justify-center rounded-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      isMuted 
+                        ? "text-destructive/80 hover:text-destructive" 
+                        : "text-muted-foreground/80 hover:text-foreground"
+                    )}
+                    aria-label={isMuted ? "Unmute microphone" : "Mute microphone"}
+                    onClick={handleMuteClick}
+                  >
+                    {isMuted ? (
+                      <MicOff className="h-3.5 w-3.5" aria-hidden="true" />
+                    ) : (
+                      <Mic className="h-3.5 w-3.5" aria-hidden="true" />
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="text-xs">
+                  {isMuted ? "Unmute" : "Mute"}
+                </TooltipContent>
+              </Tooltip>
+            )}
+            
             <span className="text-muted-foreground/60" aria-hidden="true">•</span>
 
             {/* Zoom dropdown */}
