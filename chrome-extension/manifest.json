@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Arlo for Gmail",
+  "name": "Arlo",
   "version": "1.0.0",
-  "description": "Connect Gmail to your Arlo assistant - sync emails, threads, and more.",
+  "description": "By Tartabini Enterprises LLC",
   "permissions": [
     "storage",
     "identity",
