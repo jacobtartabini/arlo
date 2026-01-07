@@ -1,0 +1,158 @@
+/* Arlo for Gmail - Content Script Styles
+ * Injected into Gmail to style Arlo UI elements
+ */
+
+/* Arlo Button in Gmail Toolbar */
+.arlo-gmail-btn-container {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+}
+
+.arlo-gmail-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  font-family: 'Google Sans', 'Roboto', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+  background: linear-gradient(135deg, hsl(220 60% 50%), hsl(220 60% 45%));
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(66, 133, 244, 0.25);
+}
+
+.arlo-gmail-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, hsl(220 60% 55%), hsl(220 60% 50%));
+  box-shadow: 0 4px 12px rgba(66, 133, 244, 0.35);
+  transform: translateY(-1px);
+}
+
+.arlo-gmail-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.arlo-gmail-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.arlo-gmail-btn.arlo-loading .arlo-icon {
+  animation: arlo-spin 1s linear infinite;
+}
+
+.arlo-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.arlo-btn-text {
+  white-space: nowrap;
+}
+
+@keyframes arlo-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Floating Action Button */
+.arlo-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, hsl(220 60% 50%), hsl(220 60% 45%));
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 
+    0 4px 16px rgba(66, 133, 244, 0.35),
+    0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  z-index: 9999;
+}
+
+.arlo-fab:hover {
+  transform: scale(1.1) translateY(-2px);
+  box-shadow: 
+    0 8px 24px rgba(66, 133, 244, 0.45),
+    0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.arlo-fab:active {
+  transform: scale(1.05);
+}
+
+.arlo-fab svg {
+  width: 24px;
+  height: 24px;
+  color: #fff;
+}
+
+/* Notification Toast */
+.arlo-notification {
+  position: fixed;
+  bottom: 100px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  background: hsl(220 18% 11%);
+  color: #fff;
+  border-radius: 12px;
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.3),
+    0 2px 8px rgba(0, 0, 0, 0.2);
+  font-family: 'Google Sans', 'Roboto', sans-serif;
+  font-size: 14px;
+  z-index: 10000;
+  transform: translateX(120%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.arlo-notification-visible {
+  transform: translateX(0);
+}
+
+.arlo-notification-success {
+  border-left: 4px solid hsl(142 70% 45%);
+}
+
+.arlo-notification-success .arlo-notification-icon {
+  color: hsl(142 70% 55%);
+}
+
+.arlo-notification-error {
+  border-left: 4px solid hsl(0 70% 50%);
+}
+
+.arlo-notification-error .arlo-notification-icon {
+  color: hsl(0 70% 60%);
+}
+
+.arlo-notification-icon {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.arlo-notification-text {
+  flex: 1;
+}
+
+/* Dark mode support (Gmail uses prefers-color-scheme) */
+@media (prefers-color-scheme: light) {
+  .arlo-notification {
+    background: #fff;
+    color: hsl(220 20% 15%);
+    border: 1px solid hsl(220 15% 88%);
+  }
+}

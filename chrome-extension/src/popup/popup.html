@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arlo for Gmail</title>
+  <link rel="stylesheet" href="styles/popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="popup-header">
+      <div class="logo-container">
+        <img src="icons/icon-32.png" alt="Arlo" class="logo">
+        <span class="logo-text">Arlo for Gmail</span>
+      </div>
+    </header>
+
+    <!-- Loading State -->
+    <div id="loading-state" class="state-container">
+      <div class="loading-spinner"></div>
+      <p class="state-text">Connecting...</p>
+    </div>
+
+    <!-- Main Content -->
+    <main id="main-content" class="hidden">
+      <!-- Arlo Status -->
+      <section class="status-section">
+        <div class="status-header">
+          <span class="status-label">Arlo Connection</span>
+          <span id="arlo-status" class="status-badge disconnected">Disconnected</span>
+        </div>
+        <div id="arlo-details" class="status-details hidden">
+          <span class="user-email" id="arlo-email"></span>
+        </div>
+        <button id="arlo-btn" class="btn btn-primary">
+          <span id="arlo-btn-text">Connect to Arlo</span>
+        </button>
+      </section>
+
+      <!-- Gmail Status -->
+      <section class="status-section" id="gmail-section">
+        <div class="status-header">
+          <span class="status-label">Gmail</span>
+          <span id="gmail-status" class="status-badge disconnected">Disconnected</span>
+        </div>
+        <div id="gmail-details" class="status-details hidden">
+          <span class="user-email" id="gmail-email"></span>
+        </div>
+        <button id="gmail-btn" class="btn btn-secondary">
+          <span id="gmail-btn-text">Connect Gmail</span>
+        </button>
+      </section>
+
+      <!-- Sync Section -->
+      <section class="sync-section hidden" id="sync-section">
+        <h3 class="section-title">Sync Emails</h3>
+        <div class="sync-controls">
+          <select id="sync-count" class="select">
+            <option value="5">Last 5 emails</option>
+            <option value="10" selected>Last 10 emails</option>
+            <option value="25">Last 25 emails</option>
+            <option value="50">Last 50 emails</option>
+          </select>
+          <button id="sync-btn" class="btn btn-primary">
+            <span id="sync-btn-text">Sync Now</span>
+          </button>
+        </div>
+        <div id="sync-result" class="sync-result hidden"></div>
+      </section>
+
+      <!-- Recent Activity -->
+      <section class="activity-section hidden" id="activity-section">
+        <h3 class="section-title">Connected Accounts</h3>
+        <div id="accounts-list" class="accounts-list">
+          <p class="no-accounts">No accounts connected</p>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="popup-footer">
+      <a href="https://arlo.jacobtartabini.com" target="_blank" class="footer-link">
+        Open Arlo
+      </a>
+      <span class="version">v1.0.0</span>
+    </footer>
+  </div>
+
+  <script src="popup.js" type="module"></script>
+</body>
+</html>
