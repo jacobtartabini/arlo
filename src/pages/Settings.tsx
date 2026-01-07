@@ -7,6 +7,7 @@ import InboxSettings from '@/components/settings/InboxSettings';
 import MorningWakeupSettings from '@/components/settings/MorningWakeupSettings';
 import DriveIntegrations from '@/components/settings/DriveIntegrations';
 import DashboardVisibilitySettings from '@/components/settings/DashboardVisibilitySettings';
+import DashboardLayoutSettings from '@/components/settings/DashboardLayoutSettings';
 import VoiceSettings from '@/components/settings/VoiceSettings';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -22,7 +23,8 @@ import {
   Plug,
   ChevronDown,
   Mic,
-  LayoutDashboard
+  LayoutDashboard,
+  Move
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -201,6 +203,15 @@ export default function Settings() {
             description="Show or hide modules"
           >
             <DashboardVisibilitySettings embedded />
+          </SettingsSection>
+
+          {/* Dashboard Layout */}
+          <SettingsSection 
+            icon={Move} 
+            title="Module Layout" 
+            description="Position and size each module"
+          >
+            <DashboardLayoutSettings embedded />
           </SettingsSection>
 
           {/* Notifications */}
