@@ -53,7 +53,11 @@ async function invokeWithAuth(functionName: string, body: Record<string, unknown
   });
 }
 
-export default function CalendarIntegrations() {
+interface CalendarIntegrationsProps {
+  embedded?: boolean;
+}
+
+export default function CalendarIntegrations({ embedded = false }: CalendarIntegrationsProps) {
   const { identity } = useAuth();
   const [integrations, setIntegrations] = useState<CalendarIntegration[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -322,6 +326,14 @@ export default function CalendarIntegrations() {
   };
 
   if (isLoading) {
+    if (embedded) {
+      return (
+        <div className="space-y-3">
+          <Skeleton className="h-20 w-full rounded-lg" />
+          <Skeleton className="h-20 w-full rounded-lg" />
+        </div>
+      );
+    }
     return (
       <Card className="bg-background/40 backdrop-blur-md border border-border/30">
         <CardHeader>
@@ -336,18 +348,8 @@ export default function CalendarIntegrations() {
     );
   }
 
-  return (
-    <Card className="bg-background/40 backdrop-blur-md border border-border/30">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Calendar className="h-5 w-5 text-primary" />
-          Calendar Integrations
-        </CardTitle>
-        <CardDescription>
-          Connect your calendars for unified availability and 2-way sync
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
+  const content = (
+    <div className="space-y-4">
         {/* Google Calendar */}
         <div className={`p-4 rounded-lg border ${googleIntegration ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/50 dark:border-emerald-800/30' : 'bg-muted/20 border-border/20'}`}>
           <div className="flex items-start justify-between">
@@ -612,14 +614,36 @@ export default function CalendarIntegrations() {
         </div>
 
         {/* Info */}
-        <div className="text-xs text-muted-foreground bg-muted/20 p-3 rounded-lg">
-          <p className="font-medium mb-1">How it works:</p>
-          <ul className="list-disc list-inside space-y-1">
-            <li><strong>Google Calendar:</strong> Full 2-way sync. Events created in Arlo appear in Google.</li>
-            <li><strong>Outlook Calendar:</strong> Read-only. Outlook events show in Arlo but changes don't sync back.</li>
-            <li>Calendars sync automatically every 60 seconds.</li>
-          </ul>
-        </div>
+        {!embedded && (
+          <div className="text-xs text-muted-foreground bg-muted/20 p-3 rounded-lg">
+            <p className="font-medium mb-1">How it works:</p>
+            <ul className="list-disc list-inside space-y-1">
+              <li><strong>Google Calendar:</strong> Full 2-way sync. Events created in Arlo appear in Google.</li>
+              <li><strong>Outlook Calendar:</strong> Read-only. Outlook events show in Arlo but changes don't sync back.</li>
+              <li>Calendars sync automatically every 60 seconds.</li>
+            </ul>
+          </div>
+        )}
+      </div>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
+  return (
+    <Card className="bg-background/40 backdrop-blur-md border border-border/30">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Calendar className="h-5 w-5 text-primary" />
+          Calendar Integrations
+        </CardTitle>
+        <CardDescription>
+          Connect your calendars for unified availability and 2-way sync
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {content}
       </CardContent>
     </Card>
   );

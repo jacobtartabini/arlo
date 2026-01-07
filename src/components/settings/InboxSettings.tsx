@@ -123,7 +123,11 @@ function IntegrationCard({
     </div>
   );
 }
-export default function InboxSettings() {
+interface InboxSettingsProps {
+  embedded?: boolean;
+}
+
+export default function InboxSettings({ embedded = false }: InboxSettingsProps) {
   const { userKey, isAuthenticated, isLoading: authLoading } = useAuth();
   const { accounts, loading, refetch, disconnectAccount } = useInboxAccounts();
   const [connectingProvider, setConnectingProvider] = useState<InboxProvider | null>(null);
@@ -259,6 +263,14 @@ export default function InboxSettings() {
   };
   // Show loading state while auth initializes
   if (authLoading) {
+    if (embedded) {
+      return (
+        <div className="space-y-3">
+          <Skeleton className="h-20 w-full rounded-lg" />
+          <Skeleton className="h-20 w-full rounded-lg" />
+        </div>
+      );
+    }
     return (
       <div className="space-y-6">
         <Card>
@@ -275,26 +287,16 @@ export default function InboxSettings() {
     );
   }
 
-  return (
-    <Card className="bg-background/40 backdrop-blur-md border border-border/30">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Mail className="h-5 w-5 text-primary" />
-          Inbox Integrations
-        </CardTitle>
-        <CardDescription>
-          Connect your email and messaging accounts for unified inbox access
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Show auth warning if not authenticated */}
-        {!isAuthenticated && (
-          <div className="p-4 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900/30">
-            <p className="text-sm text-amber-900 dark:text-amber-200">
-              Authentication required. Please verify your Tailscale connection to connect inbox accounts.
-            </p>
-          </div>
-        )}
+  const content = (
+    <div className="space-y-4">
+      {/* Show auth warning if not authenticated */}
+      {!isAuthenticated && (
+        <div className="p-4 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900/30">
+          <p className="text-sm text-amber-900 dark:text-amber-200">
+            Authentication required. Please verify your Tailscale connection to connect inbox accounts.
+          </p>
+        </div>
+      )}
 
         {/* Connected Accounts */}
         {accounts.map(account => {
@@ -454,6 +456,26 @@ export default function InboxSettings() {
             })}
           </div>
         </div>
+      </div>
+  );
+
+  if (embedded) {
+    return content;
+  }
+
+  return (
+    <Card className="bg-background/40 backdrop-blur-md border border-border/30">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Mail className="h-5 w-5 text-primary" />
+          Inbox Integrations
+        </CardTitle>
+        <CardDescription>
+          Connect your email and messaging accounts for unified inbox access
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {content}
       </CardContent>
     </Card>
   );
