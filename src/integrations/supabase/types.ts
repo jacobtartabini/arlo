@@ -1741,6 +1741,7 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          parent_folder_id: string | null
           user_id: string | null
           user_key: string | null
         }
@@ -1749,6 +1750,7 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          parent_folder_id?: string | null
           user_id?: string | null
           user_key?: string | null
         }
@@ -1757,10 +1759,19 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          parent_folder_id?: string | null
           user_id?: string | null
           user_key?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "note_folders_parent_folder_id_fkey"
+            columns: ["parent_folder_id"]
+            isOneToOne: false
+            referencedRelation: "note_folders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notes: {
         Row: {

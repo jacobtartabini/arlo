@@ -43,6 +43,7 @@ export default function Notes() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
+  const [createFolderParentId, setCreateFolderParentId] = useState<string | undefined>();
   const [isExporting, setIsExporting] = useState(false);
   const {
     notes,
@@ -195,12 +196,13 @@ export default function Notes() {
     }
   }, [notes, saveNote]);
 
-  const handleOpenCreateFolderDialog = useCallback(() => {
+  const handleOpenCreateFolderDialog = useCallback((parentId?: string) => {
+    setCreateFolderParentId(parentId);
     setCreateFolderDialogOpen(true);
   }, []);
 
-  const handleCreateFolder = useCallback(async (name: string, color: string) => {
-    const folder = await createFolder(name, color);
+  const handleCreateFolder = useCallback(async (name: string, color: string, parentId?: string) => {
+    const folder = await createFolder(name, color, parentId);
     if (folder) {
       toast.success(`Folder "${folder.name}" created`);
     }
@@ -494,6 +496,8 @@ export default function Notes() {
         open={createFolderDialogOpen}
         onOpenChange={setCreateFolderDialogOpen}
         onCreateFolder={handleCreateFolder}
+        folders={folders}
+        defaultParentId={createFolderParentId}
       />
     </div>
   );
