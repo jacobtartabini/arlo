@@ -307,12 +307,12 @@ Deno.serve(async (req) => {
   try {
     // Verify JWT
     const authResult = await verifyArloJWT(req);
-    if (!authResult.authenticated || !authResult.userKey) {
+    if (!authResult.authenticated || !authResult.userId) {
       console.log('[inbox-sync] Auth failed, returning 401');
       return unauthorizedResponse(req, 'Authentication required');
     }
 
-    const userKey = authResult.userKey;
+    const userKey = authResult.userId; // userId from JWT.sub is the user_key
     console.log(`[inbox-sync] Auth successful for: ${userKey}`);
     
     // Parse request body
