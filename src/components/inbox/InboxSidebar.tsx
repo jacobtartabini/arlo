@@ -99,7 +99,7 @@ export function InboxSidebar({
           onClick={() => navigate("/")}
           className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/50 px-3 py-1 text-xs font-medium text-muted-foreground transition hover:border-border hover:bg-background/80 hover:text-foreground"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> Dashboard
+          <ArrowLeft className="h-3.5 w-3.5" /> Back to dashboard
         </button>
       </div>
 
