@@ -1,7 +1,7 @@
 {
-  "name": "Arlo AI Assistant",
+  "name": "Arlo",
   "short_name": "Arlo",
-  "description": "Your personal AI assistant with sci-fi interface",
+  "description": "By Jacob Tartabini",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#1E1E2F",
@@ -10,13 +10,13 @@
   "scope": "/",
   "icons": [
     {
-      "src": "/icon-192x192.png",
+      "src": "/favicon4.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icon-512x512.png",
+      "src": "/favicon4.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
@@ -30,7 +30,7 @@
       "url": "/dashboard",
       "icons": [
         {
-          "src": "/icon-192x192.png",
+          "src": "/favicon4.png",
           "sizes": "192x192"
         }
       ]
@@ -42,7 +42,7 @@
       "url": "/notes",
       "icons": [
         {
-          "src": "/icon-192x192.png",
+          "src": "/favicon4.png",
           "sizes": "192x192"
         }
       ]
@@ -54,7 +54,7 @@
       "url": "/settings",
       "icons": [
         {
-          "src": "/icon-192x192.png",
+          "src": "/favicon4.png",
           "sizes": "192x192"
         }
       ]
