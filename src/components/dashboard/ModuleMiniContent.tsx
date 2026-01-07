@@ -5,7 +5,7 @@
 
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { useState, useCallback, memo } from "react";
+import { useState, useCallback, useEffect, memo } from "react";
 import { 
   Check, Plus, FileText, MapPin, Plane, Flame, Moon,
   Sparkles, Clock, FolderOpen, Navigation, Calendar,
@@ -618,9 +618,18 @@ const MiniMapComponent = memo(function MiniMapComponent({
   center: { lat: number; lng: number }; 
   size: ModuleSize;
 }) {
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
   });
+
+  // Recenter map when center prop changes (e.g., when geolocation resolves)
+  useEffect(() => {
+    if (map && center) {
+      map.panTo(center);
+    }
+  }, [map, center.lat, center.lng]);
 
   const mapContainerStyle = {
     width: "100%",
@@ -635,12 +644,16 @@ const MiniMapComponent = memo(function MiniMapComponent({
     streetViewControl: false,
     fullscreenControl: false,
     clickableIcons: true,
-    gestureHandling: "greedy", // Allow drag and interaction
+    gestureHandling: "greedy",
     styles: [
       { featureType: "poi.business", stylers: [{ visibility: "off" }] },
       { featureType: "transit", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
     ],
   };
+
+  const onLoad = useCallback((mapInstance: google.maps.Map) => {
+    setMap(mapInstance);
+  }, []);
 
   if (!isLoaded) {
     return (
@@ -656,6 +669,7 @@ const MiniMapComponent = memo(function MiniMapComponent({
       center={center}
       zoom={15}
       options={options}
+      onLoad={onLoad}
     />
   );
 });

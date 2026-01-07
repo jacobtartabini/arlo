@@ -7,7 +7,6 @@ import { useState, useEffect, useCallback } from "react";
 import { dataApiHelpers } from "@/lib/data-api";
 import { useAuth } from "@/providers/AuthProvider";
 import { useTasksPersistence } from "@/hooks/useTasksPersistence";
-import { useGeolocation } from "@/hooks/useGeolocation";
 import { isToday, parseISO, startOfDay, isThisWeek } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 
@@ -79,23 +78,27 @@ export function useDashboardData() {
   const [data, setData] = useState<DashboardData>(DEFAULT_DATA);
   const { isAuthenticated } = useAuth();
   const { createTask, toggleTask } = useTasksPersistence();
-  const { position, getCurrentPosition } = useGeolocation({ 
-    enableHighAccuracy: false, 
-    timeout: 5000,
-    maximumAge: 60000, // Cache for 1 minute
-  });
 
   // Get user location on mount
   useEffect(() => {
-    getCurrentPosition();
-  }, [getCurrentPosition]);
-
-  // Update user location when position changes
-  useEffect(() => {
-    if (position) {
-      setData(prev => ({ ...prev, userLocation: position }));
-    }
-  }, [position]);
+    if (!navigator.geolocation) return;
+    
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setData(prev => ({
+          ...prev,
+          userLocation: {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          },
+        }));
+      },
+      (error) => {
+        console.log("Geolocation error:", error.message);
+      },
+      { enableHighAccuracy: false, timeout: 5000, maximumAge: 60000 }
+    );
+  }, []);
 
   const fetchData = useCallback(async () => {
     if (!isAuthenticated) {
