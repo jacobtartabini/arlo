@@ -257,17 +257,18 @@ function TodayMiniContent({
               transition={{ delay: i * 0.03 }}
               className="flex items-center gap-2 group/task"
             >
-              {/* Clickable checkbox */}
+              {/* Clickable checkbox - larger touch target */}
               <button
                 onClick={(e) => handleToggle(e, task.id, task.done)}
                 className={cn(
-                  "w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-all",
+                  "w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all cursor-pointer",
+                  "active:scale-90",
                   task.done 
                     ? "bg-primary border-primary" 
-                    : "border-muted-foreground/30 hover:border-primary/60 group-hover/task:border-primary/40"
+                    : "border-muted-foreground/40 hover:border-primary/70 hover:bg-primary/10 group-hover/task:border-primary/50"
                 )}
               >
-                {task.done && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
+                {task.done && <Check className="w-3 h-3 text-primary-foreground" />}
               </button>
               
               {/* Priority dot */}
@@ -468,25 +469,25 @@ function NotesMiniContent({ data, size, onClick }: { data: MiniContentProps["dat
 
       {/* Quick action buttons */}
       {!isTertiary && (
-        <div className="flex gap-1.5">
+        <div className="flex gap-2">
           <motion.button
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.1 }}
-            className="flex items-center gap-1 px-2 py-1 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors text-[9px] font-medium text-primary"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary/10 hover:bg-primary/20 transition-colors text-xs font-medium text-primary"
             onClick={handleNewNote}
           >
-            <Plus className="w-3 h-3" />
+            <Plus className="w-4 h-4" />
             New
           </motion.button>
           <motion.button
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.15 }}
-            className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/30 hover:bg-muted/50 transition-colors text-[9px] font-medium text-muted-foreground"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors text-xs font-medium text-muted-foreground"
             onClick={handleUpload}
           >
-            <Upload className="w-3 h-3" />
+            <Upload className="w-4 h-4" />
             Upload
           </motion.button>
           {isPrimary && (
@@ -494,10 +495,10 @@ function NotesMiniContent({ data, size, onClick }: { data: MiniContentProps["dat
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.2 }}
-              className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/30 hover:bg-muted/50 transition-colors text-[9px] font-medium text-muted-foreground"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors text-xs font-medium text-muted-foreground"
               onClick={handleWrite}
             >
-              <PenLine className="w-3 h-3" />
+              <PenLine className="w-4 h-4" />
               Write
             </motion.button>
           )}
