@@ -23,9 +23,12 @@ const ALLOWED_ORIGINS = [
   'http://localhost:5173',
 ];
 
-// Check if origin is a Lovable preview URL (for development/preview)
-function isLovablePreview(origin: string): boolean {
-  return /^https:\/\/[a-z0-9-]+\.lovableproject\.com$/.test(origin);
+// Check if origin is a Lovable URL (editor or preview)
+function isLovableOrigin(origin: string): boolean {
+  return (
+    /^https:\/\/[a-z0-9-]+\.lovableproject\.com$/.test(origin) ||
+    origin === 'https://lovable.dev'
+  );
 }
 
 export interface ArloJWTClaims {
@@ -43,7 +46,7 @@ export interface ArloJWTClaims {
  */
 export function isAllowedOrigin(origin: string | null): boolean {
   if (!origin) return false;
-  return ALLOWED_ORIGINS.includes(origin) || isLovablePreview(origin);
+  return ALLOWED_ORIGINS.includes(origin) || isLovableOrigin(origin);
 }
 
 /**
