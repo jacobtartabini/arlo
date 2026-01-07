@@ -5,13 +5,15 @@
 
 import { motion } from "framer-motion";
 import { 
-  Check, Plus, FileText, MapPin, Plane, Flame, Moon, Activity,
-  Sparkles, Clock, FolderOpen, Palette, Navigation, Calendar,
-  TrendingDown, Zap, Target, Star
+  Check, Plus, FileText, MapPin, Plane, Flame, Moon,
+  Sparkles, Clock, FolderOpen, Navigation, Calendar,
+  Zap, Upload, PenLine, Shield, Monitor, Palette
 } from "lucide-react";
+import { GoogleMap, useJsApiLoader } from "@react-google-maps/api";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow, differenceInDays } from "date-fns";
 import type { ModuleSize } from "@/lib/app-navigation";
+import { useCallback, memo } from "react";
 
 interface MiniContentProps {
   moduleId: string;
@@ -32,9 +34,11 @@ interface MiniContentProps {
     recentTransactions: { id: string; name: string; amount: number }[];
     recentPlaces: { id: string; name: string; address?: string }[];
     savedPlacesCount: number;
+    userLocation?: { lat: number; lng: number } | null;
     upcomingTrips: { id: string; name: string; startDate: Date }[];
     activityScore: number;
     sleepHours: number;
+    connectedDevices: number;
   };
   onClick?: (e: React.MouseEvent) => void;
 }
@@ -278,61 +282,96 @@ function HabitsMiniContent({ data, size }: { data: MiniContentProps["data"]; siz
   );
 }
 
-// Notes with visual preview cards
-function NotesMiniContent({ data, size }: { data: MiniContentProps["data"]; size: ModuleSize }) {
-  const notes = data.recentNotes.slice(0, size === "primary" ? 3 : size === "tertiary" ? 1 : 2);
+// Notes with quick action buttons
+function NotesMiniContent({ data, size, onClick }: { data: MiniContentProps["data"]; size: ModuleSize; onClick?: (e: React.MouseEvent) => void }) {
+  const notes = data.recentNotes.slice(0, size === "primary" ? 2 : 1);
   const isPrimary = size === "primary";
   const isTertiary = size === "tertiary";
 
-  if (notes.length === 0) {
-    return (
-      <div className="flex items-center gap-2">
-        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-          <Plus className="w-4 h-4 text-primary/60" />
-        </div>
-        <div className="flex flex-col">
-          <span className="text-[10px] text-muted-foreground/80">Start writing</span>
-          <span className="text-[9px] text-muted-foreground/50">Create your first note</span>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className={cn("flex", isPrimary ? "gap-3" : "gap-2")}>
-      {/* Recent notes as mini cards */}
-      <div className="flex gap-1.5 flex-1 min-w-0">
-        {notes.map((note, i) => (
-          <motion.div
-            key={note.id}
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.05 }}
-            className={cn(
-              "flex-1 min-w-0 px-2 py-1.5 rounded-md bg-muted/30 border border-border/30",
-              "hover:bg-muted/50 transition-colors cursor-pointer"
-            )}
-          >
-            <div className="flex items-start gap-1.5">
-              <FileText className="w-3 h-3 text-primary/50 shrink-0 mt-0.5" />
-              <div className="min-w-0">
-                <p className="text-[10px] font-medium text-foreground/80 truncate">
-                  {note.title}
-                </p>
-                <p className="text-[8px] text-muted-foreground/50 truncate">
-                  {formatDistanceToNow(note.updatedAt, { addSuffix: true })}
-                </p>
+    <div className="flex flex-col gap-2">
+      {/* Recent note preview */}
+      {notes.length > 0 && (
+        <div className="flex gap-1.5">
+          {notes.map((note, i) => (
+            <motion.div
+              key={note.id}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05 }}
+              className="flex-1 min-w-0 px-2 py-1.5 rounded-md bg-muted/30 border border-border/30"
+            >
+              <div className="flex items-start gap-1.5">
+                <FileText className="w-3 h-3 text-primary/50 shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-medium text-foreground/80 truncate">
+                    {note.title}
+                  </p>
+                  <p className="text-[8px] text-muted-foreground/50 truncate">
+                    {formatDistanceToNow(note.updatedAt, { addSuffix: true })}
+                  </p>
+                </div>
               </div>
-            </div>
-          </motion.div>
-        ))}
-      </div>
+            </motion.div>
+          ))}
+        </div>
+      )}
 
-      {/* Stats badge */}
-      {!isTertiary && data.totalNotes > 0 && (
-        <div className="flex flex-col items-center justify-center px-2">
-          <span className="text-xs font-semibold text-foreground">{data.totalNotes}</span>
-          <span className="text-[8px] text-muted-foreground/50">notes</span>
+      {/* Quick action buttons */}
+      {!isTertiary && (
+        <div className="flex gap-1.5">
+          <motion.button
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.1 }}
+            className="flex items-center gap-1 px-2 py-1 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors text-[9px] font-medium text-primary"
+            onClick={(e) => {
+              e.stopPropagation();
+              // Navigate to notes with new note action
+              window.location.href = '/notes?action=new';
+            }}
+          >
+            <Plus className="w-3 h-3" />
+            New
+          </motion.button>
+          <motion.button
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.15 }}
+            className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/30 hover:bg-muted/50 transition-colors text-[9px] font-medium text-muted-foreground"
+            onClick={(e) => {
+              e.stopPropagation();
+              window.location.href = '/notes?action=upload';
+            }}
+          >
+            <Upload className="w-3 h-3" />
+            Upload
+          </motion.button>
+          {isPrimary && (
+            <motion.button
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/30 hover:bg-muted/50 transition-colors text-[9px] font-medium text-muted-foreground"
+              onClick={(e) => {
+                e.stopPropagation();
+                window.location.href = '/notes?action=write';
+              }}
+            >
+              <PenLine className="w-3 h-3" />
+              Write
+            </motion.button>
+          )}
+        </div>
+      )}
+
+      {/* Stats badge for tertiary */}
+      {isTertiary && notes.length === 0 && (
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center">
+            <Plus className="w-3 h-3 text-primary/60" />
+          </div>
+          <span className="text-[9px] text-muted-foreground">Create note</span>
         </div>
       )}
     </div>
@@ -432,58 +471,110 @@ function FinanceMiniContent({ data, size }: { data: MiniContentProps["data"]; si
   );
 }
 
-// Maps with visual place chips
-function MapsMiniContent({ data, size }: { data: MiniContentProps["data"]; size: ModuleSize }) {
-  const places = data.recentPlaces.slice(0, size === "primary" ? 3 : size === "tertiary" ? 2 : 2);
+// Mini Google Map component
+const MiniMapComponent = memo(function MiniMapComponent({ 
+  center, 
+  size 
+}: { 
+  center: { lat: number; lng: number }; 
+  size: ModuleSize;
+}) {
   const isPrimary = size === "primary";
+  
+  const { isLoaded } = useJsApiLoader({
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+  });
 
-  if (places.length === 0) {
+  const mapContainerStyle = {
+    width: "100%",
+    height: isPrimary ? "80px" : "60px",
+    borderRadius: "8px",
+  };
+
+  const options: google.maps.MapOptions = {
+    disableDefaultUI: true,
+    zoomControl: false,
+    mapTypeControl: false,
+    streetViewControl: false,
+    fullscreenControl: false,
+    clickableIcons: false,
+    gestureHandling: "none",
+    styles: [
+      { elementType: "labels", stylers: [{ visibility: "off" }] },
+      { featureType: "administrative", stylers: [{ visibility: "off" }] },
+      { featureType: "poi", stylers: [{ visibility: "off" }] },
+      { featureType: "transit", stylers: [{ visibility: "off" }] },
+    ],
+  };
+
+  const onLoad = useCallback((map: google.maps.Map) => {
+    map.setZoom(14);
+  }, []);
+
+  if (!isLoaded) {
     return (
-      <div className="flex items-center gap-3">
-        <div className={cn(
-          "rounded-lg bg-primary/10 flex items-center justify-center",
-          isPrimary ? "w-10 h-10" : "w-8 h-8"
-        )}>
-          <Navigation className={cn("text-primary/60", isPrimary ? "w-5 h-5" : "w-4 h-4")} />
-        </div>
-        <div className="flex flex-col">
-          <span className="text-[10px] text-muted-foreground/80">Ready to navigate</span>
-          <span className="text-[9px] text-muted-foreground/50">Search for a destination</span>
-        </div>
+      <div 
+        className="bg-muted/30 rounded-lg animate-pulse flex items-center justify-center"
+        style={{ height: isPrimary ? "80px" : "60px" }}
+      >
+        <MapPin className="w-4 h-4 text-muted-foreground/30" />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {places.map((place, i) => (
-        <motion.div
-          key={place.id}
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: i * 0.05 }}
-          className={cn(
-            "flex items-center gap-1.5 px-2 py-1 rounded-full",
-            "bg-primary/10 border border-primary/20",
-            "hover:bg-primary/15 transition-colors cursor-pointer"
-          )}
-        >
-          <MapPin className="w-3 h-3 text-primary/70" />
-          <span className="text-[10px] text-foreground/80 truncate max-w-[80px]">
-            {place.name}
-          </span>
-        </motion.div>
-      ))}
-      {data.savedPlacesCount > places.length && (
-        <div className="flex items-center px-2 py-1 text-[9px] text-muted-foreground/50">
-          +{data.savedPlacesCount - places.length} more
+    <GoogleMap
+      mapContainerStyle={mapContainerStyle}
+      center={center}
+      zoom={14}
+      options={options}
+      onLoad={onLoad}
+    />
+  );
+});
+
+// Maps with mini map preview
+function MapsMiniContent({ data, size }: { data: MiniContentProps["data"]; size: ModuleSize }) {
+  const isPrimary = size === "primary";
+  const isTertiary = size === "tertiary";
+  const places = data.recentPlaces.slice(0, 2);
+  
+  // Default to San Francisco if no user location
+  const mapCenter = data.userLocation || { lat: 37.7749, lng: -122.4194 };
+
+  return (
+    <div className="flex flex-col gap-2">
+      {/* Mini map preview */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="overflow-hidden rounded-lg border border-border/30"
+      >
+        <MiniMapComponent center={mapCenter} size={size} />
+      </motion.div>
+
+      {/* Recent places chips */}
+      {!isTertiary && places.length > 0 && (
+        <div className="flex gap-1.5 flex-wrap">
+          {places.map((place, i) => (
+            <motion.div
+              key={place.id}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: i * 0.05 }}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-muted/30 text-[9px] text-muted-foreground"
+            >
+              <MapPin className="w-2.5 h-2.5" />
+              <span className="truncate max-w-[60px]">{place.name}</span>
+            </motion.div>
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-// Travel with countdown and visual trip card
+// Travel with compact countdown
 function TravelMiniContent({ data, size }: { data: MiniContentProps["data"]; size: ModuleSize }) {
   const trip = data.upcomingTrips[0];
   const isPrimary = size === "primary";
@@ -491,12 +582,9 @@ function TravelMiniContent({ data, size }: { data: MiniContentProps["data"]; siz
 
   if (!trip) {
     return (
-      <div className="flex items-center gap-3">
-        <div className={cn(
-          "rounded-lg bg-primary/10 flex items-center justify-center",
-          isPrimary ? "w-10 h-10" : "w-8 h-8"
-        )}>
-          <Plane className={cn("text-primary/60", isPrimary ? "w-5 h-5" : "w-4 h-4")} />
+      <div className="flex items-center gap-2">
+        <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center">
+          <Plane className="w-3.5 h-3.5 text-primary/60" />
         </div>
         <div className="flex flex-col">
           <span className="text-[10px] text-muted-foreground/80">No trips planned</span>
@@ -512,25 +600,9 @@ function TravelMiniContent({ data, size }: { data: MiniContentProps["data"]; siz
     <motion.div 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className={cn(
-        "flex items-center gap-3 p-2 rounded-lg",
-        "bg-gradient-to-r from-primary/5 to-primary/10 border border-primary/10"
-      )}
+      className="flex items-center gap-3 p-2 rounded-lg bg-muted/20 border border-border/30"
     >
-      {/* Countdown */}
-      <div className="flex flex-col items-center shrink-0">
-        <span className={cn(
-          "font-bold text-primary",
-          isPrimary ? "text-xl" : "text-lg"
-        )}>
-          {daysUntil}
-        </span>
-        <span className="text-[8px] text-muted-foreground/60 uppercase tracking-wider">
-          days
-        </span>
-      </div>
-
-      {/* Trip info */}
+      {/* Trip info first */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <Plane className="w-3 h-3 text-primary/60 shrink-0" />
@@ -544,6 +616,12 @@ function TravelMiniContent({ data, size }: { data: MiniContentProps["data"]; siz
             <span>{formatDistanceToNow(trip.startDate, { addSuffix: true })}</span>
           </div>
         )}
+      </div>
+
+      {/* Compact countdown badge */}
+      <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-primary/10 shrink-0">
+        <span className="text-sm font-semibold text-primary">{daysUntil}</span>
+        <span className="text-[8px] text-primary/70">days</span>
       </div>
     </motion.div>
   );
@@ -622,46 +700,42 @@ function HealthMiniContent({ data, size }: { data: MiniContentProps["data"]; siz
   );
 }
 
-// Security with visual status indicators
-function SecurityMiniContent({ size }: { size: ModuleSize }) {
+// Security with device count
+function SecurityMiniContent({ size, data }: { size: ModuleSize; data?: { connectedDevices?: number } }) {
   const isPrimary = size === "primary";
+  const deviceCount = data?.connectedDevices ?? 0;
   
   const systems = [
     { name: "Network", status: "secure" },
-    { name: "Devices", status: "secure" },
     { name: "Auth", status: "secure" },
   ];
 
   return (
-    <div className={cn("flex", isPrimary ? "gap-4" : "gap-3")}>
-      {/* Main status indicator */}
+    <div className={cn("flex items-center", isPrimary ? "gap-4" : "gap-3")}>
+      {/* Device count badge */}
       <motion.div
         initial={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className={cn(
-          "rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0",
-          isPrimary ? "w-12 h-12" : "w-9 h-9"
-        )}
+        className="flex flex-col items-center gap-0.5"
       >
-        <div className="relative">
-          <div className={cn(
-            "rounded-full bg-emerald-500",
-            isPrimary ? "w-3 h-3" : "w-2.5 h-2.5"
-          )} />
-          <motion.div
-            className={cn(
-              "absolute inset-0 rounded-full bg-emerald-500/50",
-              isPrimary ? "w-3 h-3" : "w-2.5 h-2.5"
-            )}
-            animate={{ scale: [1, 2, 1], opacity: [0.5, 0, 0.5] }}
-            transition={{ duration: 2, repeat: Infinity }}
-          />
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+          <Monitor className="w-4 h-4 text-emerald-500" />
+          <span className="text-base font-semibold text-emerald-600 dark:text-emerald-400">
+            {deviceCount}
+          </span>
         </div>
+        <span className="text-[8px] text-muted-foreground/50">devices</span>
       </motion.div>
 
       {/* System statuses */}
       <div className="flex flex-col gap-1">
-        {systems.slice(0, isPrimary ? 3 : 2).map((sys, i) => (
+        <div className="flex items-center gap-1.5">
+          <Shield className="w-3 h-3 text-emerald-500/80" />
+          <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80">
+            All systems secure
+          </span>
+        </div>
+        {systems.map((sys, i) => (
           <motion.div
             key={sys.name}
             initial={{ opacity: 0, x: -4 }}
@@ -669,11 +743,8 @@ function SecurityMiniContent({ size }: { size: ModuleSize }) {
             transition={{ delay: i * 0.05 }}
             className="flex items-center gap-1.5"
           >
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/80" />
-            <span className="text-[10px] text-foreground/70">{sys.name}</span>
-            <span className="text-[9px] text-emerald-600/80 dark:text-emerald-400/80">
-              {sys.status}
-            </span>
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/60" />
+            <span className="text-[9px] text-muted-foreground/70">{sys.name}</span>
           </motion.div>
         ))}
       </div>
@@ -722,29 +793,36 @@ function FilesMiniContent({ size }: { size: ModuleSize }) {
   );
 }
 
-// Creation with project preview
+// Creation - compact design
 function CreationMiniContent({ size }: { size: ModuleSize }) {
-  const isPrimary = size === "primary";
+  const isTertiary = size === "tertiary";
 
   return (
-    <div className="flex items-center gap-3">
-      <motion.div
-        whileHover={{ scale: 1.05 }}
-        className={cn(
-          "rounded-lg bg-gradient-to-br from-primary/10 to-accent/10",
-          "border border-primary/20 flex items-center justify-center",
-          isPrimary ? "w-12 h-12" : "w-9 h-9"
-        )}
-      >
-        <Palette className={cn("text-primary/60", isPrimary ? "w-5 h-5" : "w-4 h-4")} />
-      </motion.div>
-      <div className="flex flex-col">
-        <span className="text-[10px] text-muted-foreground/80">Create something new</span>
-        <div className="flex items-center gap-1 mt-0.5">
-          <Plus className="w-2.5 h-2.5 text-primary/60" />
-          <span className="text-[9px] text-primary/80">New project</span>
-        </div>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] text-muted-foreground/80">3D modeling workspace</span>
       </div>
+      {!isTertiary && (
+        <div className="flex gap-1.5">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex items-center gap-1 px-2 py-1 rounded-md bg-primary/10 text-[9px] font-medium text-primary"
+          >
+            <Plus className="w-3 h-3" />
+            New project
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.05 }}
+            className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/30 text-[9px] text-muted-foreground"
+          >
+            <FolderOpen className="w-3 h-3" />
+            Open
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
@@ -769,7 +847,7 @@ export function ModuleMiniContent({ moduleId, size, data, onClick }: MiniContent
       case "health":
         return <HealthMiniContent data={data} size={size} />;
       case "security":
-        return <SecurityMiniContent size={size} />;
+        return <SecurityMiniContent size={size} data={{ connectedDevices: data.connectedDevices }} />;
       case "files":
         return <FilesMiniContent size={size} />;
       case "creation":

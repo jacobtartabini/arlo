@@ -17,7 +17,7 @@ export function ModuleTile({ module, onClick, sizeClass }: ModuleTileProps) {
   const size = sizeClass || module.size;
   const isPrimary = size === "primary";
   const isTertiary = size === "tertiary";
-  const dashboardData = useDashboardData();
+  const { refresh, isLoading, ...dashboardData } = useDashboardData();
 
   return (
     <motion.div
@@ -78,7 +78,7 @@ export function ModuleTile({ module, onClick, sizeClass }: ModuleTileProps) {
           </div>
 
           {/* Mini interaction content */}
-          {!dashboardData.isLoading && (
+          {!isLoading && (
             <ModuleMiniContent
               moduleId={module.id}
               size={size}

@@ -33,6 +33,7 @@ interface DashboardData {
   // Maps
   recentPlaces: { id: string; name: string; address?: string }[];
   savedPlacesCount: number;
+  userLocation?: { lat: number; lng: number } | null;
   
   // Travel
   upcomingTrips: { id: string; name: string; startDate: Date }[];
@@ -40,6 +41,9 @@ interface DashboardData {
   // Health (placeholder - uses static data for now)
   activityScore: number;
   sleepHours: number;
+  
+  // Security
+  connectedDevices: number;
   
   isLoading: boolean;
 }
@@ -60,9 +64,11 @@ const DEFAULT_DATA: DashboardData = {
   recentTransactions: [],
   recentPlaces: [],
   savedPlacesCount: 0,
+  userLocation: null,
   upcomingTrips: [],
   activityScore: 72,
   sleepHours: 7.5,
+  connectedDevices: 0,
   isLoading: true,
 };
 
@@ -209,9 +215,11 @@ export function useDashboardData() {
         recentTransactions,
         recentPlaces,
         savedPlacesCount: places.length,
+        userLocation: null, // Will be populated by geolocation if available
         upcomingTrips,
         activityScore: 72,
         sleepHours: 7.5,
+        connectedDevices: 0, // Placeholder - could fetch from tailscale-api
         isLoading: false,
       });
     } catch (error) {
