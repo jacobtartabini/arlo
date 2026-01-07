@@ -337,8 +337,24 @@ Deno.serve(async (req) => {
     }
 
     // Decrypt tokens
-    const accessToken = await decrypt(account.access_token);
-    const refreshToken = account.refresh_token ? await decrypt(account.refresh_token) : null;
+    let accessToken: string;
+    let refreshToken: string | null = null;
+    
+    try {
+      accessToken = await decrypt(account.access_token);
+      if (account.refresh_token) {
+        refreshToken = await decrypt(account.refresh_token);
+      }
+      console.log('[inbox-sync] Tokens decrypted successfully');
+    } catch (decryptError) {
+      console.error('[inbox-sync] Token decryption failed:', decryptError);
+      return errorResponse(req, 'Failed to decrypt tokens, please reconnect account', 401);
+    }
+    
+    if (!accessToken) {
+      console.error('[inbox-sync] Access token is empty after decryption');
+      return errorResponse(req, 'Invalid access token, please reconnect account', 401);
+    }
 
     // Check if token needs refresh
     let currentAccessToken = accessToken;
