@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Mail, 
   Plus, 
@@ -268,6 +268,45 @@ export default function InboxSettings() {
   const { userKey, isAuthenticated, isLoading: authLoading } = useAuth();
   const { accounts, loading, refetch, disconnectAccount } = useInboxAccounts();
   const [connectingProvider, setConnectingProvider] = useState<InboxProvider | null>(null);
+
+  // Check for OAuth callback on mount (same pattern as CalendarIntegrations)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('inbox_callback') === 'true') {
+      const code = params.get('code');
+      const state = params.get('state');
+      
+      if (code && state) {
+        handleInboxCallback(code, state);
+      }
+      
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
+  // Handle OAuth callback - exchange code for tokens with JWT auth
+  const handleInboxCallback = async (code: string, state: string) => {
+    setConnectingProvider('gmail'); // Show loading state
+    
+    try {
+      const { data, error } = await invokeWithAuth('inbox-connect', {
+        action: 'exchange_code',
+        code,
+        state,
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast.success(`Connected ${data.email || data.provider}`);
+      refetch();
+    } catch (error: any) {
+      toast.error('Failed to connect: ' + error.message);
+    } finally {
+      setConnectingProvider(null);
+    }
+  };
 
   const handleConnect = async (provider: InboxProvider) => {
     // Ensure authentication is ready
