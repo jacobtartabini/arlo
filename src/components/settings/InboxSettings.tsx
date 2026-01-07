@@ -1,9 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
   Mail, 
-  Plus, 
   RefreshCw, 
-  Trash2, 
   CheckCircle2, 
   XCircle,
   ExternalLink,
@@ -13,7 +11,8 @@ import {
   Send,
   Instagram,
   Linkedin,
-  Loader2
+  Loader2,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,7 +34,6 @@ import { useAuth } from '@/providers/AuthProvider';
 import { PROVIDER_META, type InboxProvider, type InboxAccount } from '@/types/inbox';
 import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
 import { getAuthHeaders } from '@/lib/arloAuth';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -74,196 +72,56 @@ function ProviderIcon({ provider, className }: { provider: InboxProvider; classN
   );
 }
 
-// Provider card for connecting new accounts
-function ProviderCard({ 
-  provider, 
-  onConnect,
+// Integration card matching Calendar/Drive style
+function IntegrationCard({
+  provider,
+  name,
+  description,
+  icon,
+  isConnected,
   isConnecting,
-  existingAccounts,
-  isAuthReady
-}: { 
+  isAuthReady,
+  onConnect,
+}: {
   provider: InboxProvider;
-  onConnect: (provider: InboxProvider) => void;
+  name: string;
+  description: string;
+  icon: React.ReactNode;
+  isConnected: boolean;
   isConnecting: boolean;
-  existingAccounts: InboxAccount[];
   isAuthReady: boolean;
+  onConnect: () => void;
 }) {
-  const meta = PROVIDER_META[provider];
-  const accountsForProvider = existingAccounts.filter(a => a.provider === provider);
-  const isImplemented = IMPLEMENTED_PROVIDERS.includes(provider);
+  if (isConnected) return null; // Don't show if already connected (shows in connected accounts above)
   
   return (
-    <Card className={cn("relative overflow-hidden", !isImplemented && "opacity-60")}>
-      <div 
-        className="absolute top-0 left-0 right-0 h-1" 
-        style={{ backgroundColor: meta.color }} 
-      />
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <ProviderIcon provider={provider} className="h-6 w-6" />
-            <div>
-              <CardTitle className="text-base">{meta.name}</CardTitle>
-              <CardDescription className="text-xs">
-                {isImplemented 
-                  ? `${accountsForProvider.length} account${accountsForProvider.length !== 1 ? 's' : ''} connected`
-                  : 'Integration not yet available'
-                }
-              </CardDescription>
-            </div>
+    <div className="p-4 rounded-lg border bg-muted/20 border-border/20">
+      <div className="flex items-start justify-between">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center shadow-sm">
+            {icon}
           </div>
-          <Button
-            size="sm"
-            onClick={() => onConnect(provider)}
-            disabled={isConnecting || !isImplemented || !isAuthReady}
-            title={!isAuthReady ? 'Authentication required' : undefined}
-          >
-            {isConnecting ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            ) : !isImplemented ? null : (
-              <ExternalLink className="h-4 w-4 mr-2" />
-            )}
-            {isConnecting ? 'Connecting...' : !isImplemented ? 'Coming soon' : 'Connect'}
-          </Button>
+          <div>
+            <h3 className="font-medium text-foreground">{name}</h3>
+            <p className="text-sm text-muted-foreground">{description}</p>
+          </div>
         </div>
-      </CardHeader>
-      
-      {meta.requiresBridge && isImplemented && (
-        <CardContent className="pt-0">
-          <Badge variant="secondary" className="text-xs">
-            Requires business API or bridge
-          </Badge>
-        </CardContent>
-      )}
-      
-      {!meta.supportsSend && isImplemented && (
-        <CardContent className="pt-0">
-          <Badge variant="outline" className="text-xs">
-            Read-only
-          </Badge>
-        </CardContent>
-      )}
-    </Card>
-  );
-}
-
-// Connected account row
-function ConnectedAccountRow({ 
-  account, 
-  onDisconnect,
-  onSync
-}: { 
-  account: InboxAccount;
-  onDisconnect: () => void;
-  onSync: () => void;
-}) {
-  const meta = PROVIDER_META[account.provider];
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  const handleSync = async () => {
-    setIsSyncing(true);
-    try {
-      await onSync();
-      toast.success('Sync started');
-    } catch (err) {
-      toast.error('Failed to start sync');
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  const handleDisconnect = async () => {
-    setIsDeleting(true);
-    try {
-      await onDisconnect();
-      toast.success('Account disconnected');
-    } catch (err) {
-      toast.error('Failed to disconnect account');
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  return (
-    <div className="flex items-center gap-4 p-4 border rounded-lg">
-      <ProviderIcon provider={account.provider} className="h-5 w-5" />
-      
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-medium truncate">
-            {account.account_name}
-          </span>
-          {account.enabled ? (
-            <CheckCircle2 className="h-4 w-4 text-green-500" />
-          ) : (
-            <XCircle className="h-4 w-4 text-destructive" />
-          )}
-        </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          {account.account_email && (
-            <span>{account.account_email}</span>
-          )}
-          {account.last_sync_at && (
-            <>
-              <span>•</span>
-              <span className="flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                Synced {formatDistanceToNow(new Date(account.last_sync_at), { addSuffix: true })}
-              </span>
-            </>
-          )}
-        </div>
-        {account.last_sync_error && (
-          <p className="text-xs text-destructive mt-1">
-            {account.last_sync_error}
-          </p>
-        )}
-      </div>
-      
-      <div className="flex items-center gap-2">
-        {account.scopes && (
-          <Badge variant="outline" className="text-xs hidden md:flex">
-            {account.scopes.length} scopes
-          </Badge>
-        )}
-        
         <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleSync}
-          disabled={isSyncing}
+          size="sm"
+          onClick={onConnect}
+          disabled={isConnecting || !isAuthReady}
         >
-          <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} />
+          {isConnecting ? (
+            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+          ) : (
+            <ExternalLink className="w-4 h-4 mr-2" />
+          )}
+          Connect
         </Button>
-        
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="ghost" size="icon" disabled={isDeleting}>
-              <Trash2 className="h-4 w-4 text-destructive" />
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Disconnect {meta.name} account?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This will remove the connection to {account.account_name}. 
-                Your messages will be deleted from Arlo, but your {meta.name} account will not be affected.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDisconnect}>
-                Disconnect
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
       </div>
     </div>
   );
 }
-
 export default function InboxSettings() {
   const { userKey, isAuthenticated, isLoading: authLoading } = useAuth();
   const { accounts, loading, refetch, disconnectAccount } = useInboxAccounts();
@@ -272,16 +130,23 @@ export default function InboxSettings() {
   // Check for OAuth callback on mount (same pattern as CalendarIntegrations)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('inbox_callback') === 'true') {
-      const code = params.get('code');
-      const state = params.get('state');
-      
-      if (code && state) {
-        handleInboxCallback(code, state);
+    const code = params.get('code');
+    const state = params.get('state');
+    
+    // Check if this is an inbox OAuth callback by looking at the state
+    // State format from inbox-connect includes provider info
+    if (code && state) {
+      try {
+        // State is base64 encoded JSON with nonce and provider
+        const decoded = JSON.parse(atob(state));
+        if (decoded.provider && ['gmail', 'outlook', 'teams'].includes(decoded.provider)) {
+          handleInboxCallback(code, state);
+          // Clean up URL
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+      } catch {
+        // Not an inbox callback, ignore
       }
-      
-      // Clean up URL
-      window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
 
@@ -361,17 +226,6 @@ export default function InboxSettings() {
   const handleDisconnect = async (accountId: string) => {
     await disconnectAccount(accountId);
   };
-
-  const allProviders: InboxProvider[] = [
-    'gmail',
-    'outlook',
-    'teams',
-    'whatsapp',
-    'telegram',
-    'instagram',
-    'linkedin',
-  ];
-
   // Show loading state while auth initializes
   if (authLoading) {
     return (
@@ -391,102 +245,184 @@ export default function InboxSettings() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Show auth warning if not authenticated */}
-      {!isAuthenticated && (
-        <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900/30">
-          <CardContent className="pt-6">
+    <Card className="bg-background/40 backdrop-blur-md border border-border/30">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Mail className="h-5 w-5 text-primary" />
+          Inbox Integrations
+        </CardTitle>
+        <CardDescription>
+          Connect your email and messaging accounts for unified inbox access
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {/* Show auth warning if not authenticated */}
+        {!isAuthenticated && (
+          <div className="p-4 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900/30">
             <p className="text-sm text-amber-900 dark:text-amber-200">
               Authentication required. Please verify your Tailscale connection to connect inbox accounts.
             </p>
-          </CardContent>
-        </Card>
-      )}
-      {/* Connected Accounts */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Mail className="h-5 w-5" />
-            Connected Accounts
-          </CardTitle>
-          <CardDescription>
-            Manage your connected email and messaging accounts
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {loading ? (
-            <div className="space-y-3">
-              {[...Array(2)].map((_, i) => (
-                <Skeleton key={i} className="h-16 w-full" />
-              ))}
-            </div>
-          ) : accounts.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Mail className="h-12 w-12 mx-auto mb-3 opacity-30" />
-              <p>No accounts connected yet</p>
-              <p className="text-sm">Connect an account below to get started</p>
-            </div>
-          ) : (
-            accounts.map(account => (
-              <ConnectedAccountRow
-                key={account.id}
-                account={account}
-                onDisconnect={() => handleDisconnect(account.id)}
-                onSync={() => handleSync(account.id)}
-              />
-            ))
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Add New Account */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Plus className="h-5 w-5" />
-            Add Account
-          </CardTitle>
-          <CardDescription>
-            Connect a new email or messaging account
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {allProviders.map(provider => (
-              <ProviderCard
-                key={provider}
-                provider={provider}
-                onConnect={handleConnect}
-                isConnecting={connectingProvider === provider}
-                existingAccounts={accounts}
-                isAuthReady={isAuthenticated && !!userKey}
-              />
-            ))}
           </div>
-        </CardContent>
-      </Card>
+        )}
 
-      {/* Sync Settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Sync Settings</CardTitle>
-          <CardDescription>
-            Configure how often your accounts are synced
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Messages are synced automatically when available via webhooks. 
-            For providers without webhook support, messages are synced every 5 minutes.
-          </p>
-          <div className="mt-4">
-            <Button variant="outline" onClick={() => refetch()}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Refresh All
-            </Button>
+        {/* Connected Accounts */}
+        {accounts.map(account => {
+          const meta = PROVIDER_META[account.provider];
+          return (
+            <div 
+              key={account.id}
+              className="p-4 rounded-lg border bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/50 dark:border-emerald-800/30"
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center shadow-sm">
+                    <ProviderIcon provider={account.provider} className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-medium text-foreground">{meta.name}</h3>
+                      <Badge variant="outline" className="text-emerald-600 border-emerald-600/30 bg-emerald-100 dark:bg-emerald-950/50">
+                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                        Connected
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      {account.account_email || account.account_name}
+                    </p>
+                    <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                      {account.last_sync_at && (
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          Last sync: {formatDistanceToNow(new Date(account.last_sync_at), { addSuffix: true })}
+                        </span>
+                      )}
+                    </div>
+                    {account.last_sync_error && (
+                      <div className="flex items-center gap-1 mt-2">
+                        <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/10">
+                          <XCircle className="w-3 h-3 mr-1" />
+                          Sync Error
+                        </Badge>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleSync(account.id)}
+                    className="gap-1.5"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Sync
+                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Disconnect {meta.name} account?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will remove the connection to {account.account_name}. 
+                          Your messages will be deleted from Arlo, but your {meta.name} account will not be affected.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => handleDisconnect(account.id)}>
+                          Disconnect
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Gmail Integration */}
+        <IntegrationCard
+          provider="gmail"
+          name="Gmail"
+          description="Read and send Gmail messages"
+          icon={
+            <svg viewBox="0 0 24 24" className="w-6 h-6">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+            </svg>
+          }
+          isConnected={accounts.some(a => a.provider === 'gmail')}
+          isConnecting={connectingProvider === 'gmail'}
+          isAuthReady={isAuthenticated && !!userKey}
+          onConnect={() => handleConnect('gmail')}
+        />
+
+        {/* Outlook Integration */}
+        <IntegrationCard
+          provider="outlook"
+          name="Outlook"
+          description="Read and send Outlook emails"
+          icon={
+            <svg viewBox="0 0 24 24" className="w-6 h-6">
+              <path fill="#0078D4" d="M24 7.387v10.478c0 .23-.08.424-.238.576-.158.152-.352.233-.578.233h-8.77v-6.761l1.983 1.478c.063.047.137.07.22.07.082 0 .156-.023.22-.07l6.163-4.593v-.001.59zm-.818-1.535H14.414l6.165 4.593c.094.063.156.07.22.07.064 0 .127-.007.22-.07l6.163-4.593v-.59c0-.064-.016-.126-.048-.185l-2.952 2.172-3.982-2.987z"/>
+              <path fill="#0078D4" d="M0 6.912v10.176c0 .252.088.466.264.644.176.178.392.268.648.268h9.177V5.087l-9.177 1.23c-.512.068-.912.595-.912 1.595z"/>
+              <path fill="#28A8EA" d="M10.09 18V6l7.09-1v13z"/>
+              <path fill="#0078D4" d="M7.08 10.47c-.232-.35-.54-.525-.924-.525-.44 0-.805.162-1.096.486-.29.324-.436.764-.436 1.32 0 .58.142 1.03.426 1.35.284.32.657.48 1.118.48.372 0 .68-.168.924-.504v.444h1.32v-4.5H7.08v.45zM6.66 12.72c-.168.168-.378.252-.63.252-.252 0-.458-.084-.618-.252-.16-.168-.24-.408-.24-.72 0-.312.08-.556.24-.732.16-.176.366-.264.618-.264.252 0 .462.088.63.264.168.176.252.42.252.732 0 .312-.084.552-.252.72z"/>
+            </svg>
+          }
+          isConnected={accounts.some(a => a.provider === 'outlook')}
+          isConnecting={connectingProvider === 'outlook'}
+          isAuthReady={isAuthenticated && !!userKey}
+          onConnect={() => handleConnect('outlook')}
+        />
+
+        {/* Teams Integration */}
+        <IntegrationCard
+          provider="teams"
+          name="Microsoft Teams"
+          description="Read Teams chat messages"
+          icon={
+            <svg viewBox="0 0 24 24" className="w-6 h-6">
+              <path fill="#5059C9" d="M19.2 7.2h-1.6c.8-.8 1.2-1.9 1.2-3.2 0-2.2-1.8-4-4-4-1.1 0-2.1.4-2.8 1.2V0h-8c-.6 0-1.2.3-1.6.8-.4.5-.6 1-.6 1.6v11.2c0 .6.2 1.1.6 1.6.4.5 1 .8 1.6.8h8V14h4.8c1.3 0 2.4-1.1 2.4-2.4V9.6c0-1.3-1.1-2.4-2-2.4z"/>
+              <path fill="#7B83EB" d="M12 16h-8c-1.1 0-2-.9-2-2V3c0-1.1.9-2 2-2h8c1.1 0 2 .9 2 2v11c0 1.1-.9 2-2 2z"/>
+              <circle fill="#7B83EB" cx="17.6" cy="4" r="2.8"/>
+              <path fill="#fff" d="M5.6 7.2h4.8v1.6H5.6zM5.6 10.4h4.8V12H5.6z"/>
+            </svg>
+          }
+          isConnected={accounts.some(a => a.provider === 'teams')}
+          isConnecting={connectingProvider === 'teams'}
+          isAuthReady={isAuthenticated && !!userKey}
+          onConnect={() => handleConnect('teams')}
+        />
+
+        {/* Coming Soon Providers */}
+        <div className="pt-4 border-t border-border/20">
+          <p className="text-sm text-muted-foreground mb-4">Coming Soon</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {(['whatsapp', 'telegram', 'instagram', 'linkedin'] as InboxProvider[]).map(provider => {
+              const meta = PROVIDER_META[provider];
+              return (
+                <div 
+                  key={provider}
+                  className="p-3 rounded-lg border bg-muted/10 border-border/20 opacity-60"
+                >
+                  <div className="flex items-center gap-2">
+                    <ProviderIcon provider={provider} className="h-4 w-4" />
+                    <span className="text-sm font-medium">{meta.name}</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
