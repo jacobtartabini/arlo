@@ -196,7 +196,7 @@ export const APP_PAGES: NavigationItem[] = [
     description: "Conversations with the Arlo assistant",
     route: "/chat",
     icon: MessageCircle,
-    keywords: ["assistant", "conversations", "messages"]
+    keywords: ["assistant", "conversations", "ai", "arlo"]
   },
   {
     id: "calendar",
@@ -204,11 +204,19 @@ export const APP_PAGES: NavigationItem[] = [
     description: "Schedule, availability, and bookings",
     route: "/calendar",
     icon: Calendar,
-    keywords: ["events", "availability", "meetings"]
+    keywords: ["events", "availability", "meetings", "schedule"]
+  },
+  {
+    id: "maps",
+    title: "Maps",
+    description: "Navigation, directions, and places",
+    route: "/maps",
+    icon: Map,
+    keywords: ["navigation", "directions", "places", "location", "traffic"]
   },
   {
     id: "notes",
-    title: "Smart Notes",
+    title: "Notes",
     description: "Canvas-based notes with drawing tools",
     route: "/notes",
     icon: NotebookPen,
@@ -221,14 +229,6 @@ export const APP_PAGES: NavigationItem[] = [
     route: "/settings",
     icon: Settings,
     keywords: ["profile", "preferences", "integrations"]
-  },
-  {
-    id: "habits",
-    title: "Habits",
-    description: "Daily alignment, routines, and streaks",
-    route: "/habits",
-    icon: Flame,
-    keywords: ["habits", "routines", "streaks", "morning", "night", "xp"]
   }
 ];
 
@@ -242,27 +242,19 @@ export const APP_RESOURCES: NavigationItem[] = [
     keywords: ["meeting", "booking", "calendar", "availability"]
   },
   {
-    id: "security-status",
-    title: "Security Status",
-    description: "Live security health and Tailscale devices",
-    route: "/security",
-    icon: ShieldCheck,
-    keywords: ["uptime", "monitoring", "status", "tailscale", "security"]
-  },
-  {
-    id: "knowledge-brief",
-    title: "Knowledge Briefs",
-    description: "Latest research digests and archives",
-    route: "/knowledge",
-    icon: FileText,
-    keywords: ["documents", "reports", "archives"]
-  },
-  {
     id: "notifications-inbox",
     title: "Notifications Inbox",
     description: "Alerts, reminders, and actionable updates",
     route: "/notifications",
     icon: Bell,
     keywords: ["alerts", "reminders", "follow up"]
+  },
+  {
+    id: "focus-session",
+    title: "Focus Session",
+    description: "Distraction-free timer for deep work",
+    route: "/focus",
+    icon: CalendarCheck,
+    keywords: ["focus", "pomodoro", "timer", "deep work"]
   }
 ];
