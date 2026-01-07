@@ -610,7 +610,7 @@ function FinanceMiniContent({ data, size }: { data: MiniContentProps["data"]; si
   );
 }
 
-// Mini Google Map component
+// Mini Google Map component - interactive with current location
 const MiniMapComponent = memo(function MiniMapComponent({ 
   center, 
   size 
@@ -618,8 +618,6 @@ const MiniMapComponent = memo(function MiniMapComponent({
   center: { lat: number; lng: number }; 
   size: ModuleSize;
 }) {
-  const isPrimary = size === "primary";
-  
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
   });
@@ -636,19 +634,13 @@ const MiniMapComponent = memo(function MiniMapComponent({
     mapTypeControl: false,
     streetViewControl: false,
     fullscreenControl: false,
-    clickableIcons: false,
-    gestureHandling: "none",
+    clickableIcons: true,
+    gestureHandling: "greedy", // Allow drag and interaction
     styles: [
-      { elementType: "labels", stylers: [{ visibility: "off" }] },
-      { featureType: "administrative", stylers: [{ visibility: "off" }] },
-      { featureType: "poi", stylers: [{ visibility: "off" }] },
-      { featureType: "transit", stylers: [{ visibility: "off" }] },
+      { featureType: "poi.business", stylers: [{ visibility: "off" }] },
+      { featureType: "transit", elementType: "labels.icon", stylers: [{ visibility: "off" }] },
     ],
   };
-
-  const onLoad = useCallback((map: google.maps.Map) => {
-    map.setZoom(14);
-  }, []);
 
   if (!isLoaded) {
     return (
@@ -662,9 +654,8 @@ const MiniMapComponent = memo(function MiniMapComponent({
     <GoogleMap
       mapContainerStyle={mapContainerStyle}
       center={center}
-      zoom={14}
+      zoom={15}
       options={options}
-      onLoad={onLoad}
     />
   );
 });
@@ -678,26 +669,26 @@ function MapsMiniContent({ data, size }: { data: MiniContentProps["data"]; size:
   const mapCenter = data.userLocation || { lat: 37.7749, lng: -122.4194 };
 
   return (
-    <div className="relative h-full">
-      {/* Mini map preview - fills available space */}
+    <div className="relative h-full" onClick={(e) => e.stopPropagation()}>
+      {/* Mini map preview - fills available space, interactive */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="absolute inset-0 overflow-hidden rounded-lg border border-border/30 pointer-events-none"
+        className="absolute inset-0 overflow-hidden rounded-lg border border-border/30"
       >
         <MiniMapComponent center={mapCenter} size={size} />
       </motion.div>
 
       {/* Recent places chips (overlayed on top of the map) */}
       {!isTertiary && places.length > 0 && (
-        <div className="absolute left-2 right-2 bottom-2 flex gap-1.5 flex-wrap z-10">
+        <div className="absolute left-2 right-2 bottom-2 flex gap-1.5 flex-wrap z-10 pointer-events-none">
           {places.map((place, i) => (
             <motion.div
               key={place.id}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: i * 0.05 }}
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-muted/50 text-[9px] text-muted-foreground"
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-background/80 backdrop-blur-sm text-[9px] text-muted-foreground shadow-sm"
             >
               <MapPin className="w-2.5 h-2.5" />
               <span className="truncate max-w-[60px]">{place.name}</span>
