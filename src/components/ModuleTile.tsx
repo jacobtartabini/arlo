@@ -3,6 +3,8 @@ import { Card } from "@/components/ui/card";
 import { type Module, type ModuleSize } from "@/lib/app-navigation";
 import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ModuleMiniContent } from "@/components/dashboard/ModuleMiniContent";
+import { useDashboardData } from "@/hooks/useDashboardData";
 
 interface ModuleTileProps {
   module: Module;
@@ -15,6 +17,7 @@ export function ModuleTile({ module, onClick, sizeClass }: ModuleTileProps) {
   const size = sizeClass || module.size;
   const isPrimary = size === "primary";
   const isTertiary = size === "tertiary";
+  const dashboardData = useDashboardData();
 
   return (
     <motion.div
@@ -42,7 +45,7 @@ export function ModuleTile({ module, onClick, sizeClass }: ModuleTileProps) {
           {/* Header */}
           <div className={cn(
             "flex items-start gap-3",
-            isPrimary ? "mb-3" : isTertiary ? "mb-2" : "mb-2"
+            isPrimary ? "mb-2" : isTertiary ? "mb-1" : "mb-2"
           )}>
             {/* Icon */}
             <div className={cn(
@@ -58,7 +61,7 @@ export function ModuleTile({ module, onClick, sizeClass }: ModuleTileProps) {
               />
             </div>
 
-            {/* Title & Summary */}
+            {/* Title only - summary removed to make room for mini content */}
             <div className="min-w-0 flex-1">
               <h3 className={cn(
                 "font-semibold text-foreground tracking-tight leading-tight",
@@ -66,19 +69,25 @@ export function ModuleTile({ module, onClick, sizeClass }: ModuleTileProps) {
               )}>
                 {module.title}
               </h3>
-              {module.summary && (
-                <p className={cn(
-                  "text-muted-foreground truncate",
-                  isPrimary ? "text-xs mt-0.5" : "text-[10px]"
-                )}>
+              {isTertiary && module.summary && (
+                <p className="text-[10px] text-muted-foreground truncate">
                   {module.summary}
                 </p>
               )}
             </div>
           </div>
 
+          {/* Mini interaction content */}
+          {!dashboardData.isLoading && (
+            <ModuleMiniContent
+              moduleId={module.id}
+              size={size}
+              data={dashboardData}
+            />
+          )}
+
           {/* Spacer */}
-          <div className="flex-1" />
+          <div className="flex-1 min-h-1" />
 
           {/* Action hint - only on primary/secondary */}
           {!isTertiary && (
