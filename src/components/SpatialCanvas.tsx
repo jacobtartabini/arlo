@@ -9,90 +9,82 @@ import {
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { APP_MODULES, type Module, type ModulePriority } from "@/lib/app-navigation";
+import { APP_MODULES, type Module } from "@/lib/app-navigation";
 import { cn } from "@/lib/utils";
 import { useUserSettings } from "@/providers/UserSettingsProvider";
 import { ModuleTile } from "@/components/ModuleTile";
 
 type GestureEventType = Event & { scale: number };
 
-// Grid configuration - 48px grid
 const GRID_SIZE = 48;
 
-// Size configurations for each tier
-const SIZE_CONFIG = {
-  primary: { widthUnits: 6, heightUnits: 5 },
-  secondary: { widthUnits: 5, heightUnits: 4 },
-  tertiary: { widthUnits: 4, heightUnits: 3 },
-};
-
-// Radial layout positions - center modules surrounded by inner and outer rings
-interface RadialPosition {
-  id: string;
-  priority: ModulePriority;
-  angle: number; // Position around the ring (in degrees)
-  ring: number; // 0 = center, 1 = inner, 2 = outer
+// Asymmetric hierarchy-driven layout
+// Primary module is dominant and slightly off-center (upper-left of center)
+// Supporting modules cluster nearby, peripheral modules are smaller and distant
+interface LayoutPosition {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
-// Generate positions for visible modules based on priority
-function generateRadialLayout(modules: Module[]): Map<string, { x: number; y: number; width: number; height: number }> {
-  const layout = new Map<string, { x: number; y: number; width: number; height: number }>();
+function generateHierarchyLayout(modules: Module[]): Map<string, LayoutPosition> {
+  const layout = new Map<string, LayoutPosition>();
   
-  const centerModules = modules.filter(m => m.priority === "center");
-  const innerModules = modules.filter(m => m.priority === "inner");
-  const outerModules = modules.filter(m => m.priority === "outer");
+  const primary = modules.filter(m => m.priority === "center");
+  const supporting = modules.filter(m => m.priority === "inner");
+  const peripheral = modules.filter(m => m.priority === "outer");
   
-  // Center ring - positioned side by side in the middle
-  const centerSpacing = GRID_SIZE * 1;
-  let centerX = -(centerModules.length - 1) * (SIZE_CONFIG.primary.widthUnits * GRID_SIZE + centerSpacing) / 2;
-  
-  centerModules.forEach((module) => {
-    const size = SIZE_CONFIG.primary;
-    layout.set(module.id, {
-      x: centerX,
-      y: -(size.heightUnits * GRID_SIZE) / 2,
-      width: size.widthUnits * GRID_SIZE,
-      height: size.heightUnits * GRID_SIZE,
+  // PRIMARY MODULE - The hero, dominant, slightly upper-left of center
+  // This is the "center of gravity" - where the eye goes first
+  if (primary.length > 0) {
+    const heroModule = primary[0];
+    layout.set(heroModule.id, {
+      x: -GRID_SIZE * 4, // Slightly left of center
+      y: -GRID_SIZE * 5, // Above center
+      width: GRID_SIZE * 7,
+      height: GRID_SIZE * 6,
     });
-    centerX += size.widthUnits * GRID_SIZE + centerSpacing;
+    
+    // Second primary (if exists) goes to the right of hero
+    if (primary.length > 1) {
+      layout.set(primary[1].id, {
+        x: GRID_SIZE * 4, // Right of hero
+        y: -GRID_SIZE * 4.5,
+        width: GRID_SIZE * 5.5,
+        height: GRID_SIZE * 5,
+      });
+    }
+  }
+  
+  // SUPPORTING MODULES - Cluster near the primary, asymmetric positions
+  // These are "what's next" actions - placed in a loose cluster below/right
+  const supportingPositions = [
+    { x: -GRID_SIZE * 5.5, y: GRID_SIZE * 2, width: GRID_SIZE * 5, height: GRID_SIZE * 4 },
+    { x: GRID_SIZE * 0.5, y: GRID_SIZE * 2, width: GRID_SIZE * 5, height: GRID_SIZE * 4 },
+    { x: GRID_SIZE * 6.5, y: GRID_SIZE * 1.5, width: GRID_SIZE * 4.5, height: GRID_SIZE * 3.5 },
+  ];
+  
+  supporting.forEach((module, index) => {
+    if (index < supportingPositions.length) {
+      layout.set(module.id, supportingPositions[index]);
+    }
   });
   
-  // Inner ring - arranged in a semi-circle around center
-  const innerRadius = GRID_SIZE * 8;
-  const innerStartAngle = -60;
-  const innerEndAngle = 60;
-  const innerAngleStep = innerModules.length > 1 ? (innerEndAngle - innerStartAngle) / (innerModules.length - 1) : 0;
+  // PERIPHERAL MODULES - Smaller, quieter, scattered to edges
+  // These are utility/low-frequency - clearly not the focus
+  const peripheralPositions = [
+    { x: -GRID_SIZE * 7, y: -GRID_SIZE * 2.5, width: GRID_SIZE * 3.5, height: GRID_SIZE * 3 },
+    { x: GRID_SIZE * 10, y: -GRID_SIZE * 3, width: GRID_SIZE * 3.5, height: GRID_SIZE * 3 },
+    { x: GRID_SIZE * 10.5, y: GRID_SIZE * 1, width: GRID_SIZE * 3.5, height: GRID_SIZE * 3 },
+    { x: -GRID_SIZE * 7.5, y: GRID_SIZE * 4.5, width: GRID_SIZE * 3.5, height: GRID_SIZE * 3 },
+    { x: GRID_SIZE * 6, y: GRID_SIZE * 5.5, width: GRID_SIZE * 3.5, height: GRID_SIZE * 3 },
+  ];
   
-  innerModules.forEach((module, index) => {
-    const size = SIZE_CONFIG.secondary;
-    const angle = innerModules.length === 1 ? 0 : innerStartAngle + index * innerAngleStep;
-    const radians = (angle * Math.PI) / 180;
-    
-    layout.set(module.id, {
-      x: Math.sin(radians) * innerRadius - (size.widthUnits * GRID_SIZE) / 2,
-      y: -Math.cos(radians) * innerRadius - (size.heightUnits * GRID_SIZE) / 2 + GRID_SIZE * 2,
-      width: size.widthUnits * GRID_SIZE,
-      height: size.heightUnits * GRID_SIZE,
-    });
-  });
-  
-  // Outer ring - spread around the edges
-  const outerRadius = GRID_SIZE * 13;
-  const outerStartAngle = -80;
-  const outerEndAngle = 80;
-  const outerAngleStep = outerModules.length > 1 ? (outerEndAngle - outerStartAngle) / (outerModules.length - 1) : 0;
-  
-  outerModules.forEach((module, index) => {
-    const size = SIZE_CONFIG.tertiary;
-    const angle = outerModules.length === 1 ? 0 : outerStartAngle + index * outerAngleStep;
-    const radians = (angle * Math.PI) / 180;
-    
-    layout.set(module.id, {
-      x: Math.sin(radians) * outerRadius - (size.widthUnits * GRID_SIZE) / 2,
-      y: -Math.cos(radians) * outerRadius - (size.heightUnits * GRID_SIZE) / 2 + GRID_SIZE * 4,
-      width: size.widthUnits * GRID_SIZE,
-      height: size.heightUnits * GRID_SIZE,
-    });
+  peripheral.forEach((module, index) => {
+    if (index < peripheralPositions.length) {
+      layout.set(module.id, peripheralPositions[index]);
+    }
   });
   
   return layout;
@@ -128,10 +120,8 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
   const navigate = useNavigate();
   const hasInitializedRecenter = useRef(false);
   
-  // Get user's module visibility settings
   const { settings } = useUserSettings();
   
-  // Filter modules based on visibility settings
   const visibleModules = useMemo(() => {
     return APP_MODULES.filter(module => {
       const visibility = settings?.dashboard_module_visibility;
@@ -139,9 +129,8 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
     });
   }, [settings?.dashboard_module_visibility]);
   
-  // Generate radial layout for visible modules
   const modulePositions = useMemo(() => {
-    return generateRadialLayout(visibleModules);
+    return generateHierarchyLayout(visibleModules);
   }, [visibleModules]);
 
   const isControlled = controlledScale !== undefined;
@@ -172,22 +161,17 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
     isDraggingRef.current = isDragging;
   }, [isDragging]);
 
-  // Snap position to grid
   const snapToGrid = useCallback((pos: { x: number; y: number }) => {
     const snapThreshold = GRID_SIZE * 0.4;
     const nearestX = Math.round(pos.x / GRID_SIZE) * GRID_SIZE;
     const nearestY = Math.round(pos.y / GRID_SIZE) * GRID_SIZE;
     
-    const distX = Math.abs(pos.x - nearestX);
-    const distY = Math.abs(pos.y - nearestY);
-    
     return {
-      x: distX < snapThreshold ? nearestX : pos.x,
-      y: distY < snapThreshold ? nearestY : pos.y
+      x: Math.abs(pos.x - nearestX) < snapThreshold ? nearestX : pos.x,
+      y: Math.abs(pos.y - nearestY) < snapThreshold ? nearestY : pos.y
     };
   }, []);
 
-  // Recenter handling
   useEffect(() => {
     if (recenterSignal === undefined) return;
     if (!hasInitializedRecenter.current) {
@@ -207,14 +191,12 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
     setScaleValue(1);
   }, [recenterSignal, setScaleValue]);
 
-  // Gesture handling for Safari
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const handleGestureStart = (event: Event) => {
-      const gestureEvent = event as GestureEventType;
-      gestureEvent.preventDefault();
+      (event as GestureEventType).preventDefault();
       pinchStartScale.current = userScale;
       isPinchingRef.current = true;
     };
@@ -289,34 +271,29 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
   const handleWheel = useCallback((e: ReactWheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
-      const zoomIntensity = e.deltaMode === 0 ? 0.002 : 0.001;
-      const delta = e.deltaY * -zoomIntensity;
+      const delta = e.deltaY * (e.deltaMode === 0 ? -0.002 : -0.001);
       setScaleValue(userScale + delta);
       return;
     }
 
     const multiplier = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? window.innerHeight : 1;
-    let deltaX = e.deltaX;
-    let deltaY = e.deltaY;
+    let deltaX = e.deltaX * multiplier * -1;
+    let deltaY = e.deltaY * multiplier * -1;
 
-    if (Math.abs(deltaX) < 0.01 && Math.abs(deltaY) > 0 && e.shiftKey) {
+    if (Math.abs(e.deltaX) < 0.01 && Math.abs(e.deltaY) > 0 && e.shiftKey) {
       deltaX = deltaY;
       deltaY = 0;
     }
-
-    deltaX *= multiplier * -1;
-    deltaY *= multiplier * -1;
 
     if (deltaX === 0 && deltaY === 0) return;
 
     e.preventDefault();
     velocityRef.current = { x: deltaX, y: deltaY };
-    setPosition((prev) => ({ x: prev.x + deltaX, y: prev.y + deltaY }));
+    setPosition(prev => ({ x: prev.x + deltaX, y: prev.y + deltaY }));
   }, [setScaleValue, userScale]);
 
   const handlePointerDown = useCallback((e: ReactPointerEvent) => {
-    const container = containerRef.current;
-    if (!container) return;
+    if (!containerRef.current) return;
 
     activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
@@ -327,8 +304,7 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
       velocityRef.current = { x: 0, y: 0 };
     } else if (activePointers.current.size === 2) {
       const points = Array.from(activePointers.current.values());
-      const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
-      pinchStartDistance.current = distance;
+      pinchStartDistance.current = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
       pinchStartScale.current = userScale;
       isPinchingRef.current = true;
       setIsDragging(false);
@@ -354,9 +330,8 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
       const deltaY = e.clientY - lastMousePos.current.y;
 
       if (!isDraggingRef.current) {
-        const totalDeltaX = e.clientX - pointerStartPos.current.x;
-        const totalDeltaY = e.clientY - pointerStartPos.current.y;
-        if (Math.hypot(totalDeltaX, totalDeltaY) < 3) {
+        const totalDelta = Math.hypot(e.clientX - pointerStartPos.current.x, e.clientY - pointerStartPos.current.y);
+        if (totalDelta < 3) {
           lastMousePos.current = { x: e.clientX, y: e.clientY };
           return;
         }
@@ -369,7 +344,7 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
       e.preventDefault();
       velocityRef.current = { x: deltaX, y: deltaY };
       lastMousePos.current = { x: e.clientX, y: e.clientY };
-      setPosition((prev) => ({ x: prev.x + deltaX, y: prev.y + deltaY }));
+      setPosition(prev => ({ x: prev.x + deltaX, y: prev.y + deltaY }));
     }
   }, [setScaleValue]);
 
@@ -379,8 +354,7 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
 
       if (panPointerId.current === pointerId) {
         panPointerId.current = null;
-        const shouldApplyMomentum = !isPinchingRef.current && isDraggingRef.current;
-        endDrag(shouldApplyMomentum);
+        endDrag(!isPinchingRef.current && isDraggingRef.current);
       }
 
       if (activePointers.current.size < 2) {
@@ -421,6 +395,12 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
     };
   }, [releasePointer]);
 
+  // Sort modules by priority for z-index stacking
+  const sortedModules = useMemo(() => {
+    const priorityOrder = { center: 0, inner: 1, outer: 2 };
+    return [...visibleModules].sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+  }, [visibleModules]);
+
   return (
     <div
       ref={containerRef}
@@ -433,24 +413,21 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
       onPointerCancel={handlePointerCancel}
       style={{ cursor: isDragging ? "grabbing" : "grab", touchAction: "none" }}
     >
-      {/* Subtle radial gradient background */}
+      {/* Subtle gradient - draws eye toward center-left */}
       <div 
         className="absolute inset-0 pointer-events-none"
         style={{
           background: `
-            radial-gradient(ellipse 80% 60% at 50% 50%, 
-              hsl(var(--primary) / 0.04) 0%, 
-              transparent 50%
+            radial-gradient(ellipse 60% 50% at 45% 45%, 
+              hsl(var(--primary) / 0.03) 0%, 
+              transparent 60%
             ),
-            radial-gradient(circle at 50% 50%, 
-              hsl(var(--background)) 0%, 
-              hsl(var(--background)) 100%
-            )
+            hsl(var(--background))
           `
         }}
       />
 
-      {/* Dot grid background */}
+      {/* Dot grid */}
       <motion.div
         className="absolute pointer-events-none"
         animate={{ x: position.x, y: position.y, scale: userScale }}
@@ -462,12 +439,12 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
           top: '50%',
           marginLeft: -GRID_SIZE * 40,
           marginTop: -GRID_SIZE * 40,
-          backgroundImage: `radial-gradient(circle, hsl(var(--muted-foreground) / 0.2) 1.5px, transparent 1.5px)`,
+          backgroundImage: `radial-gradient(circle, hsl(var(--muted-foreground) / 0.15) 1px, transparent 1px)`,
           backgroundSize: `${GRID_SIZE}px ${GRID_SIZE}px`,
         }}
       />
 
-      {/* Main canvas with modules */}
+      {/* Modules */}
       <div className="absolute inset-0 flex items-center justify-center">
         <motion.div
           animate={{ x: position.x, y: position.y, scale: userScale }}
@@ -476,39 +453,37 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
           style={{ width: GRID_SIZE * 32, height: GRID_SIZE * 24 }}
         >
           <AnimatePresence>
-            {visibleModules.map((module, index) => {
+            {sortedModules.map((module, index) => {
               const pos = modulePositions.get(module.id);
               if (!pos) return null;
 
               const isHovered = hoveredModule === module.id;
+              const isPrimary = module.priority === "center";
 
               return (
                 <motion.div
                   key={module.id}
-                  initial={{ opacity: 0, scale: 0.9 }}
+                  initial={{ opacity: 0, scale: 0.95 }}
                   animate={{
                     opacity: 1,
-                    scale: isHovered ? 1.02 : 1,
-                    x: pos.x,
-                    y: pos.y,
+                    scale: isHovered ? 1.015 : 1,
                   }}
-                  exit={{ opacity: 0, scale: 0.9 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
                   transition={{
-                    delay: index * 0.04,
+                    delay: isPrimary ? 0 : 0.05 + index * 0.03,
                     type: "spring",
                     stiffness: 400,
                     damping: 30,
                   }}
                   className={cn(
                     "absolute",
-                    module.priority === "center" && "z-20",
-                    module.priority === "inner" && "z-10"
+                    isPrimary ? "z-30" : module.priority === "inner" ? "z-20" : "z-10"
                   )}
                   style={{
+                    left: `calc(50% + ${pos.x}px)`,
+                    top: `calc(50% + ${pos.y}px)`,
                     width: pos.width,
                     height: pos.height,
-                    left: "50%",
-                    top: "50%",
                   }}
                   onMouseEnter={() => setHoveredModule(module.id)}
                   onMouseLeave={() => setHoveredModule(null)}
