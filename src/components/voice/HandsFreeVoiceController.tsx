@@ -11,6 +11,7 @@ import { AmbientVoiceFeedback } from './AmbientVoiceFeedback';
  * - Always-on wake word detection when enabled in settings
  * - Silent background chat creation (no navigation)
  * - Minimal edge glow feedback for voice state
+ * - Status indicator integrated into top-right StatusChip
  * - User stays on their current page
  */
 export function HandsFreeVoiceController() {
@@ -28,6 +29,7 @@ export function HandsFreeVoiceController() {
     return null;
   }
 
+  // Only render edge glow feedback - status indicator is in StatusChip
   return (
     <AmbientVoiceFeedback
       voiceState={voiceState}

@@ -28,6 +28,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useNotifications } from "@/providers/NotificationsProvider";
+import { useVoiceState } from "@/providers/VoiceStateProvider";
 import { cn } from "@/lib/utils";
 
 const PRESET_ZOOM_LEVELS = [50, 75, 100, 125, 150, 175, 200];
@@ -51,6 +52,7 @@ export function StatusChip({
 }: StatusChipProps) {
   const navigate = useNavigate();
   const { notifications, unreadCount, markAsRead, markAllAsRead, isLoading } = useNotifications();
+  const { voiceState, isSessionActive, isWakeWordListening, isHandsFreeEnabled } = useVoiceState();
   const [isChipInteracting, setIsChipInteracting] = useState(false);
   const [isZoomMenuOpen, setIsZoomMenuOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -61,6 +63,59 @@ export function StatusChip({
 
   // Get recent notifications (max 5)
   const recentNotifications = notifications.slice(0, 5);
+
+  // Determine status dot color based on voice state
+  const getStatusDotColor = () => {
+    if (!isHandsFreeEnabled) {
+      return 'bg-emerald-500'; // Default online state
+    }
+    
+    if (isSessionActive) {
+      switch (voiceState) {
+        case 'listening':
+          return 'bg-green-500';
+        case 'thinking':
+          return 'bg-amber-500';
+        case 'speaking':
+          return 'bg-blue-500';
+        default:
+          return 'bg-emerald-500';
+      }
+    }
+    
+    // Wake word listening - subtle pulsing emerald
+    if (isWakeWordListening) {
+      return 'bg-emerald-500';
+    }
+    
+    return 'bg-emerald-500';
+  };
+
+  // Get status text based on voice state
+  const getStatusText = () => {
+    if (!isHandsFreeEnabled) {
+      return 'Arlo Online';
+    }
+    
+    if (isSessionActive) {
+      switch (voiceState) {
+        case 'listening':
+          return 'Listening...';
+        case 'thinking':
+          return 'Thinking...';
+        case 'speaking':
+          return 'Speaking...';
+        default:
+          return 'Arlo Online';
+      }
+    }
+    
+    if (isWakeWordListening) {
+      return 'Hey Arlo';
+    }
+    
+    return 'Arlo Online';
+  };
 
   const handleChipEnter = useCallback(() => {
     setIsChipInteracting(true);
@@ -160,13 +215,30 @@ export function StatusChip({
               {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           ) : (
-            // No unread or expanded: show status dot
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+            // No unread or expanded: show status dot with voice-aware color
+            <motion.span 
+              className={cn("h-1.5 w-1.5 rounded-full", getStatusDotColor())}
+              animate={isSessionActive || isWakeWordListening ? {
+                scale: [1, 1.3, 1],
+                opacity: [1, 0.8, 1],
+              } : {}}
+              transition={{
+                duration: isSessionActive ? 1 : 2,
+                repeat: Infinity,
+                ease: 'easeInOut',
+              }}
+            />
           )}
           {isChipExpanded ? (
-            <span>Arlo Online</span>
+            <span className={cn(
+              isSessionActive && voiceState === 'listening' && 'text-green-500',
+              isSessionActive && voiceState === 'thinking' && 'text-amber-500',
+              isSessionActive && voiceState === 'speaking' && 'text-blue-500',
+            )}>
+              {getStatusText()}
+            </span>
           ) : (
-            <span className="sr-only">Arlo Online</span>
+            <span className="sr-only">{getStatusText()}</span>
           )}
         </span>
 
