@@ -13,6 +13,13 @@ const PORCUPINE_MODEL = {
   forceWrite: false,
 };
 
+// Custom "Hey Arlo" wake word trained in Picovoice Console
+const HEY_ARLO_KEYWORD = {
+  publicPath: '/hey-arlo.ppn',
+  label: 'Hey Arlo',
+  sensitivity: 0.7,
+};
+
 export function usePorcupineWakeWord({ onWakeWordDetected, enabled = false }: UsePorcupineWakeWordOptions) {
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,11 +73,10 @@ export function usePorcupineWakeWord({ onWakeWordDetected, enabled = false }: Us
       });
       streamRef.current = stream;
 
-      // Create Porcupine with built-in "Alexa" keyword (phonetically similar to "Arlo")
-      // Note: Custom wake words like "Hey Arlo" require training in Picovoice Console
+      // Create Porcupine with custom "Hey Arlo" wake word
       porcupineRef.current = await PorcupineWorker.create(
         keyData.accessKey,
-        [{ builtin: BuiltInKeyword.Alexa, sensitivity: 0.65 }],
+        [HEY_ARLO_KEYWORD],
         (detection) => {
           console.log('[Porcupine] Wake word detected:', detection);
           onWakeWordDetected();
