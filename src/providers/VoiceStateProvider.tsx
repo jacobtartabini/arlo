@@ -10,6 +10,8 @@ interface VoiceStateContextValue {
   isHandsFreeEnabled: boolean;
   transcript: string;
   error: string | null;
+  isMuted: boolean;
+  toggleMute: () => void;
 }
 
 const VoiceStateContext = createContext<VoiceStateContextValue | null>(null);
@@ -23,6 +25,8 @@ export function VoiceStateProvider({ children }: { children: ReactNode }) {
     isHandsFreeEnabled,
     transcript,
     error,
+    isMuted,
+    toggleMute,
   } = useHandsFreeVoice();
 
   return (
@@ -35,6 +39,8 @@ export function VoiceStateProvider({ children }: { children: ReactNode }) {
         isHandsFreeEnabled,
         transcript,
         error,
+        isMuted,
+        toggleMute,
       }}
     >
       {children}
@@ -54,6 +60,8 @@ export function useVoiceState() {
       isHandsFreeEnabled: false,
       transcript: '',
       error: null,
+      isMuted: false,
+      toggleMute: () => {},
     };
   }
   return context;
