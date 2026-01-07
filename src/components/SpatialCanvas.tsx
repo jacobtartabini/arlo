@@ -13,14 +13,13 @@ import { APP_MODULES, type Module } from "@/lib/app-navigation";
 import { cn } from "@/lib/utils";
 import { useUserSettings } from "@/providers/UserSettingsProvider";
 import { ModuleTile } from "@/components/ModuleTile";
+import type { ModuleLayout } from "@/types/settings";
 
 type GestureEventType = Event & { scale: number };
 
 const GRID_SIZE = 48;
 
-// Asymmetric hierarchy-driven layout
-// Primary module is dominant and slightly off-center (upper-left of center)
-// Supporting modules cluster nearby, peripheral modules are smaller and distant
+// Layout position includes pixel values for rendering
 interface LayoutPosition {
   x: number;
   y: number;
@@ -28,66 +27,47 @@ interface LayoutPosition {
   height: number;
 }
 
-function generateHierarchyLayout(modules: Module[]): Map<string, LayoutPosition> {
-  const layout = new Map<string, LayoutPosition>();
-  
-  const primary = modules.filter(m => m.priority === "center");
-  const supporting = modules.filter(m => m.priority === "inner");
-  const peripheral = modules.filter(m => m.priority === "outer");
-  
-  // PRIMARY MODULE - The hero, dominant, slightly upper-left of center
-  // This is the "center of gravity" - where the eye goes first
-  if (primary.length > 0) {
-    const heroModule = primary[0];
-    layout.set(heroModule.id, {
-      x: -GRID_SIZE * 4, // Slightly left of center
-      y: -GRID_SIZE * 5, // Above center
-      width: GRID_SIZE * 7,
-      height: GRID_SIZE * 6,
-    });
-    
-    // Second primary (if exists) goes to the right of hero
-    if (primary.length > 1) {
-      layout.set(primary[1].id, {
-        x: GRID_SIZE * 4, // Right of hero
-        y: -GRID_SIZE * 4.5,
-        width: GRID_SIZE * 5.5,
-        height: GRID_SIZE * 5,
-      });
-    }
+// Size dimensions in grid units
+const SIZE_DIMENSIONS: Record<'small' | 'medium' | 'large', { width: number; height: number }> = {
+  small: { width: 3.5, height: 3 },
+  medium: { width: 5, height: 4 },
+  large: { width: 7, height: 6 },
+};
+
+// Get default layout for a module based on priority
+function getDefaultModuleLayout(module: Module, index: number): ModuleLayout {
+  if (module.priority === 'center') {
+    return index === 0 
+      ? { x: -4, y: -5, size: 'large' }
+      : { x: 4, y: -4, size: 'large' };
+  } else if (module.priority === 'inner') {
+    const positions = [
+      { x: -5, y: 2, size: 'medium' as const },
+      { x: 1, y: 2, size: 'medium' as const },
+      { x: 7, y: 2, size: 'medium' as const },
+    ];
+    return positions[index] || { x: 0, y: 0, size: 'medium' };
+  } else {
+    const positions = [
+      { x: -7, y: -2, size: 'small' as const },
+      { x: 10, y: -3, size: 'small' as const },
+      { x: 11, y: 1, size: 'small' as const },
+      { x: -8, y: 5, size: 'small' as const },
+      { x: 6, y: 6, size: 'small' as const },
+    ];
+    return positions[index] || { x: 0, y: 0, size: 'small' };
   }
-  
-  // SUPPORTING MODULES - Cluster near the primary, asymmetric positions
-  // These are "what's next" actions - placed in a loose cluster below/right
-  const supportingPositions = [
-    { x: -GRID_SIZE * 5.5, y: GRID_SIZE * 2, width: GRID_SIZE * 5, height: GRID_SIZE * 4 },
-    { x: GRID_SIZE * 0.5, y: GRID_SIZE * 2, width: GRID_SIZE * 5, height: GRID_SIZE * 4 },
-    { x: GRID_SIZE * 6.5, y: GRID_SIZE * 1.5, width: GRID_SIZE * 4.5, height: GRID_SIZE * 3.5 },
-  ];
-  
-  supporting.forEach((module, index) => {
-    if (index < supportingPositions.length) {
-      layout.set(module.id, supportingPositions[index]);
-    }
-  });
-  
-  // PERIPHERAL MODULES - Smaller, quieter, scattered to edges
-  // These are utility/low-frequency - clearly not the focus
-  const peripheralPositions = [
-    { x: -GRID_SIZE * 7, y: -GRID_SIZE * 2.5, width: GRID_SIZE * 3.5, height: GRID_SIZE * 3 },
-    { x: GRID_SIZE * 10, y: -GRID_SIZE * 3, width: GRID_SIZE * 3.5, height: GRID_SIZE * 3 },
-    { x: GRID_SIZE * 10.5, y: GRID_SIZE * 1, width: GRID_SIZE * 3.5, height: GRID_SIZE * 3 },
-    { x: -GRID_SIZE * 7.5, y: GRID_SIZE * 4.5, width: GRID_SIZE * 3.5, height: GRID_SIZE * 3 },
-    { x: GRID_SIZE * 6, y: GRID_SIZE * 5.5, width: GRID_SIZE * 3.5, height: GRID_SIZE * 3 },
-  ];
-  
-  peripheral.forEach((module, index) => {
-    if (index < peripheralPositions.length) {
-      layout.set(module.id, peripheralPositions[index]);
-    }
-  });
-  
-  return layout;
+}
+
+// Convert grid-based layout to pixel positions
+function layoutToPixels(layout: ModuleLayout): LayoutPosition {
+  const dims = SIZE_DIMENSIONS[layout.size];
+  return {
+    x: layout.x * GRID_SIZE,
+    y: layout.y * GRID_SIZE,
+    width: dims.width * GRID_SIZE,
+    height: dims.height * GRID_SIZE,
+  };
 }
 
 interface SpatialCanvasProps {
@@ -129,9 +109,29 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
     });
   }, [settings?.dashboard_module_visibility]);
   
+  // Calculate module positions using saved layouts or defaults
   const modulePositions = useMemo(() => {
-    return generateHierarchyLayout(visibleModules);
-  }, [visibleModules]);
+    const positions = new Map<string, LayoutPosition>();
+    const savedLayouts = settings?.dashboard_module_layouts || {};
+    
+    // Group modules by priority to calculate default indices
+    const byPriority: Record<string, Module[]> = { center: [], inner: [], outer: [] };
+    visibleModules.forEach(m => byPriority[m.priority].push(m));
+    
+    visibleModules.forEach((module) => {
+      // Get saved layout or default
+      const saved = savedLayouts[module.id] as ModuleLayout | undefined;
+      if (saved) {
+        positions.set(module.id, layoutToPixels(saved));
+      } else {
+        const priorityIndex = byPriority[module.priority].indexOf(module);
+        const defaultLayout = getDefaultModuleLayout(module, priorityIndex);
+        positions.set(module.id, layoutToPixels(defaultLayout));
+      }
+    });
+    
+    return positions;
+  }, [visibleModules, settings?.dashboard_module_layouts]);
 
   const isControlled = controlledScale !== undefined;
   const userScale = isControlled ? controlledScale : internalScale;
