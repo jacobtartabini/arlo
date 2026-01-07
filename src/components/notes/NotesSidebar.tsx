@@ -1,4 +1,4 @@
-import { useState, useCallback, DragEvent } from "react";
+import { useState, useCallback, DragEvent, useMemo } from "react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,9 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   Collapsible,
@@ -18,6 +21,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   ChevronDown,
+  ChevronRight,
   Copy,
   FileText,
   FolderOpen,
@@ -41,7 +45,7 @@ interface NotesSidebarProps {
   onSelectNote: (noteId: string) => void;
   onSelectFolder: (folderId: string | null) => void;
   onCreateNote: () => void;
-  onCreateFolder: () => void;
+  onCreateFolder: (parentId?: string) => void;
   onDeleteNote: (noteId: string) => void;
   onDuplicateNote: (noteId: string) => void;
   onTogglePin: (noteId: string) => void;
@@ -70,15 +74,53 @@ export function NotesSidebar({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const [foldersExpanded, setFoldersExpanded] = useState(true);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [draggedNoteId, setDraggedNoteId] = useState<string | null>(null);
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null | "none">(null);
 
-  // Filter notes based on search and selected folder
-  const filteredNotes = notes.filter((note) => {
-    const matchesSearch = note.title.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFolder = selectedFolderId === null || note.folderId === selectedFolderId;
-    return matchesSearch && matchesFolder;
-  });
+  // Organize folders into a tree structure
+  const { rootFolders, subfolderMap } = useMemo(() => {
+    const subMap = new Map<string, NoteFolder[]>();
+    const roots: NoteFolder[] = [];
+    
+    folders.forEach(folder => {
+      if (folder.parentId) {
+        const existing = subMap.get(folder.parentId) || [];
+        subMap.set(folder.parentId, [...existing, folder]);
+      } else {
+        roots.push(folder);
+      }
+    });
+    
+    return { rootFolders: roots, subfolderMap: subMap };
+  }, [folders]);
+
+  // Get all folder IDs including children for a parent folder
+  const getAllChildFolderIds = useCallback((folderId: string): string[] => {
+    const children = subfolderMap.get(folderId) || [];
+    const allIds: string[] = [folderId];
+    children.forEach(child => {
+      allIds.push(...getAllChildFolderIds(child.id));
+    });
+    return allIds;
+  }, [subfolderMap]);
+
+  // Filter notes based on search and selected folder (including subfolders)
+  const filteredNotes = useMemo(() => {
+    return notes.filter((note) => {
+      const matchesSearch = note.title.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      if (selectedFolderId === null) {
+        return matchesSearch;
+      }
+      
+      // Check if note is in selected folder or any of its subfolders
+      const relevantFolderIds = getAllChildFolderIds(selectedFolderId);
+      const matchesFolder = note.folderId && relevantFolderIds.includes(note.folderId);
+      
+      return matchesSearch && matchesFolder;
+    });
+  }, [notes, searchQuery, selectedFolderId, getAllChildFolderIds]);
 
   const pinnedNotes = filteredNotes.filter((n) => n.pinned);
   const unpinnedNotes = filteredNotes.filter((n) => !n.pinned);
@@ -104,12 +146,23 @@ export function NotesSidebar({
     );
   };
 
+  const toggleFolderExpanded = (folderId: string) => {
+    setExpandedFolders(prev => {
+      const next = new Set(prev);
+      if (next.has(folderId)) {
+        next.delete(folderId);
+      } else {
+        next.add(folderId);
+      }
+      return next;
+    });
+  };
+
   // Drag and drop handlers
   const handleDragStart = useCallback((e: DragEvent<HTMLDivElement>, noteId: string) => {
     setDraggedNoteId(noteId);
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", noteId);
-    // Add drag ghost styling
     if (e.currentTarget) {
       e.currentTarget.style.opacity = "0.5";
     }
@@ -143,11 +196,116 @@ export function NotesSidebar({
     setDragOverFolderId(null);
   }, [draggedNoteId, onMoveToFolder]);
 
+  // Get folder path for display
+  const getFolderPath = useCallback((folderId: string): string => {
+    const folder = folders.find(f => f.id === folderId);
+    if (!folder) return "";
+    
+    if (folder.parentId) {
+      const parent = folders.find(f => f.id === folder.parentId);
+      if (parent) {
+        return `${parent.name} / ${folder.name}`;
+      }
+    }
+    return folder.name;
+  }, [folders]);
+
+  const renderFolderItem = (folder: NoteFolder, depth: number = 0) => {
+    const count = notes.filter(n => n.folderId === folder.id).length;
+    const isDragOver = dragOverFolderId === folder.id;
+    const subfolders = subfolderMap.get(folder.id) || [];
+    const hasSubfolders = subfolders.length > 0;
+    const isExpanded = expandedFolders.has(folder.id);
+    const isSelected = selectedFolderId === folder.id;
+
+    return (
+      <div key={folder.id}>
+        <div className="group flex items-center">
+          {hasSubfolders ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 p-0"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleFolderExpanded(folder.id);
+              }}
+            >
+              {isExpanded ? (
+                <ChevronDown className="h-3 w-3 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="h-3 w-3 text-muted-foreground" />
+              )}
+            </Button>
+          ) : (
+            <div className="w-6" />
+          )}
+          <button
+            onClick={() => onSelectFolder(folder.id)}
+            onDragOver={(e) => handleDragOver(e, folder.id)}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, folder.id)}
+            className={cn(
+              "flex flex-1 items-center gap-2 rounded-lg px-2 py-2 text-sm transition-all",
+              isSelected
+                ? "bg-primary/10 text-primary font-medium"
+                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+              isDragOver && "ring-2 ring-primary ring-offset-2 ring-offset-background"
+            )}
+            style={{ paddingLeft: `${depth * 12 + 8}px` }}
+          >
+            <span 
+              className="h-3 w-3 rounded-full flex-shrink-0"
+              style={{ backgroundColor: folder.color }}
+            />
+            <span className="truncate">{folder.name}</span>
+            <span className="ml-auto text-xs text-muted-foreground">
+              {count}
+            </span>
+          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MoreHorizontal className="h-3 w-3 text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              {!folder.parentId && (
+                <DropdownMenuItem onClick={() => onCreateFolder(folder.id)}>
+                  <FolderPlus className="mr-2 h-4 w-4" />
+                  Add Subfolder
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem
+                onClick={() => onDeleteFolder(folder.id)}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete Folder
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        {hasSubfolders && isExpanded && (
+          <div className="ml-2">
+            {subfolders.map(subfolder => renderFolderItem(subfolder, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const renderNoteItem = (note: Note) => {
     const isSelected = note.id === selectedNoteId;
     const isEditing = editingId === note.id;
-    const noteFolder = folders.find(f => f.id === note.folderId);
     const isDragging = draggedNoteId === note.id;
+    const folderPath = note.folderId ? getFolderPath(note.folderId) : null;
+    const noteFolder = note.folderId ? folders.find(f => f.id === note.folderId) : null;
 
     return (
       <div
@@ -195,14 +353,15 @@ export function NotesSidebar({
                 <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
                   {note.noteType}
                 </span>
-                {noteFolder && !selectedFolderId && (
+                {folderPath && !selectedFolderId && noteFolder && (
                   <>
                     <span className="text-muted-foreground/40">·</span>
                     <span 
-                      className="text-[10px] font-medium"
+                      className="text-[10px] font-medium truncate max-w-[100px]"
                       style={{ color: noteFolder.color }}
+                      title={folderPath}
                     >
-                      {noteFolder.name}
+                      {folderPath}
                     </span>
                   </>
                 )}
@@ -258,18 +417,52 @@ export function NotesSidebar({
                   <FolderOpen className="mr-2 h-4 w-4" />
                   Remove from folder
                 </DropdownMenuItem>
-                {folders.map(folder => (
-                  <DropdownMenuItem 
-                    key={folder.id}
-                    onClick={() => onMoveToFolder(note.id, folder.id)}
-                  >
-                    <span 
-                      className="mr-2 h-3 w-3 rounded-full inline-block"
-                      style={{ backgroundColor: folder.color }}
-                    />
-                    Move to {folder.name}
-                  </DropdownMenuItem>
-                ))}
+                {rootFolders.map(folder => {
+                  const subs = subfolderMap.get(folder.id) || [];
+                  if (subs.length > 0) {
+                    return (
+                      <DropdownMenuSub key={folder.id}>
+                        <DropdownMenuSubTrigger>
+                          <span 
+                            className="mr-2 h-3 w-3 rounded-full inline-block"
+                            style={{ backgroundColor: folder.color }}
+                          />
+                          {folder.name}
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                          <DropdownMenuItem onClick={() => onMoveToFolder(note.id, folder.id)}>
+                            Move to {folder.name}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          {subs.map(sub => (
+                            <DropdownMenuItem 
+                              key={sub.id}
+                              onClick={() => onMoveToFolder(note.id, sub.id)}
+                            >
+                              <span 
+                                className="mr-2 h-2.5 w-2.5 rounded-full inline-block"
+                                style={{ backgroundColor: sub.color }}
+                              />
+                              {sub.name}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                    );
+                  }
+                  return (
+                    <DropdownMenuItem 
+                      key={folder.id}
+                      onClick={() => onMoveToFolder(note.id, folder.id)}
+                    >
+                      <span 
+                        className="mr-2 h-3 w-3 rounded-full inline-block"
+                        style={{ backgroundColor: folder.color }}
+                      />
+                      Move to {folder.name}
+                    </DropdownMenuItem>
+                  );
+                })}
               </>
             )}
             <DropdownMenuSeparator />
@@ -296,7 +489,7 @@ export function NotesSidebar({
             size="icon"
             variant="ghost"
             className="h-8 w-8 rounded-lg"
-            onClick={onCreateFolder}
+            onClick={() => onCreateFolder()}
             title="New folder"
           >
             <FolderPlus className="h-4 w-4" />
@@ -335,63 +528,29 @@ export function NotesSidebar({
               <ChevronDown className={cn("h-3 w-3 transition-transform", foldersExpanded && "rotate-180")} />
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-1">
-              <button
-                onClick={() => onSelectFolder(null)}
-                onDragOver={(e) => handleDragOver(e, null)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, null)}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-all",
-                  selectedFolderId === null
-                    ? "bg-primary/10 text-primary font-medium"
-                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                  dragOverFolderId === "none" && "ring-2 ring-primary ring-offset-2 ring-offset-background"
-                )}
-              >
-                <FolderOpen className="h-4 w-4" />
-                All Notes
-                <span className="ml-auto text-xs text-muted-foreground">
-                  {notes.length}
-                </span>
-              </button>
-              {folders.map((folder) => {
-                const count = notes.filter(n => n.folderId === folder.id).length;
-                const isDragOver = dragOverFolderId === folder.id;
-                return (
-                  <div key={folder.id} className="group flex items-center">
-                    <button
-                      onClick={() => onSelectFolder(folder.id)}
-                      onDragOver={(e) => handleDragOver(e, folder.id)}
-                      onDragLeave={handleDragLeave}
-                      onDrop={(e) => handleDrop(e, folder.id)}
-                      className={cn(
-                        "flex flex-1 items-center gap-2 rounded-lg px-3 py-2 text-sm transition-all",
-                        selectedFolderId === folder.id
-                          ? "bg-primary/10 text-primary font-medium"
-                          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                        isDragOver && "ring-2 ring-primary ring-offset-2 ring-offset-background"
-                      )}
-                    >
-                      <span 
-                        className="h-3 w-3 rounded-full"
-                        style={{ backgroundColor: folder.color }}
-                      />
-                      {folder.name}
-                      <span className="ml-auto text-xs text-muted-foreground">
-                        {count}
-                      </span>
-                    </button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => onDeleteFolder(folder.id)}
-                    >
-                      <Trash2 className="h-3 w-3 text-muted-foreground" />
-                    </Button>
-                  </div>
-                );
-              })}
+              <div className="flex items-center">
+                <div className="w-6" />
+                <button
+                  onClick={() => onSelectFolder(null)}
+                  onDragOver={(e) => handleDragOver(e, null)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, null)}
+                  className={cn(
+                    "flex flex-1 items-center gap-2 rounded-lg px-2 py-2 text-sm transition-all",
+                    selectedFolderId === null
+                      ? "bg-primary/10 text-primary font-medium"
+                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                    dragOverFolderId === "none" && "ring-2 ring-primary ring-offset-2 ring-offset-background"
+                  )}
+                >
+                  <FolderOpen className="h-4 w-4" />
+                  All Notes
+                  <span className="ml-auto text-xs text-muted-foreground">
+                    {notes.length}
+                  </span>
+                </button>
+              </div>
+              {rootFolders.map(folder => renderFolderItem(folder))}
             </CollapsibleContent>
           </Collapsible>
         </div>

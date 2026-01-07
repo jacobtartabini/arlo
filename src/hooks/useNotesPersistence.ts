@@ -27,6 +27,7 @@ interface DbNoteFolder {
   user_id: string;
   name: string;
   color: string;
+  parent_folder_id: string | null;
   created_at: string;
 }
 
@@ -68,6 +69,7 @@ const dbToFolder = (dbFolder: DbNoteFolder): NoteFolder => ({
   id: dbFolder.id,
   name: dbFolder.name,
   color: dbFolder.color,
+  parentId: dbFolder.parent_folder_id ?? undefined,
   createdAt: dbFolder.created_at,
 });
 
@@ -272,9 +274,13 @@ export function useNotesPersistence() {
   }, [saveNote]);
 
   // Create folder - bypass synchronous isAuthenticated check
-  const createFolder = useCallback(async (name: string, color: string = '#3b82f6'): Promise<NoteFolder | null> => {
+  const createFolder = useCallback(async (name: string, color: string = '#3b82f6', parentId?: string): Promise<NoteFolder | null> => {
     try {
-      const { data, error } = await dataApiHelpers.insert<DbNoteFolder>('note_folders', { name, color });
+      const { data, error } = await dataApiHelpers.insert<DbNoteFolder>('note_folders', { 
+        name, 
+        color,
+        parent_folder_id: parentId ?? null,
+      });
 
       if (error || !data) {
         console.error('Error creating folder:', error);
