@@ -1844,6 +1844,60 @@ export type Database = {
           },
         ]
       }
+      notification_preferences: {
+        Row: {
+          calendar_reminder_minutes: number[] | null
+          calendar_reminders_enabled: boolean | null
+          created_at: string
+          email_enabled: boolean | null
+          id: string
+          morning_wakeup_enabled: boolean | null
+          morning_wakeup_time: string | null
+          morning_wakeup_timezone: string | null
+          push_enabled: boolean | null
+          quiet_hours_enabled: boolean | null
+          quiet_hours_end: string | null
+          quiet_hours_start: string | null
+          type_toggles: Json | null
+          updated_at: string
+          user_key: string
+        }
+        Insert: {
+          calendar_reminder_minutes?: number[] | null
+          calendar_reminders_enabled?: boolean | null
+          created_at?: string
+          email_enabled?: boolean | null
+          id?: string
+          morning_wakeup_enabled?: boolean | null
+          morning_wakeup_time?: string | null
+          morning_wakeup_timezone?: string | null
+          push_enabled?: boolean | null
+          quiet_hours_enabled?: boolean | null
+          quiet_hours_end?: string | null
+          quiet_hours_start?: string | null
+          type_toggles?: Json | null
+          updated_at?: string
+          user_key: string
+        }
+        Update: {
+          calendar_reminder_minutes?: number[] | null
+          calendar_reminders_enabled?: boolean | null
+          created_at?: string
+          email_enabled?: boolean | null
+          id?: string
+          morning_wakeup_enabled?: boolean | null
+          morning_wakeup_time?: string | null
+          morning_wakeup_timezone?: string | null
+          push_enabled?: boolean | null
+          quiet_hours_enabled?: boolean | null
+          quiet_hours_end?: string | null
+          quiet_hours_start?: string | null
+          type_toggles?: Json | null
+          updated_at?: string
+          user_key?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           action_data: Json | null
@@ -1999,6 +2053,45 @@ export type Database = {
           updated_at?: string
           user_id?: string | null
           user_key?: string | null
+        }
+        Relationships: []
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          is_active: boolean | null
+          p256dh: string
+          platform: string
+          updated_at: string
+          user_agent: string | null
+          user_key: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          is_active?: boolean | null
+          p256dh: string
+          platform?: string
+          updated_at?: string
+          user_agent?: string | null
+          user_key: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          is_active?: boolean | null
+          p256dh?: string
+          platform?: string
+          updated_at?: string
+          user_agent?: string | null
+          user_key?: string
         }
         Relationships: []
       }
@@ -2161,6 +2254,51 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      scheduled_notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          data: Json | null
+          error_message: string | null
+          id: string
+          notification_type: string
+          reference_id: string | null
+          scheduled_at: string
+          sent_at: string | null
+          status: string | null
+          title: string
+          user_key: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          data?: Json | null
+          error_message?: string | null
+          id?: string
+          notification_type: string
+          reference_id?: string | null
+          scheduled_at: string
+          sent_at?: string | null
+          status?: string | null
+          title: string
+          user_key: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          data?: Json | null
+          error_message?: string | null
+          id?: string
+          notification_type?: string
+          reference_id?: string | null
+          scheduled_at?: string
+          sent_at?: string | null
+          status?: string | null
+          title?: string
+          user_key?: string
+        }
+        Relationships: []
       }
       subtasks: {
         Row: {
@@ -3284,7 +3422,8 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      process_scheduled_notifications: { Args: never; Returns: number }
+      schedule_morning_wakeups: { Args: never; Returns: number }
     }
     Enums: {
       inbox_provider:

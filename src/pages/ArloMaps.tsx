@@ -2,8 +2,8 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapProvider } from '@/components/maps/MapProvider';
 import { MapCanvas } from '@/components/maps/MapCanvas';
-import { MapSearchBar } from '@/components/maps/MapSearchBar';
-import { MapControls } from '@/components/maps/MapControls';
+import { MapFloatingSearch } from '@/components/maps/MapFloatingSearch';
+import { MapFloatingControls } from '@/components/maps/MapFloatingControls';
 import { MapBottomSheet } from '@/components/maps/MapBottomSheet';
 import { useMapsPersistence } from '@/hooks/useMapsPersistence';
 import { useGeolocation } from '@/hooks/useGeolocation';
@@ -16,7 +16,7 @@ import type {
   RouteOption 
 } from '@/types/maps';
 
-const DEFAULT_CENTER: LatLng = { lat: 37.7749, lng: -122.4194 }; // San Francisco
+const DEFAULT_CENTER: LatLng = { lat: 37.7749, lng: -122.4194 };
 const DEFAULT_ZOOM = 14;
 
 export default function ArloMaps() {
@@ -33,6 +33,7 @@ export default function ArloMaps() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Place[]>([]);
   const [followMode, setFollowMode] = useState(false);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
 
   // Navigation state
   const [navigation, setNavigation] = useState<NavigationState>({
@@ -56,7 +57,7 @@ export default function ArloMaps() {
   const geolocation = useGeolocation({ enableHighAccuracy: true });
   const mapRef = useRef<google.maps.Map | null>(null);
 
-  // Request user location immediately on page load (otherwise we stay on DEFAULT_CENTER)
+  // Request user location immediately
   useEffect(() => {
     geolocation.getCurrentPosition();
   }, [geolocation.getCurrentPosition]);
@@ -86,11 +87,9 @@ export default function ArloMaps() {
   const handleLocateMe = useCallback(() => {
     if (geolocation.position) {
       if (center.lat === geolocation.position.lat && center.lng === geolocation.position.lng) {
-        // Second press: enable follow mode
         setFollowMode(true);
         geolocation.startWatching();
       } else {
-        // First press: center on location
         setCenter(geolocation.position);
         setZoom(16);
       }
@@ -121,8 +120,8 @@ export default function ArloMaps() {
     setZoom(17);
     setMode('place-details');
     setSheetState('half');
+    setIsSearchFocused(false);
 
-    // Record for pattern learning
     mapsPersistence.recordDestinationVisit({
       placeId: place.placeId,
       name: place.name,
@@ -134,7 +133,7 @@ export default function ArloMaps() {
   const handleGetDirections = useCallback((place: Place) => {
     setNavigation(prev => ({
       ...prev,
-      origin: null, // Will use current location
+      origin: null,
       destination: place,
     }));
     setMode('directions');
@@ -190,11 +189,11 @@ export default function ArloMaps() {
     if (query.length > 0) {
       setMode('search');
       setSheetState('half');
-    } else {
+    } else if (!isSearchFocused) {
       setMode('explore');
       setSheetState('collapsed');
     }
-  }, []);
+  }, [isSearchFocused]);
 
   const handleSearchResultSelect = useCallback((place: Place) => {
     handlePlaceSelect(place);
@@ -217,13 +216,24 @@ export default function ArloMaps() {
         setSearchResults([]);
       }
       setMode('explore');
+      setSelectedPlace(null);
     }
   }, [mode]);
 
+  const handleSearchFocusChange = useCallback((focused: boolean) => {
+    setIsSearchFocused(focused);
+    if (focused && mode === 'explore') {
+      setSheetState('half');
+    }
+  }, [mode]);
+
+  // Hide controls during navigation or when search is focused
+  const showControls = !navigation.isNavigating && !isSearchFocused;
+
   return (
     <MapProvider>
-      <div className="fixed inset-0 overflow-hidden bg-background">
-        {/* Main Map */}
+      <div className="fixed inset-0 overflow-hidden">
+        {/* Full-bleed Map Canvas */}
         <MapCanvas
           center={center}
           zoom={zoom}
@@ -245,33 +255,37 @@ export default function ArloMaps() {
           onPlaceClick={handlePlaceSelect}
         />
 
-        {/* Search Bar */}
-        <MapSearchBar
+        {/* Floating Search Bar - Apple Maps style */}
+        <MapFloatingSearch
           value={searchQuery}
           onChange={handleSearch}
           onResultSelect={handleSearchResultSelect}
+          onFocusChange={handleSearchFocusChange}
           recentSearches={mapsPersistence.recentSearches}
           onClearRecent={mapsPersistence.clearRecentSearches}
           homePlace={mapsPersistence.homePlace}
           workPlace={mapsPersistence.workPlace}
           currentLocation={geolocation.position}
+          isNavigating={navigation.isNavigating}
         />
 
-        {/* Right-side Controls */}
-        <MapControls
-          onLocateMe={handleLocateMe}
-          onZoomIn={handleZoomIn}
-          onZoomOut={handleZoomOut}
-          onResetBearing={handleResetBearing}
-          onMapTypeChange={handleMapTypeChange}
-          isFollowing={followMode}
-          bearing={bearing}
-          currentMapType={mapType}
-          isLocating={geolocation.isLoading}
-          hasLocation={!!geolocation.position}
-        />
+        {/* Floating Controls - Bottom right, minimal */}
+        <AnimatePresence>
+          {showControls && (
+            <MapFloatingControls
+              onLocateMe={handleLocateMe}
+              onResetBearing={handleResetBearing}
+              onMapTypeChange={handleMapTypeChange}
+              isFollowing={followMode}
+              bearing={bearing}
+              currentMapType={mapType}
+              isLocating={geolocation.isLoading}
+              hasLocation={!!geolocation.position}
+            />
+          )}
+        </AnimatePresence>
 
-        {/* Bottom Sheet */}
+        {/* Bottom Sheet - Floating, rounded, elegant */}
         <MapBottomSheet
           state={sheetState}
           onStateChange={handleSheetStateChange}
@@ -282,9 +296,11 @@ export default function ArloMaps() {
           selectedRouteIndex={selectedRouteIndex}
           navigation={navigation}
           smartSuggestions={mapsPersistence.getSmartSuggestions()}
+          recentSearches={mapsPersistence.recentSearches}
           homePlace={mapsPersistence.homePlace}
           workPlace={mapsPersistence.workPlace}
           incidents={mapsPersistence.incidents}
+          currentLocation={geolocation.position}
           onPlaceSelect={handlePlaceSelect}
           onGetDirections={handleGetDirections}
           onRouteSelect={setSelectedRouteIndex}
