@@ -586,15 +586,15 @@ export default function Inbox() {
             </div>
           </ScrollArea>
           
-          {/* Settings */}
+          {/* Back to dashboard */}
           <div className="pt-2 mt-2 border-t border-border/50">
             <Button 
               variant="ghost" 
               className="w-full justify-start text-muted-foreground hover:text-foreground"
-              onClick={() => navigate('/settings?tab=inbox')}
+              onClick={() => navigate('/')}
             >
-              <Settings2 className="h-4 w-4 mr-2" />
-              Settings
+              <ChevronLeft className="h-4 w-4 mr-2" />
+              Dashboard
             </Button>
           </div>
         </div>
