@@ -1,28 +1,26 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  Activity,
   Bell,
-  BellRing,
   Calendar,
   CalendarCheck,
   FileText,
   Flame,
   FolderOpen,
   Home,
-  Library,
   Map,
   MessageCircle,
   NotebookPen,
   PenTool,
   Plane,
   Settings,
-  Sparkles,
+  ShieldCheck,
+  HeartPulse,
   Users,
   Wallet,
-  Workflow,
-  ShieldCheck,
-  HeartPulse
 } from "lucide-react";
+
+export type ModulePriority = "center" | "inner" | "outer";
+export type ModuleSize = "primary" | "secondary" | "tertiary";
 
 export type Module = {
   id: string;
@@ -30,7 +28,9 @@ export type Module = {
   icon: LucideIcon;
   route: string;
   color: string;
-  size: "small" | "medium" | "large";
+  size: ModuleSize;
+  priority: ModulePriority;
+  actionLabel: string; // What clicking does
   summary?: string;
   keywords?: string[];
 };
@@ -44,97 +44,20 @@ export type NavigationItem = {
   keywords?: string[];
 };
 
+// Modules ordered by priority (center → outer)
 export const APP_MODULES: Module[] = [
-  {
-    id: "finance",
-    title: "Finance",
-    icon: Wallet,
-    route: "/finance",
-    color: "primary",
-    size: "large",
-    summary: "Spend vs. budget • Net worth update",
-    keywords: ["budgets", "accounts", "cashflow", "investments"]
-  },
+  // CENTER RING - Most used (2-3 modules, largest)
   {
     id: "productivity",
-    title: "Productivity",
+    title: "Today",
     icon: CalendarCheck,
     route: "/productivity",
     color: "accent",
-    size: "large",
-    summary: "62% tasks done • Next focus block",
+    size: "primary",
+    priority: "center",
+    actionLabel: "Start focus",
+    summary: "Tasks & focus blocks",
     keywords: ["tasks", "planning", "agenda", "focus"]
-  },
-  {
-    id: "travel",
-    title: "Travel",
-    icon: Plane,
-    route: "/travel",
-    color: "primary",
-    size: "medium",
-    summary: "Flight DL204 on-time • 72°F",
-    keywords: ["flights", "bookings", "trips", "itinerary"]
-  },
-  {
-    id: "security",
-    title: "Security",
-    icon: ShieldCheck,
-    route: "/security",
-    color: "accent",
-    size: "medium",
-    summary: "All systems secure • 6 devices",
-    keywords: ["uptime", "security", "device", "monitoring", "tailscale"]
-  },
-  {
-    id: "health",
-    title: "Health & Lifestyle",
-    icon: HeartPulse,
-    route: "/health",
-    color: "primary",
-    size: "medium",
-    summary: "Calorie burn 82% • Streak 9 days",
-    keywords: ["wellness", "fitness", "sleep", "nutrition"]
-  },
-  {
-    id: "files",
-    title: "Files & Storage",
-    icon: FolderOpen,
-    route: "/files",
-    color: "primary",
-    size: "medium",
-    summary: "Drives mounted • Filebrowser running",
-    keywords: ["filebrowser", "storage", "raspberry pi", "drives"]
-  },
-  {
-    id: "creation",
-    title: "Creation & Design",
-    icon: PenTool,
-    route: "/creation",
-    color: "accent",
-    size: "large",
-    summary: "2 drafts awaiting review",
-    keywords: ["design", "drafts", "content", "studio"]
-  },
-  // Automations hidden from dashboard for now
-  // {
-  //   id: "automations",
-  //   title: "Automations",
-  //   icon: Workflow,
-  //   route: "/automations",
-  //   color: "accent",
-  //   size: "medium",
-  //   summary: "3 active • 6.4h saved",
-  //   keywords: ["workflows", "bots", "routines", "automation"]
-  // },
-  {
-    id: "notes",
-    title: "Smart Notes",
-    icon: NotebookPen,
-    route: "/notes-dashboard",
-    color: "primary",
-    size: "large",
-    summary: "Canvas notes • Embedded modules",
-    keywords: ["notes", "drawing", "handwriting", "canvas", "sketches"]
   },
   {
     id: "habits",
@@ -142,9 +65,37 @@ export const APP_MODULES: Module[] = [
     icon: Flame,
     route: "/habits",
     color: "accent",
-    size: "medium",
-    summary: "Daily alignment • Streaks & XP",
+    size: "primary",
+    priority: "center",
+    actionLabel: "Complete habits",
+    summary: "Daily streaks & routines",
     keywords: ["habits", "routines", "streaks", "consistency", "morning", "night"]
+  },
+
+  // INNER RING - Frequently used
+  {
+    id: "notes",
+    title: "Notes",
+    icon: NotebookPen,
+    route: "/notes-dashboard",
+    color: "primary",
+    size: "secondary",
+    priority: "inner",
+    actionLabel: "Open canvas",
+    summary: "Canvas workspace",
+    keywords: ["notes", "drawing", "handwriting", "canvas", "sketches"]
+  },
+  {
+    id: "finance",
+    title: "Finance",
+    icon: Wallet,
+    route: "/finance",
+    color: "primary",
+    size: "secondary",
+    priority: "inner",
+    actionLabel: "View spending",
+    summary: "Budget & accounts",
+    keywords: ["budgets", "accounts", "cashflow", "investments"]
   },
   {
     id: "maps",
@@ -152,10 +103,74 @@ export const APP_MODULES: Module[] = [
     icon: Map,
     route: "/maps",
     color: "primary",
-    size: "medium",
-    summary: "Navigation • Traffic • Places",
+    size: "secondary",
+    priority: "inner",
+    actionLabel: "Navigate",
+    summary: "Directions & places",
     keywords: ["maps", "navigation", "directions", "places", "traffic", "location"]
-  }
+  },
+
+  // OUTER RING - Less frequent / utility
+  {
+    id: "travel",
+    title: "Travel",
+    icon: Plane,
+    route: "/travel",
+    color: "primary",
+    size: "tertiary",
+    priority: "outer",
+    actionLabel: "View trips",
+    summary: "Trips & bookings",
+    keywords: ["flights", "bookings", "trips", "itinerary"]
+  },
+  {
+    id: "files",
+    title: "Files",
+    icon: FolderOpen,
+    route: "/files",
+    color: "primary",
+    size: "tertiary",
+    priority: "outer",
+    actionLabel: "Browse files",
+    summary: "Storage & drives",
+    keywords: ["filebrowser", "storage", "raspberry pi", "drives"]
+  },
+  {
+    id: "creation",
+    title: "Create",
+    icon: PenTool,
+    route: "/creation",
+    color: "accent",
+    size: "tertiary",
+    priority: "outer",
+    actionLabel: "New project",
+    summary: "Design & content",
+    keywords: ["design", "drafts", "content", "studio"]
+  },
+  {
+    id: "health",
+    title: "Health",
+    icon: HeartPulse,
+    route: "/health",
+    color: "primary",
+    size: "tertiary",
+    priority: "outer",
+    actionLabel: "View activity",
+    summary: "Fitness & wellness",
+    keywords: ["wellness", "fitness", "sleep", "nutrition"]
+  },
+  {
+    id: "security",
+    title: "Security",
+    icon: ShieldCheck,
+    route: "/security",
+    color: "accent",
+    size: "tertiary",
+    priority: "outer",
+    actionLabel: "Check status",
+    summary: "System & devices",
+    keywords: ["uptime", "security", "device", "monitoring", "tailscale"]
+  },
 ];
 
 export const APP_PAGES: NavigationItem[] = [
