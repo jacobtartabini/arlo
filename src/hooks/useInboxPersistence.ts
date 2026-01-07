@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { dataApiHelpers } from '@/lib/data-api';
 import type { 
@@ -15,6 +15,7 @@ export function useInboxAccounts() {
   const [accounts, setAccounts] = useState<InboxAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hasFetched = useRef(false);
 
   const fetchAccounts = useCallback(async () => {
     if (!userKey || !isAuthenticated) {
@@ -43,8 +44,16 @@ export function useInboxAccounts() {
   }, [userKey, isAuthenticated]);
 
   useEffect(() => {
-    fetchAccounts();
-  }, [fetchAccounts]);
+    // Only fetch once when authenticated
+    if (isAuthenticated && userKey && !hasFetched.current) {
+      hasFetched.current = true;
+      fetchAccounts();
+    }
+    // Reset on logout
+    if (!isAuthenticated) {
+      hasFetched.current = false;
+    }
+  }, [isAuthenticated, userKey, fetchAccounts]);
 
   const disconnectAccount = async (accountId: string) => {
     if (!userKey) return { error: 'Not authenticated' };
@@ -73,6 +82,10 @@ export function useInboxThreads(options: {
   const [error, setError] = useState<string | null>(null);
 
   const { filter = 'all', providers = [], accountIds = [], searchQuery = '' } = options;
+  
+  // Stabilize array references to prevent infinite re-renders
+  const providersKey = useMemo(() => providers.sort().join(','), [providers]);
+  const accountIdsKey = useMemo(() => accountIds.sort().join(','), [accountIds]);
 
   const fetchThreads = useCallback(async () => {
     if (!userKey || !isAuthenticated) {
@@ -113,13 +126,15 @@ export function useInboxThreads(options: {
         }
         
         // Apply provider filter
-        if (providers.length > 0) {
-          filteredThreads = filteredThreads.filter(t => providers.includes(t.provider));
+        const providersList = providersKey ? providersKey.split(',') as InboxProvider[] : [];
+        if (providersList.length > 0) {
+          filteredThreads = filteredThreads.filter(t => providersList.includes(t.provider));
         }
         
         // Apply account filter
-        if (accountIds.length > 0) {
-          filteredThreads = filteredThreads.filter(t => accountIds.includes(t.account_id));
+        const accountsList = accountIdsKey ? accountIdsKey.split(',') : [];
+        if (accountsList.length > 0) {
+          filteredThreads = filteredThreads.filter(t => accountsList.includes(t.account_id));
         }
         
         // Apply search filter (client-side for now)
@@ -144,7 +159,7 @@ export function useInboxThreads(options: {
     } finally {
       setLoading(false);
     }
-  }, [userKey, isAuthenticated, filter, providers, accountIds, searchQuery]);
+  }, [userKey, isAuthenticated, filter, providersKey, accountIdsKey, searchQuery]);
 
   useEffect(() => {
     fetchThreads();
