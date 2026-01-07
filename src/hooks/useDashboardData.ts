@@ -225,7 +225,8 @@ export function useDashboardData() {
           startDate: parseISO(t.start_date),
         }));
 
-      setData({
+      setData(prev => ({
+        ...prev,
         todayTasks,
         tasksCompletedToday,
         tasksDueToday,
@@ -241,13 +242,14 @@ export function useDashboardData() {
         recentTransactions,
         recentPlaces,
         savedPlacesCount: places.length,
-        userLocation: null, // Will be populated by geolocation if available
+        // Preserve geolocation result if it already resolved (avoid reverting to SF fallback)
+        userLocation: prev.userLocation,
         upcomingTrips,
         activityScore: 72,
         sleepHours: 7.5,
         connectedDevices: 0, // Placeholder - could fetch from tailscale-api
         isLoading: false,
-      });
+      }));
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
       setData(prev => ({ ...prev, isLoading: false }));

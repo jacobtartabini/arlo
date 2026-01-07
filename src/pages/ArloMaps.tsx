@@ -56,6 +56,11 @@ export default function ArloMaps() {
   const geolocation = useGeolocation({ enableHighAccuracy: true });
   const mapRef = useRef<google.maps.Map | null>(null);
 
+  // Request user location immediately on page load (otherwise we stay on DEFAULT_CENTER)
+  useEffect(() => {
+    geolocation.getCurrentPosition();
+  }, [geolocation.getCurrentPosition]);
+
   // Initialize with user location
   useEffect(() => {
     if (geolocation.position && !geolocation.error) {
