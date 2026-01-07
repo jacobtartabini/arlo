@@ -23,6 +23,11 @@ const ALLOWED_ORIGINS = [
   'http://localhost:5173',
 ];
 
+// Check if origin is a Lovable preview URL (for development/preview)
+function isLovablePreview(origin: string): boolean {
+  return /^https:\/\/[a-z0-9-]+\.lovableproject\.com$/.test(origin);
+}
+
 export interface ArloJWTClaims {
   sub: string;      // User identity (Tailscale login/email) - THIS IS THE SOLE SOURCE OF IDENTITY
   iss: string;      // Issuer
@@ -33,19 +38,12 @@ export interface ArloJWTClaims {
   tailnet?: string; // Tailnet name
 }
 
-export interface ArloAuthResult {
-  authenticated: boolean;
-  claims?: ArloJWTClaims;
-  error?: string;
-  userId: string;   // Derived from JWT.sub - the user's identity
-}
-
 /**
  * Check if origin is allowed
  */
 export function isAllowedOrigin(origin: string | null): boolean {
   if (!origin) return false;
-  return ALLOWED_ORIGINS.includes(origin);
+  return ALLOWED_ORIGINS.includes(origin) || isLovablePreview(origin);
 }
 
 /**
@@ -53,8 +51,8 @@ export function isAllowedOrigin(origin: string | null): boolean {
  * Returns null if origin is not allowed (caller should reject request)
  */
 export function getCorsHeaders(requestOrigin?: string | null): Record<string, string> {
-  // STRICT: Only allow recognized origins
-  if (!requestOrigin || !ALLOWED_ORIGINS.includes(requestOrigin)) {
+  // STRICT: Only allow recognized origins (includes Lovable preview)
+  if (!requestOrigin || !isAllowedOrigin(requestOrigin)) {
     // Return headers that block the request
     return {
       'Access-Control-Allow-Origin': ALLOWED_ORIGINS[0], // Never echo back invalid origin
@@ -80,8 +78,8 @@ export function getCorsHeaders(requestOrigin?: string | null): Record<string, st
 export function handleCorsOptions(req: Request): Response {
   const origin = req.headers.get('origin');
   
-  // STRICT: Reject preflight from unrecognized origins
-  if (!origin || !ALLOWED_ORIGINS.includes(origin)) {
+  // STRICT: Reject preflight from unrecognized origins (but allow Lovable preview)
+  if (!origin || !isAllowedOrigin(origin)) {
     console.log(`[arloAuth] CORS preflight rejected: origin=${origin}`);
     return new Response(null, { 
       status: 403,
@@ -105,8 +103,8 @@ export function validateOrigin(req: Request): Response | null {
   const origin = req.headers.get('origin');
   
   // For requests without origin (e.g., same-origin or server-to-server), allow
-  // But for cross-origin requests, enforce strict checking
-  if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+  // But for cross-origin requests, enforce strict checking (allow Lovable preview)
+  if (origin && !isAllowedOrigin(origin)) {
     console.log(`[arloAuth] Request rejected: invalid origin=${origin}`);
     return new Response(
       JSON.stringify({ error: 'Origin not allowed' }),
