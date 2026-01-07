@@ -4,6 +4,7 @@
  */
 
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { 
   Check, Plus, FileText, MapPin, Plane, Flame, Moon,
   Sparkles, Clock, FolderOpen, Navigation, Calendar,
@@ -284,9 +285,25 @@ function HabitsMiniContent({ data, size }: { data: MiniContentProps["data"]; siz
 
 // Notes with quick action buttons
 function NotesMiniContent({ data, size, onClick }: { data: MiniContentProps["data"]; size: ModuleSize; onClick?: (e: React.MouseEvent) => void }) {
+  const navigate = useNavigate();
   const notes = data.recentNotes.slice(0, size === "primary" ? 2 : 1);
   const isPrimary = size === "primary";
   const isTertiary = size === "tertiary";
+
+  const handleNewNote = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigate("/notes", { state: { action: "new" } });
+  };
+
+  const handleUpload = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigate("/notes", { state: { action: "upload" } });
+  };
+
+  const handleWrite = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigate("/notes", { state: { action: "write" } });
+  };
 
   return (
     <div className="flex flex-col gap-2">
@@ -325,11 +342,7 @@ function NotesMiniContent({ data, size, onClick }: { data: MiniContentProps["dat
             animate={{ opacity: 1 }}
             transition={{ delay: 0.1 }}
             className="flex items-center gap-1 px-2 py-1 rounded-md bg-primary/10 hover:bg-primary/20 transition-colors text-[9px] font-medium text-primary"
-            onClick={(e) => {
-              e.stopPropagation();
-              // Navigate to notes with new note action
-              window.location.href = '/notes?action=new';
-            }}
+            onClick={handleNewNote}
           >
             <Plus className="w-3 h-3" />
             New
@@ -339,10 +352,7 @@ function NotesMiniContent({ data, size, onClick }: { data: MiniContentProps["dat
             animate={{ opacity: 1 }}
             transition={{ delay: 0.15 }}
             className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/30 hover:bg-muted/50 transition-colors text-[9px] font-medium text-muted-foreground"
-            onClick={(e) => {
-              e.stopPropagation();
-              window.location.href = '/notes?action=upload';
-            }}
+            onClick={handleUpload}
           >
             <Upload className="w-3 h-3" />
             Upload
@@ -353,10 +363,7 @@ function NotesMiniContent({ data, size, onClick }: { data: MiniContentProps["dat
               animate={{ opacity: 1 }}
               transition={{ delay: 0.2 }}
               className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/30 hover:bg-muted/50 transition-colors text-[9px] font-medium text-muted-foreground"
-              onClick={(e) => {
-                e.stopPropagation();
-                window.location.href = '/notes?action=write';
-              }}
+              onClick={handleWrite}
             >
               <PenLine className="w-3 h-3" />
               Write
@@ -487,7 +494,8 @@ const MiniMapComponent = memo(function MiniMapComponent({
 
   const mapContainerStyle = {
     width: "100%",
-    height: isPrimary ? "80px" : "60px",
+    height: isPrimary ? "100%" : "100%",
+    minHeight: isPrimary ? "90px" : "70px",
     borderRadius: "8px",
   };
 
@@ -514,8 +522,8 @@ const MiniMapComponent = memo(function MiniMapComponent({
   if (!isLoaded) {
     return (
       <div 
-        className="bg-muted/30 rounded-lg animate-pulse flex items-center justify-center"
-        style={{ height: isPrimary ? "80px" : "60px" }}
+        className="bg-muted/30 rounded-lg animate-pulse flex items-center justify-center flex-1"
+        style={{ minHeight: isPrimary ? "90px" : "70px" }}
       >
         <MapPin className="w-4 h-4 text-muted-foreground/30" />
       </div>
@@ -543,19 +551,19 @@ function MapsMiniContent({ data, size }: { data: MiniContentProps["data"]; size:
   const mapCenter = data.userLocation || { lat: 37.7749, lng: -122.4194 };
 
   return (
-    <div className="flex flex-col gap-2">
-      {/* Mini map preview */}
+    <div className="flex flex-col gap-2 h-full">
+      {/* Mini map preview - takes remaining space */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="overflow-hidden rounded-lg border border-border/30"
+        className="overflow-hidden rounded-lg border border-border/30 flex-1"
       >
         <MiniMapComponent center={mapCenter} size={size} />
       </motion.div>
 
       {/* Recent places chips */}
       {!isTertiary && places.length > 0 && (
-        <div className="flex gap-1.5 flex-wrap">
+        <div className="flex gap-1.5 flex-wrap shrink-0">
           {places.map((place, i) => (
             <motion.div
               key={place.id}
