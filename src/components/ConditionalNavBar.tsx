@@ -4,7 +4,7 @@ import NavBar from "./NavBar";
 import { isPublicBookingDomain } from "@/lib/domain-utils";
 
 // Show navbar on main app routes
-const visibleRoutes = ["/", "/dashboard", "/chat", "/calendar", "/settings"];
+const visibleRoutes = ["/", "/dashboard", "/chat", "/calendar", "/settings", "/maps"];
 
 export default function ConditionalNavBar() {
   const location = useLocation();
