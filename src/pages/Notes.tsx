@@ -64,15 +64,44 @@ export default function Notes() {
     document.title = "Arlo";
   }, []);
 
-  // Handle opening a specific note from navigation state
+  // Handle opening a specific note or action from navigation state
   useEffect(() => {
-    const state = location.state as { openNoteId?: string } | null;
+    const state = location.state as { openNoteId?: string; action?: string } | null;
     if (state?.openNoteId) {
       setSelectedNoteId(state.openNoteId);
       // Clear the state so it doesn't persist on refresh
       window.history.replaceState({}, document.title);
     }
-  }, [location.state]);
+    
+    // Handle quick actions from dashboard
+    if (state?.action && isAuthenticated && !isLoading) {
+      const handleAction = async () => {
+        switch (state.action) {
+          case "new":
+            setCreateDialogOpen(true);
+            break;
+          case "upload":
+            // For upload, open the create dialog (user can import)
+            setCreateDialogOpen(true);
+            break;
+          case "write":
+            // Create a new page note in write mode directly
+            const newNote = await createNote({
+              noteType: 'page',
+              pageMode: 'write',
+            });
+            if (newNote) {
+              setSelectedNoteId(newNote.id);
+              toast.success("New handwritten note created");
+            }
+            break;
+        }
+        // Clear the state
+        window.history.replaceState({}, document.title);
+      };
+      handleAction();
+    }
+  }, [location.state, isAuthenticated, isLoading, createNote]);
 
   // Auto-select first note when notes load (or most recently edited)
   useEffect(() => {

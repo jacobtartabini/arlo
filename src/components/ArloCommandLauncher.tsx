@@ -289,7 +289,8 @@ const ArloCommandLauncher = () => {
         !containerRef.current?.contains(activeElement);
 
       // Cmd+Option+K - Open directly to chat mode
-      if ((e.metaKey || e.ctrlKey) && e.altKey && e.key === "k") {
+      // Note: altKey with 'k' may produce different characters on some keyboards
+      if ((e.metaKey || e.ctrlKey) && e.altKey && (e.key === "k" || e.key === "˚" || e.code === "KeyK")) {
         e.preventDefault();
         setOpen(true);
         setSearchQuery("");
