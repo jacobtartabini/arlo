@@ -6,17 +6,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   Search,
-  Home,
-  Settings,
-  Calendar,
-  FileText,
-  Clock,
   Zap,
   Plus,
   MessageSquare,
   CheckSquare,
   Folder,
-  Star,
   LayoutPanelTop,
   ArrowRight,
   NotebookPen,
@@ -26,11 +20,10 @@ import {
   HeartPulse,
   FolderOpen,
   PenTool,
-  Library,
-  Workflow,
-  Sparkles,
   BellRing,
   Flame,
+  Map,
+  CalendarCheck,
   type LucideIcon,
 } from "lucide-react";
 import { APP_MODULES, APP_PAGES, APP_RESOURCES } from "@/lib/app-navigation";
@@ -61,18 +54,16 @@ const DASHBOARD_ROUTES = ["/", "/dashboard"];
 // Icon mapping for modules
 const moduleIconMap: Record<string, LucideIcon> = {
   finance: Wallet,
-  productivity: Calendar,
+  productivity: CalendarCheck,
   travel: Plane,
-  system: ShieldCheck,
+  security: ShieldCheck,
   health: HeartPulse,
   files: FolderOpen,
   creation: PenTool,
-  knowledge: Library,
-  automations: Workflow,
-  insights: Sparkles,
   notifications: BellRing,
   notes: NotebookPen,
   habits: Flame,
+  maps: Map,
 };
 
 const ArloCommandLauncher = () => {
@@ -136,8 +127,28 @@ const ArloCommandLauncher = () => {
       category: "Actions",
       icon: Zap,
       action: () => navigate("/focus?duration=25"),
-      shortcut: "⌘F",
-      keywords: ["focus", "pomodoro", "timer", "25"],
+      keywords: ["focus", "pomodoro", "timer", "deep work"],
+    });
+
+    commands.push({
+      id: "open-chat",
+      title: "Chat with Arlo",
+      description: "Open AI assistant",
+      category: "Actions",
+      icon: MessageSquare,
+      action: () => navigate("/chat"),
+      shortcut: "⌘⌥K",
+      keywords: ["chat", "ai", "assistant", "arlo", "ask"],
+    });
+
+    commands.push({
+      id: "get-directions",
+      title: "Get Directions",
+      description: "Navigate somewhere",
+      category: "Actions",
+      icon: Map,
+      action: () => navigate("/maps"),
+      keywords: ["directions", "navigate", "maps", "drive", "commute"],
     });
 
     // Navigation from APP_PAGES
@@ -190,7 +201,7 @@ const ArloCommandLauncher = () => {
         title: note.title || "Untitled Note",
         description: `Opened ${new Date(note.updatedAt).toLocaleDateString()}`,
         category: "Recent",
-        icon: FileText,
+        icon: NotebookPen,
         action: () => navigate("/notes"),
         keywords: ["recent", "note", ...(note.tags || [])],
       });
