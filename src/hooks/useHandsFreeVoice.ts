@@ -106,6 +106,10 @@ export function useHandsFreeVoice() {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const headers = await getAuthHeaders();
       
+      if (!headers) {
+        throw new Error('Not authenticated');
+      }
+      
       const response = await fetch(`${supabaseUrl}/functions/v1/cartesia-tts`, {
         method: 'POST',
         headers: {
@@ -120,6 +124,8 @@ export function useHandsFreeVoice() {
       });
 
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[HandsFree] TTS response error:', response.status, errorText);
         throw new Error('TTS generation failed');
       }
 
