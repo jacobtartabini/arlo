@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { APP_MODULES, type Module } from "@/lib/app-navigation";
 import { cn } from "@/lib/utils";
+import { useUserSettings } from "@/providers/UserSettingsProvider";
 
 type GestureEventType = Event & { scale: number };
 
@@ -86,6 +87,22 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
   const isPinchingRef = useRef(false);
   const navigate = useNavigate();
   const hasInitializedRecenter = useRef(false);
+  
+  // Get user's module visibility settings
+  const { settings } = useUserSettings();
+  
+  // Filter modules based on visibility settings
+  const visibleModuleLayout = useMemo(() => {
+    return moduleLayout.filter(layoutPos => {
+      // Check if module exists in APP_MODULES
+      const module = moduleMap[layoutPos.id];
+      if (!module) return false;
+      
+      // Check visibility setting - default to visible if not explicitly hidden
+      const visibility = settings?.dashboard_module_visibility;
+      return visibility?.[layoutPos.id] !== false;
+    });
+  }, [settings?.dashboard_module_visibility]);
 
   const isControlled = controlledScale !== undefined;
   const userScale = isControlled ? controlledScale : internalScale;
@@ -429,7 +446,7 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
           style={{ width: GRID_SIZE * 32, height: GRID_SIZE * 20 }}
         >
           <AnimatePresence>
-            {moduleLayout.map((layoutPos, index) => {
+            {visibleModuleLayout.map((layoutPos, index) => {
               const module = moduleMap[layoutPos.id];
               if (!module) return null;
 

@@ -32,6 +32,7 @@ interface DbUserSettings {
   morning_wakeup_time: string;
   api_endpoint: string | null;
   api_token: string | null;
+  dashboard_module_visibility: Record<string, boolean>;
   created_at: string;
   updated_at: string;
 }
