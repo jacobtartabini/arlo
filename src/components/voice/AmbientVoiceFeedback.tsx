@@ -1,6 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { VoiceState } from '@/types/voice';
-import { Mic } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface AmbientVoiceFeedbackProps {
@@ -12,8 +11,8 @@ interface AmbientVoiceFeedbackProps {
 }
 
 /**
- * Ambient Voice Feedback - Minimal edge glow UI for hands-free voice mode
- * Non-intrusive, futuristic, and calm visual feedback
+ * Ambient Voice Feedback - Edge glow UI only for hands-free voice mode
+ * The status indicator is now integrated into the StatusChip component
  */
 export function AmbientVoiceFeedback({
   voiceState,
@@ -30,35 +29,30 @@ export function AmbientVoiceFeedback({
           color: 'hsl(142, 71%, 45%)', // Green
           shadowColor: 'hsl(142, 71%, 45%, 0.4)',
           pulseIntensity: 0.8,
-          label: 'Listening...',
         };
       case 'thinking':
         return {
           color: 'hsl(45, 93%, 47%)', // Amber/Gold
           shadowColor: 'hsl(45, 93%, 47%, 0.4)',
           pulseIntensity: 0.6,
-          label: 'Processing...',
         };
       case 'speaking':
         return {
           color: 'hsl(217, 91%, 60%)', // Blue
           shadowColor: 'hsl(217, 91%, 60%, 0.4)',
           pulseIntensity: 0.5,
-          label: 'Speaking...',
         };
       default:
         return {
           color: 'hsl(var(--muted-foreground))',
           shadowColor: 'hsl(var(--muted-foreground), 0.2)',
           pulseIntensity: 0.3,
-          label: '',
         };
     }
   };
 
   const glowConfig = getGlowConfig();
   const showActiveState = isActive && voiceState !== 'idle';
-  const showWakeWordIndicator = isWakeWordListening && !isActive;
 
   return (
     <>
@@ -176,63 +170,6 @@ export function AmbientVoiceFeedback({
               />
             ))}
           </>
-        )}
-      </AnimatePresence>
-
-      {/* Minimal status indicator - bottom right, very subtle */}
-      <AnimatePresence>
-        {(showActiveState || showWakeWordIndicator) && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 10 }}
-            className="fixed bottom-4 right-4 z-[200] pointer-events-none"
-          >
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-background/60 backdrop-blur-md border border-border/30 shadow-lg">
-              {/* Mic indicator with state color */}
-              <motion.div
-                animate={showActiveState ? {
-                  scale: [1, 1.1, 1],
-                } : {}}
-                transition={{
-                  duration: 1.5,
-                  repeat: Infinity,
-                  ease: 'easeInOut',
-                }}
-                className="relative"
-              >
-                <Mic 
-                  className={cn(
-                    "w-3.5 h-3.5",
-                    showActiveState && voiceState === 'listening' && "text-green-500",
-                    showActiveState && voiceState === 'thinking' && "text-amber-500",
-                    showActiveState && voiceState === 'speaking' && "text-blue-500",
-                    showWakeWordIndicator && "text-muted-foreground"
-                  )}
-                />
-                {/* Pulse ring for wake word listening */}
-                {showWakeWordIndicator && (
-                  <motion.span
-                    initial={{ scale: 1, opacity: 0.5 }}
-                    animate={{ scale: 1.5, opacity: 0 }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                    className="absolute inset-0 rounded-full border border-muted-foreground"
-                  />
-                )}
-              </motion.div>
-
-              {/* State label */}
-              <span className={cn(
-                "text-xs font-medium",
-                showActiveState && voiceState === 'listening' && "text-green-500",
-                showActiveState && voiceState === 'thinking' && "text-amber-500",
-                showActiveState && voiceState === 'speaking' && "text-blue-500",
-                showWakeWordIndicator && "text-muted-foreground"
-              )}>
-                {showActiveState ? glowConfig.label : 'Hey Arlo'}
-              </span>
-            </div>
-          </motion.div>
         )}
       </AnimatePresence>
 

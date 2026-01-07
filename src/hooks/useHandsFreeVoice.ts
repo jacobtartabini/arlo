@@ -2,10 +2,12 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { VoiceState } from '@/types/voice';
 import { getSpeechRecognition, SpeechRecognitionInstance, SpeechRecognitionEventResult } from '@/types/speech-recognition';
 import { useVoiceSettings } from './useVoiceSettings';
-import { useArlo } from '@/providers/ArloProvider';
 import { getAuthHeaders } from '@/lib/arloAuth';
 import { usePorcupineWakeWord } from './usePorcupineWakeWord';
 import { useAuth } from '@/providers/AuthProvider';
+
+// Generic test response for TTS testing
+const TEST_RESPONSE = "Hey! I heard you loud and clear. This is a test response from Arlo to verify the voice flow is working correctly.";
 
 /**
  * Hands-Free Voice Mode Hook
@@ -20,7 +22,6 @@ import { useAuth } from '@/providers/AuthProvider';
 export function useHandsFreeVoice() {
   const { isAuthenticated } = useAuth();
   const { settings, updateSettings, isLoading: settingsLoading } = useVoiceSettings();
-  const { sendMessage, messages, isLoading: arloLoading } = useArlo();
   
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
   const [isSessionActive, setIsSessionActive] = useState(false);
@@ -31,7 +32,6 @@ export function useHandsFreeVoice() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const silenceTimeoutRef = useRef<number | null>(null);
   const pendingTranscriptRef = useRef('');
-  const lastMessageCountRef = useRef(messages.length);
   const sessionTimeoutRef = useRef<number | null>(null);
 
   // Check if hands-free mode is enabled
@@ -89,37 +89,6 @@ export function useHandsFreeVoice() {
 
     return recognition;
   }, []);
-
-  // Send transcript to Arlo
-  const sendTranscriptToArlo = useCallback(async () => {
-    const textToSend = pendingTranscriptRef.current.trim();
-    if (!textToSend) {
-      // No speech detected, return to passive listening
-      cleanup();
-      setIsSessionActive(false);
-      setVoiceState('idle');
-      setTranscript('');
-      return;
-    }
-
-    // Clear transcript and switch to thinking state
-    pendingTranscriptRef.current = '';
-    setTranscript('');
-    setVoiceState('thinking');
-
-    // Stop speech recognition while processing
-    if (recognitionRef.current) {
-      try {
-        recognitionRef.current.stop();
-      } catch (e) {
-        // Already stopped
-      }
-    }
-
-    // Send message to Arlo (creates chat silently in background)
-    console.log('[HandsFree] Sending to Arlo:', textToSend);
-    await sendMessage(textToSend);
-  }, [sendMessage, cleanup]);
 
   // Speak response via Cartesia TTS
   const speakResponse = useCallback(async (text: string) => {
@@ -181,29 +150,42 @@ export function useHandsFreeVoice() {
     }
   }, [settings, cleanup]);
 
-  // Watch for new assistant messages to speak
-  useEffect(() => {
-    if (!isSessionActive || voiceState !== 'thinking') return;
-    
-    const currentCount = messages.length;
-    if (currentCount > lastMessageCountRef.current) {
-      const newMessages = messages.slice(lastMessageCountRef.current);
-      const lastAssistantMessage = newMessages.reverse().find(m => m.role === 'assistant');
-      
-      if (lastAssistantMessage && lastAssistantMessage.content) {
-        console.log('[HandsFree] Got assistant response, speaking');
-        speakResponse(lastAssistantMessage.content);
+  // Send transcript to Arlo (currently returns generic test response)
+  const sendTranscriptToArlo = useCallback(async () => {
+    const textToSend = pendingTranscriptRef.current.trim();
+    if (!textToSend) {
+      // No speech detected, return to passive listening
+      cleanup();
+      setIsSessionActive(false);
+      setVoiceState('idle');
+      setTranscript('');
+      return;
+    }
+
+    // Clear transcript and switch to thinking state
+    pendingTranscriptRef.current = '';
+    setTranscript('');
+    setVoiceState('thinking');
+
+    // Stop speech recognition while processing
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {
+        // Already stopped
       }
     }
-    lastMessageCountRef.current = currentCount;
-  }, [messages, isSessionActive, voiceState, speakResponse]);
 
-  // Update thinking state when Arlo starts processing
-  useEffect(() => {
-    if (isSessionActive && arloLoading && voiceState === 'listening') {
-      setVoiceState('thinking');
-    }
-  }, [arloLoading, isSessionActive, voiceState]);
+    // Log what user said
+    console.log('[HandsFree] User said:', textToSend);
+    
+    // For now, use generic test response instead of calling Arlo API
+    // This allows testing the full TTS flow
+    setTimeout(() => {
+      console.log('[HandsFree] Sending test response');
+      speakResponse(TEST_RESPONSE);
+    }, 500); // Small delay to simulate "thinking"
+  }, [cleanup, speakResponse]);
 
   // Start voice session after wake word detection
   const startVoiceSession = useCallback(async () => {
@@ -221,7 +203,6 @@ export function useHandsFreeVoice() {
       recognitionRef.current = recognition;
       pendingTranscriptRef.current = '';
       setTranscript('');
-      lastMessageCountRef.current = messages.length;
 
       // Set up recognition event handlers
       recognition.onresult = (event: SpeechRecognitionEventResult) => {
@@ -297,7 +278,7 @@ export function useHandsFreeVoice() {
       console.error('[HandsFree] Error starting voice session:', err);
       setError('Failed to start voice session');
     }
-  }, [initSpeechRecognition, messages.length, settings, sendTranscriptToArlo, cleanup, isSessionActive, voiceState]);
+  }, [initSpeechRecognition, settings, sendTranscriptToArlo, cleanup, isSessionActive, voiceState]);
 
   // Handle interruption (user speaks while Arlo is talking)
   const handleInterruption = useCallback(() => {

@@ -16,6 +16,7 @@ import { ArloProvider } from "./providers/ArloProvider";
 import { ChatHistoryProvider } from "./providers/ChatHistoryProvider";
 import { UserSettingsProvider } from "./providers/UserSettingsProvider";
 import { NotificationsProvider } from "./providers/NotificationsProvider";
+import { VoiceStateProvider } from "./providers/VoiceStateProvider";
 import ConditionalNavBar from "./components/ConditionalNavBar";
 import Chat from "./pages/Chat";
 import CalendarPage from "./pages/Calendar";
@@ -41,7 +42,7 @@ import MorningView from "./pages/MorningView";
 import FocusSession from "./pages/FocusSession";
 import { NotificationMonitor } from "./components/NotificationMonitor";
 import { MorningWakeupScheduler } from "./components/MorningWakeupScheduler";
-import { HandsFreeVoiceController } from "./components/voice";
+import { VoiceAmbientGlow } from "./components/voice/VoiceAmbientGlow";
 
 const queryClient = new QueryClient();
 
@@ -53,15 +54,16 @@ const App = () => (
           <ChatHistoryProvider>
             <ArloProvider>
               <NotificationsProvider>
-                <TooltipProvider>
-                  <Toaster />
-                  <Sonner />
-                  <NotificationMonitor />
-                  <MorningWakeupScheduler />
-                  <BrowserRouter>
-                    <ArloCommandLauncher />
-                    <HandsFreeVoiceController />
-                <ConditionalNavBar />
+                <VoiceStateProvider>
+                  <TooltipProvider>
+                    <Toaster />
+                    <Sonner />
+                    <NotificationMonitor />
+                    <MorningWakeupScheduler />
+                    <BrowserRouter>
+                      <ArloCommandLauncher />
+                      <VoiceAmbientGlow />
+                      <ConditionalNavBar />
                 <Routes>
                   {/* Public routes */}
                   <Route path="/login" element={<TailscaleAuth />} />
@@ -189,10 +191,11 @@ const App = () => (
 
                   {/* Catch-all route */}
                   <Route path="*" element={<NotFound />} />
-                </Routes>
-              </BrowserRouter>
-                </TooltipProvider>
-              </NotificationsProvider>
+                  </Routes>
+                </BrowserRouter>
+              </TooltipProvider>
+            </VoiceStateProvider>
+          </NotificationsProvider>
             </ArloProvider>
           </ChatHistoryProvider>
         </UserSettingsProvider>
