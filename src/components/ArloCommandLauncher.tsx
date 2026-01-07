@@ -114,7 +114,7 @@ const ArloCommandLauncher = () => {
       description: "Start a new note",
       category: "Actions",
       icon: Plus,
-      action: () => navigate("/notes-dashboard"),
+      action: () => navigate("/notes"),
       shortcut: "⌘N",
       keywords: ["new", "note", "create", "add"],
     });
@@ -191,7 +191,7 @@ const ArloCommandLauncher = () => {
         description: `Opened ${new Date(note.updatedAt).toLocaleDateString()}`,
         category: "Recent",
         icon: FileText,
-        action: () => navigate("/notes-dashboard"),
+        action: () => navigate("/notes"),
         keywords: ["recent", "note", ...(note.tags || [])],
       });
     });

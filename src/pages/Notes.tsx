@@ -365,7 +365,19 @@ export default function Notes() {
   }
 
   return (
-    <div className="flex h-screen bg-background print:bg-white">
+    <div className="flex flex-col h-screen bg-background print:bg-white">
+      {/* Back to dashboard - above everything */}
+      <div className="px-4 py-2 print:hidden">
+        <button
+          type="button"
+          onClick={() => navigate("/dashboard")}
+          className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/50 px-3 py-1 text-xs font-medium transition hover:border-border hover:bg-background/80"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" /> Back to dashboard
+        </button>
+      </div>
+
+      <div className="flex flex-1 min-h-0">
       {/* Sidebar - hidden in print */}
       {sidebarOpen && (
         <div className="print:hidden">
@@ -395,13 +407,6 @@ export default function Notes() {
         {/* Header - hidden in print */}
         <header className="flex items-center justify-between border-b border-border/40 bg-card/30 px-4 py-3 backdrop-blur-sm print:hidden">
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => navigate("/dashboard")}
-              className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/50 px-3 py-1 text-xs font-medium transition hover:border-border hover:bg-background/80"
-            >
-              <ArrowLeft className="h-3.5 w-3.5" /> Back to dashboard
-            </button>
             <Button
               variant="ghost"
               size="icon"
@@ -410,6 +415,7 @@ export default function Notes() {
             >
               <PanelLeft className="h-4 w-4" />
             </Button>
+            <h1 className="text-sm font-semibold text-foreground">Notes</h1>
           </div>
           
           {selectedNote && (
@@ -484,6 +490,7 @@ export default function Notes() {
             </div>
           )}
         </div>
+      </div>
       </div>
 
       {/* Create Note Dialog */}
