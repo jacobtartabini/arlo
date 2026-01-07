@@ -1,5 +1,6 @@
 import { useEffect } from "react";
-import { Bell, Settings } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft, Bell, Settings } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useNotifications } from "@/providers/NotificationsProvider";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
@@ -13,6 +14,7 @@ import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 
 export default function Notifications() {
+  const navigate = useNavigate();
   const {
     notifications,
     unreadCount,
@@ -29,6 +31,15 @@ export default function Notifications() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 pt-20 pb-8 px-4 md:px-8">
       <div className="max-w-4xl mx-auto space-y-6">
+        {/* Back Button */}
+        <button
+          type="button"
+          onClick={() => navigate("/dashboard")}
+          className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/50 px-3 py-1 text-xs font-medium transition hover:border-border hover:bg-background/80"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" /> Back to dashboard
+        </button>
+
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">

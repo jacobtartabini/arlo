@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { PanelLeft, LogIn, Loader2, Download, Share2 } from "lucide-react";
+import { ArrowLeft, PanelLeft, LogIn, Loader2, Download, Share2 } from "lucide-react";
 import { NotesSidebar } from "@/components/notes/NotesSidebar";
 import { NoteCanvas } from "@/components/notes/NoteCanvas";
 import { PageNoteEditor } from "@/components/notes/PageNoteEditor";
@@ -360,6 +360,13 @@ export default function Notes() {
         {/* Header - hidden in print */}
         <header className="flex items-center justify-between border-b border-border/40 bg-card/30 px-4 py-3 backdrop-blur-sm print:hidden">
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate("/dashboard")}
+              className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/50 px-3 py-1 text-xs font-medium transition hover:border-border hover:bg-background/80"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" /> Back to dashboard
+            </button>
             <Button
               variant="ghost"
               size="icon"
