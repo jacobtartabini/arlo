@@ -32,6 +32,7 @@ import { FilePreviewPanel } from "@/components/files/FilePreviewPanel";
 import { FileBreadcrumbs } from "@/components/files/FileBreadcrumbs";
 import { FileSortDropdown } from "@/components/files/FileSortDropdown";
 import { EmbeddedFileViewer } from "@/components/files/EmbeddedFileViewer";
+import { FileConversionSection } from "@/components/files/FileConversionSection";
 
 export default function Files() {
   const navigate = useNavigate();
@@ -324,6 +325,9 @@ export default function Files() {
             </Button>
           </div>
         </header>
+
+        {/* File Conversion Section */}
+        <FileConversionSection />
 
         {/* Main Content */}
         <div className="flex gap-6">
