@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { PanelLeftClose, PanelLeft, LogIn, Loader2, Download, Share2 } from "lucide-react";
+import { PanelLeft, LogIn, Loader2, Download, Share2 } from "lucide-react";
 import { NotesSidebar } from "@/components/notes/NotesSidebar";
 import { NoteCanvas } from "@/components/notes/NoteCanvas";
 import { PageNoteEditor } from "@/components/notes/PageNoteEditor";
@@ -366,11 +366,7 @@ export default function Notes() {
               className="h-8 w-8 rounded-lg"
               onClick={() => setSidebarOpen(!sidebarOpen)}
             >
-              {sidebarOpen ? (
-                <PanelLeftClose className="h-4 w-4" />
-              ) : (
-                <PanelLeft className="h-4 w-4" />
-              )}
+              <PanelLeft className="h-4 w-4" />
             </Button>
           </div>
           

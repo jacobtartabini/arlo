@@ -8,10 +8,9 @@ import {
   MessageSquare,
   ArrowUp,
   Paperclip,
-  ChevronLeft,
+  PanelLeft,
   Folder,
   FolderPlus,
-  Menu,
   Mic,
   MicOff,
   FileImage,
@@ -1206,11 +1205,7 @@ export default function Chat() {
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="p-2 hover:bg-muted rounded-lg transition-colors"
           >
-            {sidebarOpen ? (
-              <ChevronLeft className="w-5 h-5" />
-            ) : (
-              <Menu className="w-5 h-5" />
-            )}
+            <PanelLeft className="w-5 h-5" />
           </button>
         </div>
 
