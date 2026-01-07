@@ -4,7 +4,6 @@ import {
   X, 
   Volume2, 
   VolumeX, 
-  Plus, 
   AlertTriangle,
   Navigation,
   Clock,
@@ -18,7 +17,6 @@ import {
   DialogTitle,
   DialogTrigger 
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import type { NavigationState, IncidentType, LatLng, Incident } from '@/types/maps';
 
@@ -42,7 +40,6 @@ export function NavigationSheet({
   onReportIncident,
 }: NavigationSheetProps) {
   const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
-  const [reportDescription, setReportDescription] = useState('');
   const [isReporting, setIsReporting] = useState(false);
 
   const currentStep = navigation.currentRoute?.steps[navigation.currentStepIndex];
@@ -53,15 +50,12 @@ export function NavigationSheet({
     
     setIsReporting(true);
     try {
-      // Use the current step's end location for reporting
       const location = currentStep?.endLocation || { lat: 0, lng: 0 };
       await onReportIncident({
         type,
         location,
-        description: reportDescription || undefined,
       });
       setIsReportDialogOpen(false);
-      setReportDescription('');
     } finally {
       setIsReporting(false);
     }
@@ -69,58 +63,55 @@ export function NavigationSheet({
 
   return (
     <div className="space-y-4">
-      {/* Current Maneuver - Big and readable */}
-      <div className="bg-primary text-primary-foreground rounded-2xl p-6">
+      {/* Current Maneuver - Large, clear */}
+      <div className="bg-gradient-to-br from-primary to-primary/90 text-primary-foreground rounded-2xl p-5">
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center">
-            <Navigation className="w-8 h-8" />
+          <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center">
+            <Navigation className="w-7 h-7" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-3xl font-bold">{currentStep?.distance || '--'}</p>
-            <p className="text-lg opacity-90 truncate">
+            <p className="text-base opacity-90 truncate">
               {currentStep?.instruction || 'Continue on route'}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Next Step Preview */}
+      {/* Next Step */}
       {nextStep && (
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-secondary">
-          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-sm font-medium">
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/50">
+          <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-xs font-medium text-muted-foreground">
             Then
           </div>
-          <p className="text-sm truncate flex-1">{nextStep.instruction}</p>
-          <span className="text-sm text-muted-foreground">{nextStep.distance}</span>
+          <p className="text-sm truncate flex-1 text-muted-foreground">{nextStep.instruction}</p>
         </div>
       )}
 
-      {/* ETA and Remaining */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="text-center p-3 rounded-xl bg-secondary">
-          <Clock className="w-5 h-5 mx-auto text-muted-foreground mb-1" />
-          <p className="text-lg font-bold">{navigation.estimatedArrival || '--:--'}</p>
-          <p className="text-xs text-muted-foreground">Arrival</p>
+      {/* Stats Grid */}
+      <div className="grid grid-cols-3 gap-2">
+        <div className="text-center p-3 rounded-xl bg-secondary/50">
+          <Clock className="w-4 h-4 mx-auto text-muted-foreground mb-1" />
+          <p className="text-lg font-bold">{navigation.estimatedArrival || '--'}</p>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Arrival</p>
         </div>
-        <div className="text-center p-3 rounded-xl bg-secondary">
-          <Navigation className="w-5 h-5 mx-auto text-muted-foreground mb-1" />
+        <div className="text-center p-3 rounded-xl bg-secondary/50">
+          <Navigation className="w-4 h-4 mx-auto text-muted-foreground mb-1" />
           <p className="text-lg font-bold">{navigation.remainingDistance || '--'}</p>
-          <p className="text-xs text-muted-foreground">Distance</p>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Left</p>
         </div>
-        <div className="text-center p-3 rounded-xl bg-secondary">
-          <MapPin className="w-5 h-5 mx-auto text-muted-foreground mb-1" />
+        <div className="text-center p-3 rounded-xl bg-secondary/50">
+          <MapPin className="w-4 h-4 mx-auto text-muted-foreground mb-1" />
           <p className="text-lg font-bold">{navigation.remainingDuration || '--'}</p>
-          <p className="text-xs text-muted-foreground">Time left</p>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Time</p>
         </div>
       </div>
 
       {/* Quick Actions */}
       <div className="flex gap-2">
-        {/* Mute/Unmute */}
         <Button
           variant="secondary"
-          className="flex-1 gap-2"
-          onClick={() => {/* Toggle mute */}}
+          className="flex-1 gap-2 h-11 rounded-xl"
         >
           {navigation.voiceMuted ? (
             <>
@@ -135,15 +126,14 @@ export function NavigationSheet({
           )}
         </Button>
 
-        {/* Report Incident */}
         <Dialog open={isReportDialogOpen} onOpenChange={setIsReportDialogOpen}>
           <DialogTrigger asChild>
-            <Button variant="secondary" className="flex-1 gap-2">
+            <Button variant="secondary" className="flex-1 gap-2 h-11 rounded-xl">
               <AlertTriangle className="w-4 h-4" />
               Report
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-sm">
             <DialogHeader>
               <DialogTitle>Report an Incident</DialogTitle>
             </DialogHeader>
@@ -151,7 +141,6 @@ export function NavigationSheet({
               {incidentTypes.map(({ type, icon, label }) => (
                 <motion.button
                   key={type}
-                  whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => handleReport(type)}
                   disabled={isReporting}
@@ -166,28 +155,18 @@ export function NavigationSheet({
                 </motion.button>
               ))}
             </div>
-            <Input
-              placeholder="Add details (optional)"
-              value={reportDescription}
-              onChange={(e) => setReportDescription(e.target.value)}
-            />
           </DialogContent>
         </Dialog>
-
-        {/* Add Stop */}
-        <Button variant="secondary" size="icon">
-          <Plus className="w-4 h-4" />
-        </Button>
       </div>
 
       {/* End Navigation */}
       <Button
-        variant="destructive"
-        className="w-full gap-2"
+        variant="outline"
+        className="w-full gap-2 h-11 rounded-xl text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
         onClick={onEndNavigation}
       >
         <X className="w-4 h-4" />
-        End Navigation
+        End
       </Button>
     </div>
   );

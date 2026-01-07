@@ -1,6 +1,5 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import { motion, useDragControls, PanInfo } from 'framer-motion';
-import { GripHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ExploreSheet } from './sheets/ExploreSheet';
 import { SearchResultsSheet } from './sheets/SearchResultsSheet';
@@ -17,7 +16,8 @@ import type {
   SavedPlace,
   Incident,
   IncidentType,
-  LatLng
+  LatLng,
+  RecentSearch
 } from '@/types/maps';
 
 interface MapBottomSheetProps {
@@ -30,9 +30,11 @@ interface MapBottomSheetProps {
   selectedRouteIndex: number;
   navigation: NavigationState;
   smartSuggestions: DestinationPattern[];
+  recentSearches: RecentSearch[];
   homePlace?: SavedPlace;
   workPlace?: SavedPlace;
   incidents: Incident[];
+  currentLocation: LatLng | null;
   onPlaceSelect: (place: Place) => void;
   onGetDirections: (place: Place) => void;
   onRouteSelect: (index: number) => void;
@@ -43,10 +45,11 @@ interface MapBottomSheetProps {
   onSavePlace: (place: Omit<SavedPlace, 'id' | 'createdAt'>) => Promise<SavedPlace | null>;
 }
 
+// Heights for different states - more elegant proportions
 const SHEET_HEIGHTS = {
-  collapsed: 120,
-  half: '50%',
-  full: 'calc(100% - 80px)',
+  collapsed: 100,
+  half: '45%',
+  full: 'calc(100% - 60px)',
 };
 
 export function MapBottomSheet({
@@ -59,9 +62,11 @@ export function MapBottomSheet({
   selectedRouteIndex,
   navigation,
   smartSuggestions,
+  recentSearches,
   homePlace,
   workPlace,
   incidents,
+  currentLocation,
   onPlaceSelect,
   onGetDirections,
   onRouteSelect,
@@ -72,22 +77,18 @@ export function MapBottomSheet({
   onSavePlace,
 }: MapBottomSheetProps) {
   const dragControls = useDragControls();
-  const containerRef = useRef<HTMLDivElement>(null);
 
   const handleDragEnd = useCallback((_: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     const velocity = info.velocity.y;
     const offset = info.offset.y;
 
-    // Determine new state based on velocity and offset
-    if (velocity > 500 || offset > 100) {
-      // Dragging down fast or far
+    if (velocity > 400 || offset > 80) {
       if (state === 'full') {
         onStateChange('half');
       } else {
         onStateChange('collapsed');
       }
-    } else if (velocity < -500 || offset < -100) {
-      // Dragging up fast or far
+    } else if (velocity < -400 || offset < -80) {
       if (state === 'collapsed') {
         onStateChange('half');
       } else {
@@ -95,10 +96,6 @@ export function MapBottomSheet({
       }
     }
   }, [state, onStateChange]);
-
-  const getHeight = () => {
-    return SHEET_HEIGHTS[state];
-  };
 
   const renderContent = () => {
     switch (mode) {
@@ -147,9 +144,11 @@ export function MapBottomSheet({
         return (
           <ExploreSheet
             smartSuggestions={smartSuggestions}
+            recentSearches={recentSearches}
             homePlace={homePlace}
             workPlace={workPlace}
             incidents={incidents}
+            currentLocation={currentLocation}
             onPlaceSelect={onPlaceSelect}
             onVoteIncident={onVoteIncident}
           />
@@ -159,16 +158,24 @@ export function MapBottomSheet({
 
   return (
     <motion.div
-      ref={containerRef}
       initial={false}
-      animate={{ height: getHeight() }}
-      transition={{ type: 'spring', damping: 30, stiffness: 400 }}
+      animate={{ height: SHEET_HEIGHTS[state] }}
+      transition={{ 
+        type: 'spring', 
+        damping: 30, 
+        stiffness: 350,
+        mass: 0.8
+      }}
       className={cn(
         "absolute bottom-0 left-0 right-0 z-50",
-        "bg-background/95 backdrop-blur-xl",
-        "rounded-t-3xl shadow-2xl border-t border-x border-border",
+        "bg-background/95 backdrop-blur-2xl",
+        "rounded-t-[28px] shadow-2xl",
+        "border-t border-x border-white/10 dark:border-white/5",
         "overflow-hidden"
       )}
+      style={{
+        boxShadow: '0 -8px 32px rgba(0,0,0,0.12), 0 -2px 8px rgba(0,0,0,0.08)'
+      }}
     >
       {/* Drag Handle */}
       <motion.div
@@ -177,16 +184,14 @@ export function MapBottomSheet({
         dragConstraints={{ top: 0, bottom: 0 }}
         dragElastic={0.1}
         onDragEnd={handleDragEnd}
-        className="flex justify-center py-3 cursor-grab active:cursor-grabbing"
+        className="flex justify-center pt-3 pb-2 cursor-grab active:cursor-grabbing touch-none"
       >
-        <div className="flex flex-col items-center gap-1">
-          <GripHorizontal className="w-6 h-6 text-muted-foreground/50" />
-        </div>
+        <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
       </motion.div>
 
       {/* Content */}
       <div className="h-full overflow-hidden">
-        <div className="h-full overflow-y-auto px-4 pb-8">
+        <div className="h-full overflow-y-auto overscroll-contain px-5 pb-8">
           {renderContent()}
         </div>
       </div>
