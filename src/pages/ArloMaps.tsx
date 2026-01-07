@@ -235,7 +235,7 @@ export default function ArloMaps() {
 
   return (
     <MapProvider>
-      <div className="fixed inset-0 overflow-hidden">
+      <div className="fixed inset-0 top-16 overflow-hidden">
         {/* Full-bleed Map Canvas */}
         <MapCanvas
           center={center}
@@ -258,19 +258,21 @@ export default function ArloMaps() {
           onPlaceClick={handlePlaceSelect}
         />
 
-        {/* Floating Search Bar - Apple Maps style */}
-        <MapFloatingSearch
-          value={searchQuery}
-          onChange={handleSearch}
-          onResultSelect={handleSearchResultSelect}
-          onFocusChange={handleSearchFocusChange}
-          recentSearches={mapsPersistence.recentSearches}
-          onClearRecent={mapsPersistence.clearRecentSearches}
-          homePlace={mapsPersistence.homePlace}
-          workPlace={mapsPersistence.workPlace}
-          currentLocation={geolocation.position}
-          isNavigating={navigation.isNavigating}
-        />
+        {/* Floating Search Bar - Mobile only */}
+        {isMobile && (
+          <MapFloatingSearch
+            value={searchQuery}
+            onChange={handleSearch}
+            onResultSelect={handleSearchResultSelect}
+            onFocusChange={handleSearchFocusChange}
+            recentSearches={mapsPersistence.recentSearches}
+            onClearRecent={mapsPersistence.clearRecentSearches}
+            homePlace={mapsPersistence.homePlace}
+            workPlace={mapsPersistence.workPlace}
+            currentLocation={geolocation.position}
+            isNavigating={navigation.isNavigating}
+          />
+        )}
 
         {/* Floating Controls - Bottom right, minimal */}
         <AnimatePresence>
@@ -338,6 +340,10 @@ export default function ArloMaps() {
             onReportIncident={mapsPersistence.reportIncident}
             onVoteIncident={mapsPersistence.voteIncident}
             onSavePlace={mapsPersistence.savePlace}
+            searchQuery={searchQuery}
+            onSearchChange={handleSearch}
+            onSearchResultSelect={handleSearchResultSelect}
+            onClearRecent={mapsPersistence.clearRecentSearches}
           />
         )}
       </div>
