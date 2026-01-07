@@ -1742,6 +1742,7 @@ export type Database = {
           id: string
           name: string
           parent_folder_id: string | null
+          sort_order: number | null
           user_id: string | null
           user_key: string | null
         }
@@ -1751,6 +1752,7 @@ export type Database = {
           id?: string
           name: string
           parent_folder_id?: string | null
+          sort_order?: number | null
           user_id?: string | null
           user_key?: string | null
         }
@@ -1760,6 +1762,7 @@ export type Database = {
           id?: string
           name?: string
           parent_folder_id?: string | null
+          sort_order?: number | null
           user_id?: string | null
           user_key?: string | null
         }
@@ -1785,6 +1788,7 @@ export type Database = {
           pan_x: number
           pan_y: number
           pinned: boolean
+          sort_order: number | null
           tags: string[] | null
           title: string
           updated_at: string
@@ -1803,6 +1807,7 @@ export type Database = {
           pan_x?: number
           pan_y?: number
           pinned?: boolean
+          sort_order?: number | null
           tags?: string[] | null
           title?: string
           updated_at?: string
@@ -1821,6 +1826,7 @@ export type Database = {
           pan_x?: number
           pan_y?: number
           pinned?: boolean
+          sort_order?: number | null
           tags?: string[] | null
           title?: string
           updated_at?: string

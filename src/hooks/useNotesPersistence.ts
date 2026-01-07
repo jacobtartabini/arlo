@@ -14,6 +14,7 @@ interface DbNote {
   tags: string[] | null;
   folder_id: string | null;
   pinned: boolean;
+  sort_order: number;
   zoom: number;
   pan_x: number;
   pan_y: number;
@@ -28,6 +29,7 @@ interface DbNoteFolder {
   name: string;
   color: string;
   parent_folder_id: string | null;
+  sort_order: number;
   created_at: string;
 }
 
@@ -41,6 +43,7 @@ const dbToNote = (dbNote: DbNote): Note => ({
   tags: dbNote.tags ?? [],
   folderId: dbNote.folder_id ?? undefined,
   pinned: dbNote.pinned,
+  sortOrder: dbNote.sort_order ?? 0,
   zoom: dbNote.zoom,
   panX: dbNote.pan_x,
   panY: dbNote.pan_y,
@@ -58,6 +61,7 @@ const noteToDb = (note: Partial<Note> & { id?: string }) => ({
   tags: note.tags ?? [],
   folder_id: note.folderId ?? null,
   pinned: note.pinned ?? false,
+  sort_order: note.sortOrder ?? 0,
   zoom: note.zoom ?? 1,
   pan_x: note.panX ?? 0,
   pan_y: note.panY ?? 0,
@@ -70,6 +74,7 @@ const dbToFolder = (dbFolder: DbNoteFolder): NoteFolder => ({
   name: dbFolder.name,
   color: dbFolder.color,
   parentId: dbFolder.parent_folder_id ?? undefined,
+  sortOrder: dbFolder.sort_order ?? 0,
   createdAt: dbFolder.created_at,
 });
 
@@ -319,6 +324,46 @@ export function useNotesPersistence() {
     }
   }, []);
 
+  // Reorder notes - update sort_order for all affected notes
+  const reorderNotes = useCallback(async (reorderedNotes: Note[]): Promise<boolean> => {
+    // Optimistic update
+    setNotes(reorderedNotes);
+
+    try {
+      // Update sort_order for each note
+      const updates = reorderedNotes.map((note, index) => 
+        dataApiHelpers.update('notes', note.id, { sort_order: index })
+      );
+      
+      await Promise.all(updates);
+      return true;
+    } catch (error) {
+      console.error('Error reordering notes:', error);
+      await fetchNotes();
+      return false;
+    }
+  }, [fetchNotes]);
+
+  // Reorder folders - update sort_order for all affected folders
+  const reorderFolders = useCallback(async (reorderedFolders: NoteFolder[]): Promise<boolean> => {
+    // Optimistic update
+    setFolders(reorderedFolders);
+
+    try {
+      // Update sort_order for each folder
+      const updates = reorderedFolders.map((folder, index) => 
+        dataApiHelpers.update('note_folders', folder.id, { sort_order: index })
+      );
+      
+      await Promise.all(updates);
+      return true;
+    } catch (error) {
+      console.error('Error reordering folders:', error);
+      await fetchNotes();
+      return false;
+    }
+  }, [fetchNotes]);
+
   return {
     notes,
     folders,
@@ -332,6 +377,8 @@ export function useNotesPersistence() {
     renameNote,
     createFolder,
     deleteFolder,
+    reorderNotes,
+    reorderFolders,
     refreshNotes: fetchNotes,
   };
 }

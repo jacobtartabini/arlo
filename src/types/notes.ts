@@ -69,6 +69,7 @@ export interface Note {
   tags: string[];
   folderId?: string;
   pinned: boolean;
+  sortOrder: number;
   createdAt: string;
   updatedAt: string;
   zoom: number;
@@ -86,6 +87,7 @@ export interface NoteFolder {
   name: string;
   color: string;
   parentId?: string;
+  sortOrder: number;
   createdAt: string;
 }
 

@@ -17,6 +17,7 @@ export function createNote(overrides: Partial<Note> = {}): Note {
     elements: [],
     tags: [],
     pinned: false,
+    sortOrder: 0,
     createdAt: now,
     updatedAt: now,
     zoom: 1,
@@ -33,6 +34,7 @@ export function createFolder(name: string, color = "#3b82f6"): NoteFolder {
     id: generateId(),
     name,
     color,
+    sortOrder: 0,
     createdAt: new Date().toISOString(),
   };
 }
