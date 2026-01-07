@@ -241,6 +241,10 @@ export function useVoiceMode() {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const headers = await getAuthHeaders();
       
+      if (!headers) {
+        throw new Error('Not authenticated');
+      }
+      
       const response = await fetch(`${supabaseUrl}/functions/v1/cartesia-tts`, {
         method: 'POST',
         headers: {
@@ -256,7 +260,7 @@ export function useVoiceMode() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        console.error('[useVoiceMode] TTS error:', errorData);
+        console.error('[useVoiceMode] TTS error:', response.status, errorData);
         throw new Error(errorData.error || 'TTS failed');
       }
 
