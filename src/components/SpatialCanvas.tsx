@@ -13,7 +13,7 @@ import { APP_MODULES, type Module } from "@/lib/app-navigation";
 import { cn } from "@/lib/utils";
 import { useUserSettings } from "@/providers/UserSettingsProvider";
 import { ModuleTile } from "@/components/ModuleTile";
-import type { ModuleLayout } from "@/types/settings";
+import { useDashboardData } from "@/hooks/useDashboardData";
 
 type GestureEventType = Event & { scale: number };
 
@@ -34,33 +34,27 @@ const SIZE_DIMENSIONS: Record<'small' | 'medium' | 'large', { width: number; hei
   large: { width: 7, height: 6 },
 };
 
-// Get default layout for a module based on priority
-function getDefaultModuleLayout(module: Module, index: number): ModuleLayout {
-  if (module.priority === 'center') {
-    return index === 0 
-      ? { x: -4, y: -5, size: 'large' }
-      : { x: 4, y: -4, size: 'large' };
-  } else if (module.priority === 'inner') {
-    const positions = [
-      { x: -5, y: 2, size: 'medium' as const },
-      { x: 1, y: 2, size: 'medium' as const },
-      { x: 7, y: 2, size: 'medium' as const },
-    ];
-    return positions[index] || { x: 0, y: 0, size: 'medium' };
-  } else {
-    const positions = [
-      { x: -7, y: -2, size: 'small' as const },
-      { x: 10, y: -3, size: 'small' as const },
-      { x: 11, y: 1, size: 'small' as const },
-      { x: -8, y: 5, size: 'small' as const },
-      { x: 6, y: 6, size: 'small' as const },
-    ];
-    return positions[index] || { x: 0, y: 0, size: 'small' };
-  }
-}
+// Fixed module layouts - hardcoded for optimal dashboard experience
+const FIXED_MODULE_LAYOUTS: Record<string, { x: number; y: number; size: 'small' | 'medium' | 'large' }> = {
+  // Center (primary) - Large modules
+  productivity: { x: -4, y: -5, size: 'large' },
+  habits: { x: 4, y: -4, size: 'large' },
+  
+  // Inner ring (secondary) - Medium modules
+  notes: { x: -5, y: 2, size: 'medium' },
+  finance: { x: 1, y: 2, size: 'medium' },
+  maps: { x: 7, y: 2, size: 'medium' },
+  
+  // Outer ring (tertiary) - Small modules
+  travel: { x: -7, y: -2, size: 'small' },
+  files: { x: 10, y: -3, size: 'small' },
+  creation: { x: 11, y: 1, size: 'small' },
+  health: { x: -8, y: 5, size: 'small' },
+  security: { x: 6, y: 6, size: 'small' },
+};
 
 // Convert grid-based layout to pixel positions
-function layoutToPixels(layout: ModuleLayout): LayoutPosition {
+function layoutToPixels(layout: { x: number; y: number; size: 'small' | 'medium' | 'large' }): LayoutPosition {
   const dims = SIZE_DIMENSIONS[layout.size];
   return {
     x: layout.x * GRID_SIZE,
@@ -101,6 +95,7 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
   const hasInitializedRecenter = useRef(false);
   
   const { settings } = useUserSettings();
+  const { insights } = useDashboardData();
   
   const visibleModules = useMemo(() => {
     return APP_MODULES.filter(module => {
@@ -109,29 +104,19 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
     });
   }, [settings?.dashboard_module_visibility]);
   
-  // Calculate module positions using saved layouts or defaults
+  // Calculate module positions using fixed layouts
   const modulePositions = useMemo(() => {
     const positions = new Map<string, LayoutPosition>();
-    const savedLayouts = settings?.dashboard_module_layouts || {};
-    
-    // Group modules by priority to calculate default indices
-    const byPriority: Record<string, Module[]> = { center: [], inner: [], outer: [] };
-    visibleModules.forEach(m => byPriority[m.priority].push(m));
     
     visibleModules.forEach((module) => {
-      // Get saved layout or default
-      const saved = savedLayouts[module.id] as ModuleLayout | undefined;
-      if (saved) {
-        positions.set(module.id, layoutToPixels(saved));
-      } else {
-        const priorityIndex = byPriority[module.priority].indexOf(module);
-        const defaultLayout = getDefaultModuleLayout(module, priorityIndex);
-        positions.set(module.id, layoutToPixels(defaultLayout));
+      const layout = FIXED_MODULE_LAYOUTS[module.id];
+      if (layout) {
+        positions.set(module.id, layoutToPixels(layout));
       }
     });
     
     return positions;
-  }, [visibleModules, settings?.dashboard_module_layouts]);
+  }, [visibleModules]);
 
   const isControlled = controlledScale !== undefined;
   const userScale = isControlled ? controlledScale : internalScale;
@@ -491,7 +476,8 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
                   <ModuleTile
                     module={module}
                     onClick={() => handleModuleClick(module)}
-                    sizeClass={module.size}
+                    sizeClass={FIXED_MODULE_LAYOUTS[module.id]?.size === 'large' ? 'primary' : FIXED_MODULE_LAYOUTS[module.id]?.size === 'medium' ? 'secondary' : 'tertiary'}
+                    insights={insights}
                   />
                 </motion.div>
               );
