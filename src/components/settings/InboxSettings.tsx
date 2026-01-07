@@ -36,6 +36,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { toast } from 'sonner';
 import { getAuthHeaders } from '@/lib/arloAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { cn } from '@/lib/utils';
 
 // Helper to invoke edge functions with auth (matches CalendarIntegrations pattern)
 async function invokeWithAuth(functionName: string, body: Record<string, unknown>) {
@@ -126,6 +127,7 @@ export default function InboxSettings() {
   const { userKey, isAuthenticated, isLoading: authLoading } = useAuth();
   const { accounts, loading, refetch, disconnectAccount } = useInboxAccounts();
   const [connectingProvider, setConnectingProvider] = useState<InboxProvider | null>(null);
+  const [syncingAccountId, setSyncingAccountId] = useState<string | null>(null);
 
   // Check for OAuth callback on mount (same pattern as CalendarIntegrations)
   useEffect(() => {
@@ -165,7 +167,19 @@ export default function InboxSettings() {
       if (data?.error) throw new Error(data.error);
 
       toast.success(`Connected ${data.email || data.provider}`);
-      refetch();
+      await refetch();
+      
+      // Trigger initial sync for the newly connected account
+      if (data.account_id) {
+        toast.info('Starting initial sync...');
+        try {
+          await handleSync(data.account_id);
+          toast.success('Messages synced successfully');
+        } catch (syncErr) {
+          console.error('Initial sync failed:', syncErr);
+          toast.error('Connected but initial sync failed. Try syncing manually.');
+        }
+      }
     } catch (error: any) {
       toast.error('Failed to connect: ' + error.message);
     } finally {
@@ -219,8 +233,25 @@ export default function InboxSettings() {
       sync_type: 'incremental' 
     });
     
-    if (error) throw error;
+    if (error) {
+      console.error('Sync error:', error);
+      throw new Error(error.message || 'Sync failed');
+    }
     if (data?.error) throw new Error(data.error);
+    return data;
+  };
+
+  const handleSyncClick = async (accountId: string) => {
+    setSyncingAccountId(accountId);
+    try {
+      await handleSync(accountId);
+      toast.success('Messages synced successfully');
+      refetch();
+    } catch (error: any) {
+      toast.error('Sync failed: ' + (error.message || 'Unknown error'));
+    } finally {
+      setSyncingAccountId(null);
+    }
   };
 
   const handleDisconnect = async (accountId: string) => {
@@ -311,11 +342,12 @@ export default function InboxSettings() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleSync(account.id)}
+                    onClick={() => handleSyncClick(account.id)}
+                    disabled={syncingAccountId === account.id}
                     className="gap-1.5"
                   >
-                    <RefreshCw className="w-4 h-4" />
-                    Sync
+                    <RefreshCw className={cn("w-4 h-4", syncingAccountId === account.id && "animate-spin")} />
+                    {syncingAccountId === account.id ? 'Syncing...' : 'Sync'}
                   </Button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>

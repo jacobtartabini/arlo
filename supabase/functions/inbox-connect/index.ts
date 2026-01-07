@@ -258,6 +258,7 @@ Deno.serve(async (req) => {
       console.log(`[inbox-connect] Account saved: ${data.id}`);
       return jsonResponse(req, { 
         success: true, 
+        account_id: data.id,
         provider: stateProvider, 
         email: userEmail, 
         name: userName 
