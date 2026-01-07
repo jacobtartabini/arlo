@@ -2981,6 +2981,7 @@ export type Database = {
           api_endpoint: string | null
           api_token: string | null
           created_at: string
+          dashboard_module_visibility: Json | null
           data_collection_enabled: boolean
           email_notifications_enabled: boolean
           encryption_enabled: boolean
@@ -3002,6 +3003,7 @@ export type Database = {
           api_endpoint?: string | null
           api_token?: string | null
           created_at?: string
+          dashboard_module_visibility?: Json | null
           data_collection_enabled?: boolean
           email_notifications_enabled?: boolean
           encryption_enabled?: boolean
@@ -3023,6 +3025,7 @@ export type Database = {
           api_endpoint?: string | null
           api_token?: string | null
           created_at?: string
+          dashboard_module_visibility?: Json | null
           data_collection_enabled?: boolean
           email_notifications_enabled?: boolean
           encryption_enabled?: boolean

@@ -1,3 +1,6 @@
+// Dashboard module visibility - maps module ID to visibility boolean
+export type DashboardModuleVisibility = Record<string, boolean>;
+
 export interface UserSettings {
   id: string;
   user_id: string;
@@ -28,6 +31,9 @@ export interface UserSettings {
   api_endpoint: string | null;
   api_token: string | null;
   
+  // Dashboard visibility settings
+  dashboard_module_visibility: DashboardModuleVisibility;
+  
   // Timestamps
   created_at: string;
   updated_at: string;
@@ -50,4 +56,5 @@ export const DEFAULT_USER_SETTINGS: Omit<UserSettings, 'id' | 'user_id' | 'creat
   morning_wakeup_time: '07:00',
   api_endpoint: null,
   api_token: null,
+  dashboard_module_visibility: {}, // Empty = all modules visible by default
 };

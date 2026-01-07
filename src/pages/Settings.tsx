@@ -6,6 +6,7 @@ import CalendarIntegrations from '@/components/settings/CalendarIntegrations';
 import InboxSettings from '@/components/settings/InboxSettings';
 import MorningWakeupSettings from '@/components/settings/MorningWakeupSettings';
 import DriveIntegrations from '@/components/settings/DriveIntegrations';
+import DashboardVisibilitySettings from '@/components/settings/DashboardVisibilitySettings';
 import VoiceSettings from '@/components/settings/VoiceSettings';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -162,6 +163,11 @@ export default function Settings() {
               <EnhancedThemeToggle />
             </CardContent>
           </Card>
+        </section>
+
+        {/* Dashboard Visibility Settings */}
+        <section>
+          <DashboardVisibilitySettings />
         </section>
 
         {/* Calendar Integrations */}
