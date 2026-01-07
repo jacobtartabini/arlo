@@ -77,7 +77,7 @@ export default function Files() {
   const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([]);
 
   useEffect(() => {
-    document.title = "Files - Arlo";
+    document.title = "Arlo";
   }, []);
 
   // Load accounts on mount
