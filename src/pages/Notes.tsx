@@ -58,6 +58,8 @@ export default function Notes() {
     saveNote,
     createFolder,
     deleteFolder,
+    reorderNotes,
+    reorderFolders,
   } = useNotesPersistence();
 
   // Set page title
@@ -382,6 +384,8 @@ export default function Notes() {
             onRenameNote={handleRenameNote}
             onMoveToFolder={handleMoveToFolder}
             onDeleteFolder={handleDeleteFolder}
+            onReorderNotes={reorderNotes}
+            onReorderFolders={reorderFolders}
           />
         </div>
       )}
