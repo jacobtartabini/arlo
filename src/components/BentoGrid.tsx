@@ -121,35 +121,39 @@ type ModuleSpan = {
 };
 
 const getModuleSpan = (size: Module["size"], columns: number): ModuleSpan => {
+  // Map new size system: primary = large, secondary = medium, tertiary = small
+  const isPrimary = size === "primary";
+  const isSecondary = size === "secondary";
+  
   switch (columns) {
     case 1:
       return { colSpan: 1, rowSpan: 1 };
     case 2:
       return {
-        colSpan: size === "small" ? 1 : 2,
-        rowSpan: size === "large" ? 2 : 1
+        colSpan: isPrimary || isSecondary ? 2 : 1,
+        rowSpan: isPrimary ? 2 : 1
       };
     case 3:
-      if (size === "large") {
+      if (isPrimary) {
         return { colSpan: 3, rowSpan: 2 };
       }
-      if (size === "medium") {
+      if (isSecondary) {
         return { colSpan: 2, rowSpan: 1 };
       }
       return { colSpan: 1, rowSpan: 1 };
     case 4:
-      if (size === "large") {
+      if (isPrimary) {
         return { colSpan: 3, rowSpan: 2 };
       }
-      if (size === "medium") {
+      if (isSecondary) {
         return { colSpan: 2, rowSpan: 1 };
       }
       return { colSpan: 1, rowSpan: 1 };
     default:
-      if (size === "large") {
+      if (isPrimary) {
         return { colSpan: 3, rowSpan: 2 };
       }
-      if (size === "medium") {
+      if (isSecondary) {
         return { colSpan: 2, rowSpan: 1 };
       }
       return { colSpan: 1, rowSpan: 1 };

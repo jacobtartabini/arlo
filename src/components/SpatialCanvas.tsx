@@ -9,54 +9,94 @@ import {
 } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { APP_MODULES, type Module } from "@/lib/app-navigation";
+import { APP_MODULES, type Module, type ModulePriority } from "@/lib/app-navigation";
 import { cn } from "@/lib/utils";
 import { useUserSettings } from "@/providers/UserSettingsProvider";
+import { ModuleTile } from "@/components/ModuleTile";
 
 type GestureEventType = Event & { scale: number };
 
-// Grid configuration - 48px grid to match dot-grid background
+// Grid configuration - 48px grid
 const GRID_SIZE = 48;
-const GAP_UNITS = 1; // 1 grid unit gap between modules
 
-// Module layout configuration - strict grid positioning (top-left corner based)
-interface ModulePosition {
+// Size configurations for each tier
+const SIZE_CONFIG = {
+  primary: { widthUnits: 6, heightUnits: 5 },
+  secondary: { widthUnits: 5, heightUnits: 4 },
+  tertiary: { widthUnits: 4, heightUnits: 3 },
+};
+
+// Radial layout positions - center modules surrounded by inner and outer rings
+interface RadialPosition {
   id: string;
-  col: number; // column position in grid units
-  row: number; // row position in grid units
-  widthUnits: number; // width in grid units
-  heightUnits: number; // height in grid units
+  priority: ModulePriority;
+  angle: number; // Position around the ring (in degrees)
+  ring: number; // 0 = center, 1 = inner, 2 = outer
 }
 
-// Define strict grid layout - no overlapping, consistent spacing
-// Layout: 3 columns with varied heights
-// Total grid: ~24 units wide x ~18 units tall
-const moduleLayout: ModulePosition[] = [
-  // Row 1: Top row
-  { id: "finance", col: 0, row: 0, widthUnits: 5, heightUnits: 4 },
-  { id: "productivity", col: 6, row: 0, widthUnits: 6, heightUnits: 5 },
-  { id: "creation", col: 13, row: 0, widthUnits: 5, heightUnits: 4 },
+// Generate positions for visible modules based on priority
+function generateRadialLayout(modules: Module[]): Map<string, { x: number; y: number; width: number; height: number }> {
+  const layout = new Map<string, { x: number; y: number; width: number; height: number }>();
   
-  // Row 2: Upper middle  
-  { id: "travel", col: 0, row: 5, widthUnits: 4, heightUnits: 4 },
-  { id: "automations", col: 5, row: 6, widthUnits: 4, heightUnits: 3 },
-  { id: "files", col: 10, row: 6, widthUnits: 4, heightUnits: 3 },
-  { id: "security", col: 15, row: 5, widthUnits: 4, heightUnits: 4 },
+  const centerModules = modules.filter(m => m.priority === "center");
+  const innerModules = modules.filter(m => m.priority === "inner");
+  const outerModules = modules.filter(m => m.priority === "outer");
   
-  // Row 3: Lower middle
-  { id: "notes", col: 0, row: 10, widthUnits: 5, heightUnits: 4 },
-  { id: "insights", col: 6, row: 10, widthUnits: 4, heightUnits: 3 },
-  { id: "knowledge", col: 11, row: 10, widthUnits: 4, heightUnits: 3 },
-  { id: "health", col: 16, row: 10, widthUnits: 5, heightUnits: 4 },
+  // Center ring - positioned side by side in the middle
+  const centerSpacing = GRID_SIZE * 1;
+  let centerX = -(centerModules.length - 1) * (SIZE_CONFIG.primary.widthUnits * GRID_SIZE + centerSpacing) / 2;
   
-  // Row 4: Bottom row
-  { id: "habits", col: 5, row: 14, widthUnits: 4, heightUnits: 3 },
-  { id: "maps", col: 10, row: 14, widthUnits: 4, heightUnits: 3 },
-];
-
-// Calculate grid bounds for centering
-const GRID_COLS = 21;
-const GRID_ROWS = 17;
+  centerModules.forEach((module) => {
+    const size = SIZE_CONFIG.primary;
+    layout.set(module.id, {
+      x: centerX,
+      y: -(size.heightUnits * GRID_SIZE) / 2,
+      width: size.widthUnits * GRID_SIZE,
+      height: size.heightUnits * GRID_SIZE,
+    });
+    centerX += size.widthUnits * GRID_SIZE + centerSpacing;
+  });
+  
+  // Inner ring - arranged in a semi-circle around center
+  const innerRadius = GRID_SIZE * 8;
+  const innerStartAngle = -60;
+  const innerEndAngle = 60;
+  const innerAngleStep = innerModules.length > 1 ? (innerEndAngle - innerStartAngle) / (innerModules.length - 1) : 0;
+  
+  innerModules.forEach((module, index) => {
+    const size = SIZE_CONFIG.secondary;
+    const angle = innerModules.length === 1 ? 0 : innerStartAngle + index * innerAngleStep;
+    const radians = (angle * Math.PI) / 180;
+    
+    layout.set(module.id, {
+      x: Math.sin(radians) * innerRadius - (size.widthUnits * GRID_SIZE) / 2,
+      y: -Math.cos(radians) * innerRadius - (size.heightUnits * GRID_SIZE) / 2 + GRID_SIZE * 2,
+      width: size.widthUnits * GRID_SIZE,
+      height: size.heightUnits * GRID_SIZE,
+    });
+  });
+  
+  // Outer ring - spread around the edges
+  const outerRadius = GRID_SIZE * 13;
+  const outerStartAngle = -80;
+  const outerEndAngle = 80;
+  const outerAngleStep = outerModules.length > 1 ? (outerEndAngle - outerStartAngle) / (outerModules.length - 1) : 0;
+  
+  outerModules.forEach((module, index) => {
+    const size = SIZE_CONFIG.tertiary;
+    const angle = outerModules.length === 1 ? 0 : outerStartAngle + index * outerAngleStep;
+    const radians = (angle * Math.PI) / 180;
+    
+    layout.set(module.id, {
+      x: Math.sin(radians) * outerRadius - (size.widthUnits * GRID_SIZE) / 2,
+      y: -Math.cos(radians) * outerRadius - (size.heightUnits * GRID_SIZE) / 2 + GRID_SIZE * 4,
+      width: size.widthUnits * GRID_SIZE,
+      height: size.heightUnits * GRID_SIZE,
+    });
+  });
+  
+  return layout;
+}
 
 interface SpatialCanvasProps {
   onScaleChange?: (value: number) => void;
@@ -92,17 +132,17 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
   const { settings } = useUserSettings();
   
   // Filter modules based on visibility settings
-  const visibleModuleLayout = useMemo(() => {
-    return moduleLayout.filter(layoutPos => {
-      // Check if module exists in APP_MODULES
-      const module = moduleMap[layoutPos.id];
-      if (!module) return false;
-      
-      // Check visibility setting - default to visible if not explicitly hidden
+  const visibleModules = useMemo(() => {
+    return APP_MODULES.filter(module => {
       const visibility = settings?.dashboard_module_visibility;
-      return visibility?.[layoutPos.id] !== false;
+      return visibility?.[module.id] !== false;
     });
   }, [settings?.dashboard_module_visibility]);
+  
+  // Generate radial layout for visible modules
+  const modulePositions = useMemo(() => {
+    return generateRadialLayout(visibleModules);
+  }, [visibleModules]);
 
   const isControlled = controlledScale !== undefined;
   const userScale = isControlled ? controlledScale : internalScale;
@@ -132,7 +172,7 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
     isDraggingRef.current = isDragging;
   }, [isDragging]);
 
-  // Snap position to grid with soft easing
+  // Snap position to grid
   const snapToGrid = useCallback((pos: { x: number; y: number }) => {
     const snapThreshold = GRID_SIZE * 0.4;
     const nearestX = Math.round(pos.x / GRID_SIZE) * GRID_SIZE;
@@ -222,7 +262,6 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
         positionRef.current = { ...currentPosition };
         requestAnimationFrame(animate);
       } else {
-        // Soft snap when momentum ends
         const snapped = snapToGrid(currentPosition);
         setPosition(snapped);
         positionRef.current = snapped;
@@ -237,7 +276,6 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
       if (withMomentum) {
         applyMomentum();
       } else {
-        // Soft snap when drag ends without momentum
         const snapped = snapToGrid(positionRef.current);
         setPosition(snapped);
         positionRef.current = snapped;
@@ -383,14 +421,6 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
     };
   }, [releasePointer]);
 
-  // Snapped position for grid background alignment
-  const snappedBgPosition = useMemo(() => {
-    return {
-      x: position.x % GRID_SIZE,
-      y: position.y % GRID_SIZE
-    };
-  }, [position]);
-
   return (
     <div
       ref={containerRef}
@@ -403,7 +433,7 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
       onPointerCancel={handlePointerCancel}
       style={{ cursor: isDragging ? "grabbing" : "grab", touchAction: "none" }}
     >
-      {/* Subtle radial gradient background emanating from center */}
+      {/* Subtle radial gradient background */}
       <div 
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -420,7 +450,7 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
         }}
       />
 
-      {/* Prominent dot grid - moves in sync with modules */}
+      {/* Dot grid background */}
       <motion.div
         className="absolute pointer-events-none"
         animate={{ x: position.x, y: position.y, scale: userScale }}
@@ -432,7 +462,7 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
           top: '50%',
           marginLeft: -GRID_SIZE * 40,
           marginTop: -GRID_SIZE * 40,
-          backgroundImage: `radial-gradient(circle, hsl(var(--muted-foreground) / 0.25) 1.5px, transparent 1.5px)`,
+          backgroundImage: `radial-gradient(circle, hsl(var(--muted-foreground) / 0.2) 1.5px, transparent 1.5px)`,
           backgroundSize: `${GRID_SIZE}px ${GRID_SIZE}px`,
         }}
       />
@@ -443,155 +473,51 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
           animate={{ x: position.x, y: position.y, scale: userScale }}
           transition={{ type: "spring", stiffness: 200, damping: 25 }}
           className="relative"
-          style={{ width: GRID_SIZE * 32, height: GRID_SIZE * 20 }}
+          style={{ width: GRID_SIZE * 32, height: GRID_SIZE * 24 }}
         >
           <AnimatePresence>
-            {visibleModuleLayout.map((layoutPos, index) => {
-              const module = moduleMap[layoutPos.id];
-              if (!module) return null;
+            {visibleModules.map((module, index) => {
+              const pos = modulePositions.get(module.id);
+              if (!pos) return null;
 
-              const Icon = module.icon;
               const isHovered = hoveredModule === module.id;
-              const isPrimary = layoutPos.id === "productivity";
-              const isLarge = ["finance", "creation", "notes", "health"].includes(layoutPos.id);
-              
-              // Calculate pixel position from grid units (top-left based, offset to center the grid)
-              const offsetX = -(GRID_COLS * GRID_SIZE) / 2;
-              const offsetY = -(GRID_ROWS * GRID_SIZE) / 2;
-              const pixelX = layoutPos.col * GRID_SIZE + offsetX;
-              const pixelY = layoutPos.row * GRID_SIZE + offsetY;
-              
-              // Calculate size from grid units
-              const width = layoutPos.widthUnits * GRID_SIZE;
-              const height = layoutPos.heightUnits * GRID_SIZE;
 
               return (
                 <motion.div
                   key={module.id}
-                  initial={{ opacity: 0, scale: 0.95 }}
+                  initial={{ opacity: 0, scale: 0.9 }}
                   animate={{
                     opacity: 1,
                     scale: isHovered ? 1.02 : 1,
-                    x: pixelX,
-                    y: pixelY,
+                    x: pos.x,
+                    y: pos.y,
                   }}
-                  exit={{ opacity: 0, scale: 0.95 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
                   transition={{
-                    delay: index * 0.03,
+                    delay: index * 0.04,
                     type: "spring",
                     stiffness: 400,
                     damping: 30,
                   }}
                   className={cn(
-                    "absolute cursor-pointer group",
-                    isPrimary && "z-20",
-                    isLarge && "z-10"
+                    "absolute",
+                    module.priority === "center" && "z-20",
+                    module.priority === "inner" && "z-10"
                   )}
                   style={{
-                    width,
-                    height,
-                    zIndex: isPrimary ? 20 : isLarge ? 10 : 5 + (isHovered ? 50 : 0),
+                    width: pos.width,
+                    height: pos.height,
+                    left: "50%",
+                    top: "50%",
                   }}
                   onMouseEnter={() => setHoveredModule(module.id)}
                   onMouseLeave={() => setHoveredModule(null)}
-                  onClick={() => !isDragging && handleModuleClick(module)}
-                  whileTap={{ scale: 0.98 }}
                 >
-                  {/* Module card */}
-                  <div
-                    className={cn(
-                      "w-full h-full rounded-2xl border backdrop-blur-sm",
-                      "flex flex-col p-5 overflow-hidden",
-                      "transition-all duration-200 ease-out",
-                      isPrimary
-                        ? "bg-card/95 border-primary/25 shadow-lg shadow-primary/5"
-                        : isLarge
-                        ? "bg-card/90 border-border/50 shadow-md"
-                        : "bg-card/80 border-border/40 shadow-sm",
-                      isHovered && "border-primary/50 shadow-lg shadow-primary/10"
-                    )}
-                  >
-                    {/* Top accent line */}
-                    <motion.div
-                      className="absolute top-0 left-0 right-0 h-[2px]"
-                      initial={{ scaleX: 0 }}
-                      animate={{ scaleX: isHovered ? 1 : 0 }}
-                      transition={{ duration: 0.2 }}
-                      style={{
-                        background: `linear-gradient(90deg, transparent, hsl(var(--primary)), transparent)`,
-                        transformOrigin: "center"
-                      }}
-                    />
-
-                    {/* Icon */}
-                    <div className={cn(
-                      "rounded-xl flex items-center justify-center mb-3",
-                      "bg-primary/10 transition-colors duration-200",
-                      isHovered && "bg-primary/15",
-                      isPrimary ? "w-12 h-12" : isLarge ? "w-10 h-10" : "w-9 h-9"
-                    )}>
-                      <Icon 
-                        className={cn(
-                          "text-primary",
-                          isPrimary ? "w-6 h-6" : isLarge ? "w-5 h-5" : "w-4 h-4"
-                        )} 
-                        strokeWidth={2} 
-                      />
-                    </div>
-
-                    {/* Title */}
-                    <h3 className={cn(
-                      "font-semibold text-foreground tracking-tight mb-1.5",
-                      isPrimary ? "text-lg" : isLarge ? "text-base" : "text-sm"
-                    )}>
-                      {module.title}
-                    </h3>
-
-                    {/* Summary - show on all modules for larger sizes */}
-                    <p className={cn(
-                      "text-muted-foreground leading-relaxed flex-1",
-                      isPrimary ? "text-sm line-clamp-3" : isLarge ? "text-xs line-clamp-2" : "text-[11px] line-clamp-2"
-                    )}>
-                      {module.summary}
-                    </p>
-
-                    {/* Hover indicator */}
-                    <motion.div
-                      className="mt-auto pt-3 flex items-center gap-1.5"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: isHovered ? 1 : 0 }}
-                      transition={{ duration: 0.15 }}
-                    >
-                      <span className={cn(
-                        "font-medium text-primary/80",
-                        isPrimary ? "text-sm" : "text-xs"
-                      )}>
-                        Open
-                      </span>
-                      <svg 
-                        className={cn(
-                          "text-primary/80",
-                          isPrimary ? "w-4 h-4" : "w-3 h-3"
-                        )}
-                        fill="none" 
-                        viewBox="0 0 24 24" 
-                        stroke="currentColor"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </motion.div>
-
-                    {/* Subtle corner glow on hover */}
-                    <motion.div
-                      className="absolute bottom-0 right-0 w-24 h-24 pointer-events-none rounded-br-2xl"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: isHovered ? 1 : 0 }}
-                      transition={{ duration: 0.2 }}
-                      style={{
-                        background: `radial-gradient(circle at bottom right, hsl(var(--primary) / 0.08), transparent 70%)`
-                      }}
-                    />
-                  </div>
+                  <ModuleTile
+                    module={module}
+                    onClick={() => handleModuleClick(module)}
+                    sizeClass={module.size}
+                  />
                 </motion.div>
               );
             })}
