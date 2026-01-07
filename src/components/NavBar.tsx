@@ -177,28 +177,29 @@ export default function NavBar() {
     { title: "Settings", icon: SettingsIcon },
   ];
 
-  // Find active index based on current path (excluding custom elements)
+  // Build paths array matching expandableTabs indices
+  // Index: 0=Dashboard, 1=Inbox, 2=Chat, 3=Calendar, 4=separator, 5=notification, 6=Settings
+  const pathMap: (string | null)[] = [
+    "/dashboard",  // 0
+    "/inbox",      // 1
+    "/chat",       // 2
+    "/calendar",   // 3
+    null,          // 4 - separator
+    null,          // 5 - notification (custom)
+    "/settings",   // 6
+  ];
+
+  // Find active index based on current path
   const activeIndex = React.useMemo(() => {
-    const allItems = [...navTabsBase, { title: "Settings", icon: SettingsIcon, path: "/settings" }];
-    for (let i = 0; i < allItems.length; i++) {
-      const tab = allItems[i];
-      if (isNavSeparator(tab)) continue;
-      if (tab.path === location.pathname || 
-          (location.pathname === "/" && tab.path === "/dashboard")) {
-        return i;
-      }
-    }
-    return null;
+    const currentPath = location.pathname === "/" ? "/dashboard" : location.pathname;
+    return pathMap.findIndex(p => p === currentPath);
   }, [location.pathname]);
 
   const handleTabChange = (index: number | null) => {
     if (index === null) return;
-    
-    // Map index to actual navigation items (skip separator and custom element)
-    const allNavItems = [...navTabsBase, { title: "Settings", icon: SettingsIcon, path: "/settings" }];
-    const tab = allNavItems[index];
-    if (tab && !isNavSeparator(tab)) {
-      navigate(tab.path);
+    const path = pathMap[index];
+    if (path) {
+      navigate(path);
     }
   };
 
