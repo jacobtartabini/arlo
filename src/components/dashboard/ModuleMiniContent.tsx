@@ -494,8 +494,7 @@ const MiniMapComponent = memo(function MiniMapComponent({
 
   const mapContainerStyle = {
     width: "100%",
-    height: isPrimary ? "100%" : "100%",
-    minHeight: isPrimary ? "90px" : "70px",
+    height: "100%",
     borderRadius: "8px",
   };
 
@@ -521,10 +520,7 @@ const MiniMapComponent = memo(function MiniMapComponent({
 
   if (!isLoaded) {
     return (
-      <div 
-        className="bg-muted/30 rounded-lg animate-pulse flex items-center justify-center flex-1"
-        style={{ minHeight: isPrimary ? "90px" : "70px" }}
-      >
+      <div className="bg-muted/30 rounded-lg animate-pulse flex items-center justify-center w-full h-full">
         <MapPin className="w-4 h-4 text-muted-foreground/30" />
       </div>
     );
@@ -543,34 +539,33 @@ const MiniMapComponent = memo(function MiniMapComponent({
 
 // Maps with mini map preview
 function MapsMiniContent({ data, size }: { data: MiniContentProps["data"]; size: ModuleSize }) {
-  const isPrimary = size === "primary";
   const isTertiary = size === "tertiary";
   const places = data.recentPlaces.slice(0, 2);
-  
+
   // Default to San Francisco if no user location
   const mapCenter = data.userLocation || { lat: 37.7749, lng: -122.4194 };
 
   return (
-    <div className="flex flex-col gap-2 h-full">
-      {/* Mini map preview - takes remaining space */}
+    <div className="relative h-full">
+      {/* Mini map preview - fills available space */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="overflow-hidden rounded-lg border border-border/30 flex-1"
+        className="absolute inset-0 overflow-hidden rounded-lg border border-border/30 pointer-events-none"
       >
         <MiniMapComponent center={mapCenter} size={size} />
       </motion.div>
 
-      {/* Recent places chips */}
+      {/* Recent places chips (overlayed on top of the map) */}
       {!isTertiary && places.length > 0 && (
-        <div className="flex gap-1.5 flex-wrap shrink-0">
+        <div className="absolute left-2 right-2 bottom-2 flex gap-1.5 flex-wrap z-10">
           {places.map((place, i) => (
             <motion.div
               key={place.id}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: i * 0.05 }}
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-muted/30 text-[9px] text-muted-foreground"
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-muted/50 text-[9px] text-muted-foreground"
             >
               <MapPin className="w-2.5 h-2.5" />
               <span className="truncate max-w-[60px]">{place.name}</span>
@@ -837,6 +832,7 @@ function CreationMiniContent({ size }: { size: ModuleSize }) {
 
 export function ModuleMiniContent({ moduleId, size, data, onClick }: MiniContentProps) {
   const isTertiary = size === "tertiary";
+  const isMaps = moduleId === "maps";
 
   const content = (() => {
     switch (moduleId) {
@@ -873,8 +869,8 @@ export function ModuleMiniContent({ moduleId, size, data, onClick }: MiniContent
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.15 }}
       className={cn(
-        "mt-auto",
-        !isTertiary && "pt-3"
+        isMaps ? "h-full pt-2" : "mt-auto",
+        !isTertiary && !isMaps && "pt-3"
       )}
       onClick={onClick}
     >
