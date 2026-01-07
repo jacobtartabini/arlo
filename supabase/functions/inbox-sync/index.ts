@@ -308,13 +308,27 @@ Deno.serve(async (req) => {
     // Verify JWT
     const authResult = await verifyArloJWT(req);
     if (!authResult.authenticated || !authResult.userKey) {
+      console.log('[inbox-sync] Auth failed, returning 401');
       return unauthorizedResponse(req, 'Authentication required');
     }
 
     const userKey = authResult.userKey;
-    const { account_id, sync_type = 'incremental' }: SyncRequest = await req.json();
+    console.log(`[inbox-sync] Auth successful for: ${userKey}`);
+    
+    // Parse request body
+    let requestBody: SyncRequest;
+    try {
+      requestBody = await req.json();
+      console.log('[inbox-sync] Request body:', JSON.stringify(requestBody));
+    } catch (parseError) {
+      console.error('[inbox-sync] Failed to parse request body:', parseError);
+      return errorResponse(req, 'Invalid request body', 400);
+    }
+    
+    const { account_id, sync_type = 'incremental' } = requestBody;
 
     if (!account_id) {
+      console.log('[inbox-sync] Missing account_id');
       return errorResponse(req, 'account_id is required', 400);
     }
 
