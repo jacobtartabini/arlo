@@ -33,6 +33,7 @@ interface DbUserSettings {
   api_endpoint: string | null;
   api_token: string | null;
   dashboard_module_visibility: Record<string, boolean>;
+  dashboard_module_layouts: Record<string, { x: number; y: number; size: string }>;
   created_at: string;
   updated_at: string;
 }

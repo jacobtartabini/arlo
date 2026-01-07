@@ -1,6 +1,13 @@
 // Dashboard module visibility - maps module ID to visibility boolean
 export type DashboardModuleVisibility = Record<string, boolean>;
 
+// Dashboard module layout - position and size for each module
+export interface ModuleLayout {
+  x: number;
+  y: number;
+  size: 'small' | 'medium' | 'large';
+}
+export type DashboardModuleLayouts = Record<string, ModuleLayout>;
 export interface UserSettings {
   id: string;
   user_id: string;
@@ -34,6 +41,9 @@ export interface UserSettings {
   // Dashboard visibility settings
   dashboard_module_visibility: DashboardModuleVisibility;
   
+  // Dashboard module layout settings
+  dashboard_module_layouts: DashboardModuleLayouts;
+  
   // Timestamps
   created_at: string;
   updated_at: string;
@@ -57,4 +67,5 @@ export const DEFAULT_USER_SETTINGS: Omit<UserSettings, 'id' | 'user_id' | 'creat
   api_endpoint: null,
   api_token: null,
   dashboard_module_visibility: {}, // Empty = all modules visible by default
+  dashboard_module_layouts: {}, // Empty = use default auto-layout
 };
