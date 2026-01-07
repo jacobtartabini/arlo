@@ -5,8 +5,9 @@ import { useVoiceSettings } from './useVoiceSettings';
 import { getAuthHeaders } from '@/lib/arloAuth';
 import { usePorcupineWakeWord } from './usePorcupineWakeWord';
 import { useAuth } from '@/providers/AuthProvider';
+import { useChatHistory } from '@/providers/ChatHistoryProvider';
 
-// Generic test response for TTS testing
+// Generic test response for TTS testing (will be replaced with real Arlo response)
 const TEST_RESPONSE = "Hey! I heard you loud and clear. This is a test response from Arlo to verify the voice flow is working correctly.";
 
 /**
@@ -22,6 +23,7 @@ const TEST_RESPONSE = "Hey! I heard you loud and clear. This is a test response 
 export function useHandsFreeVoice() {
   const { isAuthenticated } = useAuth();
   const { settings, updateSettings, isLoading: settingsLoading } = useVoiceSettings();
+  const { appendMessage, ensureActiveConversation } = useChatHistory();
   
   const [voiceState, setVoiceState] = useState<VoiceState>('idle');
   const [isSessionActive, setIsSessionActive] = useState(false);
@@ -156,7 +158,7 @@ export function useHandsFreeVoice() {
     }
   }, [settings, cleanup]);
 
-  // Send transcript to Arlo (currently returns generic test response)
+  // Send transcript to Arlo and persist to chat history
   const sendTranscriptToArlo = useCallback(async () => {
     const textToSend = pendingTranscriptRef.current.trim();
     if (!textToSend) {
@@ -185,13 +187,31 @@ export function useHandsFreeVoice() {
     // Log what user said
     console.log('[HandsFree] User said:', textToSend);
     
+    // Get or create a conversation and save user message
+    const conversationId = ensureActiveConversation();
+    appendMessage({
+      conversationId,
+      text: textToSend,
+      sender: 'user',
+      status: 'sent',
+    });
+    
     // For now, use generic test response instead of calling Arlo API
     // This allows testing the full TTS flow
     setTimeout(() => {
       console.log('[HandsFree] Sending test response');
+      
+      // Save assistant response to chat history
+      appendMessage({
+        conversationId,
+        text: TEST_RESPONSE,
+        sender: 'arlo',
+        status: 'sent',
+      });
+      
       speakResponse(TEST_RESPONSE);
     }, 500); // Small delay to simulate "thinking"
-  }, [cleanup, speakResponse]);
+  }, [cleanup, speakResponse, ensureActiveConversation, appendMessage]);
 
   // Start voice session after wake word detection
   const startVoiceSession = useCallback(async () => {
