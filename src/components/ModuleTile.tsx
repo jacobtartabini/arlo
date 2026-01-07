@@ -103,15 +103,17 @@ export function ModuleTile({ module, onClick, sizeClass, dashboardData }: Module
 
           {/* Mini interaction content */}
           {!isLoading && (
-            <ModuleMiniContent
-              moduleId={module.id}
-              size={size}
-              data={data}
-            />
+            <div className={cn(module.id === "maps" && "flex-1 min-h-0")}>
+              <ModuleMiniContent
+                moduleId={module.id}
+                size={size}
+                data={data}
+              />
+            </div>
           )}
 
           {/* Spacer */}
-          <div className="flex-1 min-h-1" />
+          {module.id !== "maps" && <div className="flex-1 min-h-1" />}
 
           {/* Action hint - only on primary/secondary */}
           {!isTertiary && (
