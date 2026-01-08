@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { MobileChatView } from "@/components/mobile/views/MobileChatView";
 import {
   Search,
   Plus,
@@ -152,7 +154,7 @@ interface ChatFolder {
   updated_at: string;
 }
 
-export default function Chat() {
+function ChatDesktop() {
   const [input, setInput] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -1539,4 +1541,15 @@ export default function Chat() {
       </div>
     </div>
   );
+}
+
+// Main export with mobile/desktop routing
+export default function Chat() {
+  const isMobile = useIsMobile();
+  
+  if (isMobile) {
+    return <MobileChatView />;
+  }
+  
+  return <ChatDesktop />;
 }

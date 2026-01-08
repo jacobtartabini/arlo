@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { MobileHabitsView } from "@/components/mobile/views/MobileHabitsView";
 import { format } from "date-fns";
 import {
   Plus,
@@ -33,6 +35,7 @@ import type { RoutineWithHabits } from "@/types/habits";
 
 export default function Habits() {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const {
     habits,
     routines,
@@ -138,6 +141,11 @@ export default function Habits() {
         </div>
       </div>
     );
+  }
+
+  // Mobile view
+  if (isMobile) {
+    return <MobileHabitsView />;
   }
 
   return (
