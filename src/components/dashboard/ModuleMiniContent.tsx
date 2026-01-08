@@ -11,7 +11,8 @@ import {
   Sparkles, Clock, FolderOpen, Navigation, Calendar,
   Zap, Upload, PenLine, Shield, Monitor, Palette, Loader2, Send, Circle
 } from "lucide-react";
-import { GoogleMap, useJsApiLoader } from "@react-google-maps/api";
+import { GoogleMap } from "@react-google-maps/api";
+import { useMapContext } from "@/components/maps/MapProvider";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow, differenceInDays } from "date-fns";
 import { Input } from "@/components/ui/input";
@@ -620,10 +621,7 @@ const MiniMapComponent = memo(function MiniMapComponent({
   size: ModuleSize;
 }) {
   const [map, setMap] = useState<google.maps.Map | null>(null);
-  
-  const { isLoaded } = useJsApiLoader({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-  });
+  const { isLoaded } = useMapContext();
 
   // Recenter map when center prop changes (e.g., when geolocation resolves)
   useEffect(() => {
