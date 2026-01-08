@@ -3,6 +3,10 @@
  * 
  * Handles JWT-based authentication with the Raspberry Pi auth server.
  * Token is cached in memory only (no localStorage/sessionStorage).
+ * 
+ * In Lovable preview environments (*.lovableproject.com, lovable.dev),
+ * provides development-mode authentication when the Tailscale auth server
+ * is unreachable.
  */
 
 const AUTH_ENDPOINT = 'https://raspberrypi.tailf531bd.ts.net/auth/verify';
@@ -10,8 +14,55 @@ const AUTH_ENDPOINT = 'https://raspberrypi.tailf531bd.ts.net/auth/verify';
 // Buffer time before expiry to trigger refresh (15 seconds)
 const REFRESH_BUFFER_MS = 15 * 1000;
 
-// Network timeout for auth requests (10 seconds)
+// Network timeout for auth requests (10 seconds for prod, 3 seconds for dev fallback)
 const AUTH_TIMEOUT_MS = 10 * 1000;
+const DEV_AUTH_TIMEOUT_MS = 3 * 1000;
+
+// Development user key for Lovable preview environments
+const DEV_USER_KEY = 'dev@lovable.preview';
+
+/**
+ * Check if running in a Lovable preview environment
+ */
+function isLovablePreview(): boolean {
+  if (typeof window === 'undefined') return false;
+  const host = window.location.hostname;
+  return (
+    host.endsWith('.lovableproject.com') ||
+    host.includes('lovable.dev') ||
+    host === 'localhost'
+  );
+}
+
+/**
+ * Create a development-mode token for Lovable preview
+ */
+function createDevToken(): CachedToken {
+  // Token expires in 24 hours
+  const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
+  
+  // Create a simple JWT-like structure (not cryptographically signed, dev only)
+  const header = btoa(JSON.stringify({ alg: 'none', typ: 'JWT' }));
+  const payload = btoa(JSON.stringify({
+    sub: DEV_USER_KEY,
+    iss: 'lovable-dev',
+    exp: Math.floor(expiresAt / 1000),
+    iat: Math.floor(Date.now() / 1000),
+  }));
+  const token = `${header}.${payload}.dev`;
+
+  console.log('[arloAuth] Using development mode authentication (Lovable preview)');
+
+  return {
+    token,
+    expiresAt,
+    identity: {
+      user: DEV_USER_KEY,
+      node: 'lovable-preview',
+      tailnet: 'dev.lovable.ts.net',
+    },
+  };
+}
 
 function base64UrlToString(input: string): string {
   const pad = '='.repeat((4 - (input.length % 4)) % 4);
@@ -104,8 +155,11 @@ async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: nu
 
 /**
  * Fetch a new token from the auth server
+ * Falls back to dev mode in Lovable preview environments
  */
 async function fetchNewToken(): Promise<CachedToken | null> {
+  const inLovablePreview = isLovablePreview();
+  
   try {
     const response = await fetchWithTimeout(
       AUTH_ENDPOINT,
@@ -113,11 +167,15 @@ async function fetchNewToken(): Promise<CachedToken | null> {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
       },
-      AUTH_TIMEOUT_MS
+      inLovablePreview ? DEV_AUTH_TIMEOUT_MS : AUTH_TIMEOUT_MS
     );
 
     if (!response.ok) {
       console.error('[arloAuth] Auth endpoint returned:', response.status);
+      // Fall back to dev mode in Lovable preview
+      if (inLovablePreview) {
+        return createDevToken();
+      }
       return null;
     }
 
@@ -125,6 +183,9 @@ async function fetchNewToken(): Promise<CachedToken | null> {
     
     if (!data.token || !data.expiresAt) {
       console.error('[arloAuth] Invalid response from auth endpoint:', data);
+      if (inLovablePreview) {
+        return createDevToken();
+      }
       return null;
     }
 
@@ -142,6 +203,14 @@ async function fetchNewToken(): Promise<CachedToken | null> {
       },
     };
   } catch (error) {
+    // In Lovable preview environments, fall back to dev mode on network errors
+    if (inLovablePreview) {
+      if (import.meta.env.DEV) {
+        console.log('[arloAuth] Tailscale auth unreachable, using dev mode');
+      }
+      return createDevToken();
+    }
+    
     if (error instanceof Error && error.name === 'AbortError') {
       console.error('[arloAuth] Auth request timed out');
     } else {
