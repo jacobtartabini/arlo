@@ -18,6 +18,7 @@ import { UserSettingsProvider } from "./providers/UserSettingsProvider";
 import { NotificationsProvider } from "./providers/NotificationsProvider";
 import { VoiceStateProvider } from "./providers/VoiceStateProvider";
 import ConditionalNavBar from "./components/ConditionalNavBar";
+import { MobileNavWrapper } from "./components/mobile/MobileNavWrapper";
 import Chat from "./pages/Chat";
 import CalendarPage from "./pages/Calendar";
 import PublicBookingPage from "./pages/PublicBooking";
@@ -64,6 +65,7 @@ const App = () => (
                       <ArloCommandLauncher />
                       <VoiceAmbientGlow />
                       <ConditionalNavBar />
+                      <MobileNavWrapper />
                 <Routes>
                   {/* Public routes */}
                   <Route path="/login" element={<TailscaleAuth />} />

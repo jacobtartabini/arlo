@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useNavigate } from 'react-router-dom';
 import { useInboxThreads, useInboxMessages, useInboxAccounts } from '@/hooks/useInboxPersistence';
+import { useIsMobile } from '@/hooks/use-mobile';
 import type { InboxThread, InboxMessage } from '@/types/inbox';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -24,16 +25,28 @@ import {
   type ComposeData,
 } from '@/components/inbox';
 
+import { MobilePageLayout, MobileInboxView } from '@/components/mobile';
+
 const AUTO_SYNC_INTERVAL = 60000; // 60 seconds
 
 export default function Inbox() {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFolder, setActiveFolder] = useState<SystemFolder>('inbox');
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(new Set());
   const [isMobileReading, setIsMobileReading] = useState(false);
+
+  // Mobile view
+  if (isMobile) {
+    return (
+      <MobilePageLayout title="Inbox">
+        <MobileInboxView />
+      </MobilePageLayout>
+    );
+  }
   
   // Compose state
   const [composeOpen, setComposeOpen] = useState(false);
