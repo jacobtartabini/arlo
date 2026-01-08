@@ -5,11 +5,14 @@ import { useArlo } from "@/providers/ArloProvider";
 import { SpatialCanvas } from "@/components/SpatialCanvas";
 import { StatusChip } from "@/components/dashboard/StatusChip";
 import { MapProvider } from "@/components/maps/MapProvider";
+import { MobileHome, MobileTabBar } from "@/components/mobile";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { isAuthenticated, verifyAuth } = useAuth();
   const { isConnected, checkConnection } = useArlo();
+  const isMobile = useIsMobile();
   const [gridScale, setGridScale] = useState(1);
   const [isFit, setIsFit] = useState(false);
   const [recenterSignal, setRecenterSignal] = useState(0);
@@ -77,6 +80,17 @@ export default function Dashboard() {
     return null;
   }
 
+  // Mobile layout
+  if (isMobile) {
+    return (
+      <MapProvider>
+        <MobileHome />
+        <MobileTabBar />
+      </MapProvider>
+    );
+  }
+
+  // Desktop layout
   return (
     <MapProvider>
       <div className="min-h-screen bg-background relative overflow-hidden">
