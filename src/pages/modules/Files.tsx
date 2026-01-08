@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { MobileFilesView } from "@/components/mobile/views/MobileFilesView";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -36,7 +38,13 @@ import { FileConversionSection } from "@/components/files/FileConversionSection"
 
 export default function Files() {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
+
+  // Mobile view
+  if (isMobile) {
+    return <MobileFilesView />;
+  }
   
   const {
     isLoading: filesLoading,

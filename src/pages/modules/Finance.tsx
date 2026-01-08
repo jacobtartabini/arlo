@@ -1,4 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { MobileFinanceView } from "@/components/mobile/views/MobileFinanceView";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +23,7 @@ import { toast } from "sonner";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 
 export default function Finance() {
+  const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState("overview");
   const [accounts, setAccounts] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
@@ -100,6 +103,11 @@ export default function Finance() {
         </div>
       </div>
     );
+  }
+
+  // Mobile view
+  if (isMobile) {
+    return <MobileFinanceView />;
   }
 
   return (

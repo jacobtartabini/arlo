@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { MobileTravelView } from "@/components/mobile/views/MobileTravelView";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -16,6 +18,7 @@ import { useAuth } from "@/providers/AuthProvider";
 
 export default function Travel() {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const { fetchTrips, createTrip, deleteTrip } = useTravelPersistence();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   
@@ -137,6 +140,11 @@ export default function Travel() {
         </div>
       </div>
     );
+  }
+
+  // Mobile view
+  if (isMobile) {
+    return <MobileTravelView />;
   }
 
   return (

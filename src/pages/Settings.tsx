@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { MobileSettingsView } from '@/components/mobile/views/MobileSettingsView';
 import { useArlo } from '@/providers/ArloProvider';
 import { useUserSettings } from '@/providers/UserSettingsProvider';
 import EnhancedThemeToggle from '@/components/EnhancedThemeToggle';
@@ -100,9 +102,15 @@ function SettingToggle({ label, description, checked, onCheckedChange }: Setting
 }
 
 export default function Settings() {
+  const isMobile = useIsMobile();
   const { isConnected } = useArlo();
   const { settings, isLoading, isAuthenticated, updateSettings } = useUserSettings();
   const navigate = useNavigate();
+
+  // Mobile view
+  if (isMobile) {
+    return <MobileSettingsView />;
+  }
 
   // SEO
   useEffect(() => {

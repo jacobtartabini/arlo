@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { MobileCalendarView } from "@/components/mobile/views/MobileCalendarView";
 import {
   addDays,
   addMonths,
@@ -97,6 +99,12 @@ const DEFAULT_DRAFT: DraftState = {
 
 const CalendarPage: React.FC = () => {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
+
+  // Mobile view - render early before other hooks that may have side effects
+  if (isMobile) {
+    return <MobileCalendarView />;
+  }
   const [view, setView] = React.useState<CalendarView>("week");
   const [selectedDate, setSelectedDate] = React.useState(new Date());
   const [events, setEvents, bookings, setBookings, isCalendarLoading, isCalendarAuthenticated] = useCalendarDatabase();
