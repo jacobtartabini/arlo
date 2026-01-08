@@ -1,7 +1,6 @@
 import { motion } from "framer-motion";
-import { Flame, Zap, TrendingUp } from "lucide-react";
+import { Flame, Zap } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { MobileModuleCard } from "../MobileModuleCard";
 import { cn } from "@/lib/utils";
 
 interface MobileHabitsCardProps {
@@ -20,20 +19,32 @@ export function MobileHabitsCard({
   const navigate = useNavigate();
   const progressPercent = total > 0 ? (completed / total) * 100 : 0;
   const remaining = total - completed;
+  const allDone = remaining === 0 && total > 0;
 
   return (
-    <MobileModuleCard
-      title="Habits"
-      icon={Flame}
+    <motion.div
+      whileTap={{ scale: 0.98 }}
       onClick={() => navigate("/habits")}
-      actionLabel="Open"
-      isCompact
+      className="rounded-2xl bg-card border border-border/50 p-4 cursor-pointer"
     >
-      {/* Stats row */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <div className="flex items-center gap-2 mb-1">
+            <Flame className="h-4 w-4 text-orange-500" />
+            <h3 className="text-[15px] font-semibold text-foreground">Habits</h3>
+          </div>
+          
+          <p className="text-[13px] text-muted-foreground">
+            {allDone 
+              ? "All done for today! 🎉" 
+              : `${remaining} remaining`
+            }
+          </p>
+        </div>
+
         {/* Circular progress */}
         <div className="relative w-14 h-14">
-          <svg className="w-full h-full -rotate-90">
+          <svg className="w-full h-full -rotate-90" viewBox="0 0 56 56">
             <circle
               cx="28"
               cy="28"
@@ -55,33 +66,32 @@ export function MobileHabitsCard({
             />
           </svg>
           <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-sm font-bold text-foreground">
+            <span className="text-[13px] font-bold text-foreground">
               {completed}/{total}
             </span>
           </div>
         </div>
+      </div>
 
-        {/* Info chips */}
-        <div className="flex-1 space-y-1.5">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5">
-              <TrendingUp className="h-3.5 w-3.5 text-orange-500" />
-              <span className="text-xs font-medium">{streak} day streak</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Zap className="h-3.5 w-3.5 text-amber-500" />
-              <span className="text-xs font-medium">{xp} XP</span>
-            </div>
+      {/* Stats row */}
+      <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border/50">
+        <div className="flex items-center gap-1.5">
+          <div className="w-5 h-5 rounded-md bg-orange-500/10 flex items-center justify-center">
+            <Flame className="h-3 w-3 text-orange-500" />
           </div>
-          
-          <p className="text-xs text-muted-foreground">
-            {remaining > 0 
-              ? `${remaining} habit${remaining !== 1 ? "s" : ""} remaining today`
-              : "All habits complete! 🎉"
-            }
-          </p>
+          <span className="text-[12px] text-muted-foreground">
+            <span className="font-semibold text-foreground">{streak}</span> day streak
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-5 h-5 rounded-md bg-amber-500/10 flex items-center justify-center">
+            <Zap className="h-3 w-3 text-amber-500" />
+          </div>
+          <span className="text-[12px] text-muted-foreground">
+            <span className="font-semibold text-foreground">{xp}</span> XP
+          </span>
         </div>
       </div>
-    </MobileModuleCard>
+    </motion.div>
   );
 }

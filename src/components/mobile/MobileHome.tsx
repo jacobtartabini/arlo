@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { useDashboardData } from "@/hooks/useDashboardData";
 import { MobileGreeting } from "./MobileGreeting";
@@ -6,8 +5,8 @@ import { MobileTodayCard } from "./cards/MobileTodayCard";
 import { MobileHabitsCard } from "./cards/MobileHabitsCard";
 import { MobileFinanceCard } from "./cards/MobileFinanceCard";
 import { MobileQuickActions } from "./cards/MobileQuickActions";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Skeleton } from "@/components/ui/skeleton";
+import { MobileInboxCard } from "./cards/MobileInboxCard";
+import { cn } from "@/lib/utils";
 
 export function MobileHome() {
   const dashboardData = useDashboardData();
@@ -32,16 +31,19 @@ export function MobileHome() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background pb-20">
-        <div className="px-5 pt-4 pb-2">
-          <Skeleton className="h-5 w-32 mb-2" />
-          <Skeleton className="h-8 w-48 mb-1" />
-          <Skeleton className="h-4 w-40" />
-        </div>
-        <div className="px-5 space-y-4 mt-4">
-          <Skeleton className="h-48 w-full rounded-2xl" />
-          <Skeleton className="h-24 w-full rounded-2xl" />
-          <Skeleton className="h-32 w-full rounded-2xl" />
+      <div className="min-h-screen bg-background">
+        <div className="px-6 pt-12 pb-24 animate-pulse">
+          <div className="h-4 w-24 bg-muted rounded mb-2" />
+          <div className="h-8 w-40 bg-muted rounded mb-4" />
+          <div className="flex gap-2 mb-8">
+            <div className="h-6 w-20 bg-muted rounded-full" />
+            <div className="h-6 w-24 bg-muted rounded-full" />
+          </div>
+          <div className="space-y-4">
+            <div className="h-48 bg-muted rounded-2xl" />
+            <div className="h-28 bg-muted rounded-2xl" />
+            <div className="h-36 bg-muted rounded-2xl" />
+          </div>
         </div>
       </div>
     );
@@ -49,9 +51,12 @@ export function MobileHome() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Scrollable content with safe area padding */}
-      <div className="pb-24 overflow-y-auto">
-        {/* Greeting section */}
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="pb-28 pt-12"
+      >
+        {/* Greeting */}
         <MobileGreeting
           tasksToday={totalTasks}
           tasksDone={tasksCompletedToday}
@@ -60,13 +65,13 @@ export function MobileHome() {
           habitsDone={habitsCompletedToday}
         />
 
-        {/* Cards stack */}
-        <div className="px-5 space-y-4 mt-2">
-          {/* Primary card - Today/Tasks */}
+        {/* Cards */}
+        <div className="px-4 mt-6 space-y-3">
+          {/* Primary: Today tasks */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
+            transition={{ delay: 0.05 }}
           >
             <MobileTodayCard
               tasks={todayTasks}
@@ -77,12 +82,12 @@ export function MobileHome() {
             />
           </motion.div>
 
-          {/* Habits card */}
+          {/* Habits */}
           {totalHabitsToday > 0 && (
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15 }}
+              transition={{ delay: 0.1 }}
             >
               <MobileHabitsCard
                 completed={habitsCompletedToday}
@@ -93,9 +98,21 @@ export function MobileHome() {
             </motion.div>
           )}
 
-          {/* Finance snapshot */}
+          {/* Inbox preview - only if there are emails */}
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+          >
+            <MobileInboxCard
+              unreadCount={0}
+              emails={[]}
+            />
+          </motion.div>
+
+          {/* Finance */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
           >
@@ -107,19 +124,16 @@ export function MobileHome() {
           </motion.div>
         </div>
 
-        {/* Quick actions grid */}
+        {/* Quick actions */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.25 }}
-          className="mt-6"
+          className="mt-8"
         >
           <MobileQuickActions />
         </motion.div>
-
-        {/* Bottom spacing for tab bar */}
-        <div className="h-8" />
-      </div>
+      </motion.div>
     </div>
   );
 }
