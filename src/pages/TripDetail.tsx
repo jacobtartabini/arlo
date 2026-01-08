@@ -4,7 +4,7 @@ import { format, differenceInDays, eachDayOfInterval } from "date-fns";
 import {
   ArrowLeft, Plane, MapPin, Calendar, DollarSign, 
   List, Plus, RefreshCw,
-  Bookmark, Clock, CheckCircle2, Folder
+  Bookmark, Clock, CheckCircle2, Folder, Utensils
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -26,6 +26,7 @@ import { TripCurrencyWidget } from "@/components/travel/TripCurrencyWidget";
 import { TripPlanningAssistant } from "@/components/travel/TripPlanningAssistant";
 import { FlightExplorer } from "@/components/travel/FlightExplorer";
 import { AddDestinationDialog } from "@/components/travel/AddDestinationDialog";
+import { RestaurantBookingCard } from "@/components/travel/RestaurantBookingCard";
 import { MapProvider } from "@/components/maps/MapProvider";
 import { LinkedFilesSection } from "@/components/files/LinkedFilesSection";
 import { cn } from "@/lib/utils";
@@ -208,6 +209,10 @@ export default function TripDetail() {
               <TabsTrigger value="reservations" className="gap-2">
                 <Plane className="h-4 w-4" />
                 Flights
+              </TabsTrigger>
+              <TabsTrigger value="dining" className="gap-2">
+                <Utensils className="h-4 w-4" />
+                Dining
               </TabsTrigger>
               <TabsTrigger value="budget" className="gap-2">
                 <DollarSign className="h-4 w-4" />
@@ -528,6 +533,23 @@ export default function TripDetail() {
                         itineraryItemId: item.id,
                       });
                     }
+                  }
+                  return item;
+                }}
+              />
+            </TabsContent>
+
+            {/* Dining Tab */}
+            <TabsContent value="dining">
+              <RestaurantBookingCard
+                tripId={tripId!}
+                destinations={destinations}
+                onAddToItinerary={async (type, title, startTime, options) => {
+                  const item = await createItineraryItem(tripId!, type, title, startTime, options);
+                  if (item) {
+                    setItineraryItems(prev => [...prev, item].sort((a, b) => 
+                      a.startTime.getTime() - b.startTime.getTime()
+                    ));
                   }
                   return item;
                 }}
