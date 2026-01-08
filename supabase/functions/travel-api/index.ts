@@ -58,7 +58,19 @@ interface ParseReservationRequest {
   text: string;
 }
 
-type RequestBody = WeatherRequest | CurrencyRequest | FlightSearchRequest | HotelSearchRequest | AirportSearchRequest | ParseReservationRequest;
+interface RestaurantSearchRequest {
+  action: 'restaurant_search';
+  location: string;
+  latitude?: number;
+  longitude?: number;
+  date?: string;
+  time?: string;
+  partySize?: number;
+  cuisine?: string;
+  priceRange?: number[];
+}
+
+type RequestBody = WeatherRequest | CurrencyRequest | FlightSearchRequest | HotelSearchRequest | AirportSearchRequest | ParseReservationRequest | RestaurantSearchRequest;
 
 // Parse common reservation formats
 function parseReservationText(text: string): { type: string; data: Record<string, unknown> } | null {
@@ -470,6 +482,116 @@ Deno.serve(async (req) => {
           parsed,
           success: parsed !== null,
         });
+      }
+
+      case 'restaurant_search': {
+        const yelpApiKey = Deno.env.get('YELP_API_KEY');
+        
+        if (!yelpApiKey) {
+          return jsonResponse(req, { 
+            error: 'Restaurant search not configured. Please add YELP_API_KEY.',
+            configured: false 
+          });
+        }
+
+        const { location, latitude, longitude, date, time, partySize = 2, cuisine, priceRange } = body as RestaurantSearchRequest;
+        
+        try {
+          // Build Yelp Fusion API URL
+          let searchUrl = 'https://api.yelp.com/v3/businesses/search?';
+          const params = new URLSearchParams();
+          
+          if (latitude && longitude) {
+            params.append('latitude', latitude.toString());
+            params.append('longitude', longitude.toString());
+          } else if (location) {
+            params.append('location', location);
+          } else {
+            throw new Error('Location or coordinates required');
+          }
+          
+          params.append('categories', cuisine || 'restaurants');
+          params.append('limit', '20');
+          params.append('sort_by', 'best_match');
+          
+          // Price filter: Yelp uses 1-4 scale
+          if (priceRange && priceRange.length > 0) {
+            params.append('price', priceRange.join(','));
+          }
+          
+          // If date/time provided, check if open at that time
+          if (date && time) {
+            const dateTime = new Date(`${date}T${time}`);
+            params.append('open_at', Math.floor(dateTime.getTime() / 1000).toString());
+          }
+          
+          searchUrl += params.toString();
+          console.log('[travel-api] Yelp search URL:', searchUrl);
+          
+          const response = await fetch(searchUrl, {
+            headers: { 
+              'Authorization': `Bearer ${yelpApiKey}`,
+              'Accept': 'application/json',
+            },
+          });
+          
+          const data = await response.json();
+          
+          if (data.error) {
+            console.error('[travel-api] Yelp error:', data.error);
+            throw new Error(data.error.description || 'Yelp API error');
+          }
+          
+          // Transform results with booking links
+          const restaurants = (data.businesses || []).map((biz: {
+            id: string;
+            name: string;
+            rating?: number;
+            review_count?: number;
+            price?: string;
+            categories?: { title: string }[];
+            location?: { display_address?: string[] };
+            coordinates?: { latitude?: number; longitude?: number };
+            phone?: string;
+            image_url?: string;
+            url?: string;
+            is_closed?: boolean;
+            hours?: { is_open_now?: boolean }[];
+          }) => {
+            // Generate booking links
+            const encodedName = encodeURIComponent(biz.name);
+            const encodedLocation = encodeURIComponent(biz.location?.display_address?.join(', ') || location || '');
+            const openTableLink = `https://www.opentable.com/s?term=${encodedName}&covers=${partySize}${date ? `&dateTime=${date}T${time || '19:00'}` : ''}`;
+            const googleReserveLink = `https://www.google.com/maps/search/${encodedName}+${encodedLocation}`;
+            
+            return {
+              id: biz.id,
+              name: biz.name,
+              rating: biz.rating,
+              reviewCount: biz.review_count,
+              priceLevel: biz.price?.length || null,
+              cuisine: biz.categories?.map(c => c.title).join(', '),
+              address: biz.location?.display_address?.join(', '),
+              latitude: biz.coordinates?.latitude,
+              longitude: biz.coordinates?.longitude,
+              phone: biz.phone,
+              imageUrl: biz.image_url,
+              yelpUrl: biz.url,
+              isOpen: !biz.is_closed,
+              bookingLinks: {
+                yelp: biz.url,
+                openTable: openTableLink,
+                google: googleReserveLink,
+              },
+            };
+          });
+          
+          console.log('[travel-api] Found', restaurants.length, 'restaurants');
+          return jsonResponse(req, { restaurants, configured: true, partySize, date, time });
+        } catch (e) {
+          console.error('[travel-api] Restaurant search error:', e);
+          return jsonResponse(req, { error: e instanceof Error ? e.message : 'Failed to search restaurants', configured: true });
+        }
       }
 
       default:
