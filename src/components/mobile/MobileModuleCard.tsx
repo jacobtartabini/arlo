@@ -6,90 +6,76 @@ import { cn } from "@/lib/utils";
 interface MobileModuleCardProps {
   title: string;
   subtitle?: string;
-  icon: LucideIcon;
-  accentColor?: string;
+  icon?: LucideIcon;
   onClick?: () => void;
   children: ReactNode;
   actionLabel?: string;
-  isCompact?: boolean;
   className?: string;
+  noPadding?: boolean;
 }
 
 export function MobileModuleCard({
   title,
   subtitle,
   icon: Icon,
-  accentColor = "primary",
   onClick,
   children,
   actionLabel,
-  isCompact = false,
   className,
+  noPadding = false,
 }: MobileModuleCardProps) {
   return (
     <motion.div
-      whileTap={{ scale: 0.985 }}
+      whileTap={onClick ? { scale: 0.98 } : undefined}
       onClick={onClick}
       className={cn(
-        "relative rounded-2xl overflow-hidden",
-        "bg-card/60 backdrop-blur-xl",
-        "border border-border/50",
-        "shadow-sm",
-        onClick && "cursor-pointer active:bg-card/80",
+        "rounded-2xl overflow-hidden",
+        "bg-card border border-border/50",
+        onClick && "cursor-pointer active:bg-card/90",
         className
       )}
     >
-      {/* Accent gradient at top */}
-      <div 
-        className="absolute top-0 inset-x-0 h-0.5 opacity-60"
-        style={{
-          background: `linear-gradient(90deg, transparent, hsl(var(--${accentColor})), transparent)`
-        }}
-      />
-
-      <div className={cn(isCompact ? "p-3" : "p-4")}>
-        {/* Header */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2.5">
-            <div className={cn(
-              "flex items-center justify-center rounded-xl",
-              "bg-primary/10",
-              isCompact ? "w-8 h-8" : "w-9 h-9"
-            )}>
-              <Icon className={cn(
-                "text-primary",
-                isCompact ? "h-4 w-4" : "h-4.5 w-4.5"
-              )} strokeWidth={2} />
-            </div>
-            <div>
-              <h3 className={cn(
-                "font-semibold text-foreground",
-                isCompact ? "text-sm" : "text-base"
-              )}>
-                {title}
-              </h3>
-              {subtitle && (
-                <p className="text-xs text-muted-foreground">{subtitle}</p>
+      <div className={cn(noPadding ? "" : "p-4")}>
+        {/* Header - only show if title exists */}
+        {title && (
+          <div className={cn(
+            "flex items-center justify-between",
+            noPadding ? "px-4 pt-4" : "",
+            "mb-3"
+          )}>
+            <div className="flex items-center gap-2.5">
+              {Icon && (
+                <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-primary/10">
+                  <Icon className="h-4 w-4 text-primary" strokeWidth={2} />
+                </div>
               )}
+              <div>
+                <h3 className="text-[15px] font-semibold text-foreground">
+                  {title}
+                </h3>
+                {subtitle && (
+                  <p className="text-[12px] text-muted-foreground">{subtitle}</p>
+                )}
+              </div>
             </div>
+            
+            {actionLabel && (
+              <button 
+                className="flex items-center gap-0.5 text-[12px] font-medium text-primary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClick?.();
+                }}
+              >
+                {actionLabel}
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
-          
-          {actionLabel && (
-            <button 
-              className="flex items-center gap-0.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
-              onClick={(e) => {
-                e.stopPropagation();
-                onClick?.();
-              }}
-            >
-              {actionLabel}
-              <ChevronRight className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
+        )}
 
         {/* Content */}
-        <div className={cn(isCompact ? "space-y-2" : "space-y-3")}>
+        <div className={cn(noPadding && !title ? "" : "")}>
           {children}
         </div>
       </div>

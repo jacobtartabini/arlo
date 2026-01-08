@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { motion } from "framer-motion";
-import { Sparkles, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 
 interface MobileGreetingProps {
@@ -30,63 +29,83 @@ export function MobileGreeting({
     return "Good night";
   }, [hour]);
 
-  const contextSummary = useMemo(() => {
-    const parts: string[] = [];
-    
-    const pendingTasks = tasksToday - tasksDone;
-    if (pendingTasks > 0) {
-      parts.push(`${pendingTasks} task${pendingTasks !== 1 ? "s" : ""} left`);
-    } else if (tasksToday > 0) {
-      parts.push("All tasks done!");
-    }
-    
-    if (eventsToday > 0) {
-      parts.push(`${eventsToday} event${eventsToday !== 1 ? "s" : ""}`);
-    }
-    
-    const pendingHabits = habitsToday - habitsDone;
-    if (pendingHabits > 0) {
-      parts.push(`${pendingHabits} habit${pendingHabits !== 1 ? "s" : ""} to go`);
-    }
-    
-    if (parts.length === 0) {
-      return "You're all caught up";
-    }
-    
-    return parts.join(" • ");
-  }, [tasksToday, tasksDone, eventsToday, habitsToday, habitsDone]);
+  const pendingTasks = tasksToday - tasksDone;
+  const pendingHabits = habitsToday - habitsDone;
+  const allDone = pendingTasks === 0 && pendingHabits === 0 && tasksToday > 0;
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="px-5 pt-4 pb-2"
+    <motion.header 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="px-6 pt-safe-top"
     >
-      {/* Date chip */}
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-xs font-medium text-muted-foreground">
-          {format(new Date(), "EEEE, MMMM d")}
-        </span>
-        {alerts > 0 && (
-          <span className="flex items-center gap-0.5 text-[10px] font-medium text-destructive">
-            <AlertCircle className="h-3 w-3" />
-            {alerts}
-          </span>
-        )}
-      </div>
+      {/* Minimal date */}
+      <p className="text-[13px] text-muted-foreground/70 font-medium">
+        {format(new Date(), "EEEE, MMM d")}
+      </p>
       
-      {/* Greeting */}
-      <h1 className="text-2xl font-bold text-foreground tracking-tight">
+      {/* Large greeting */}
+      <h1 className="text-[28px] font-semibold text-foreground tracking-tight mt-1">
         {greeting}
       </h1>
       
-      {/* Summary */}
-      <p className="text-sm text-muted-foreground mt-0.5 flex items-center gap-1.5">
-        {contextSummary}
-        {tasksToday > 0 && tasksDone === tasksToday && (
-          <Sparkles className="h-3.5 w-3.5 text-primary" />
+      {/* Status pills */}
+      <div className="flex items-center gap-2 mt-3 flex-wrap">
+        {pendingTasks > 0 && (
+          <StatusPill 
+            label={`${pendingTasks} task${pendingTasks !== 1 ? 's' : ''}`}
+            variant="default"
+          />
         )}
-      </p>
-    </motion.div>
+        {pendingHabits > 0 && (
+          <StatusPill 
+            label={`${pendingHabits} habit${pendingHabits !== 1 ? 's' : ''}`}
+            variant="muted"
+          />
+        )}
+        {eventsToday > 0 && (
+          <StatusPill 
+            label={`${eventsToday} event${eventsToday !== 1 ? 's' : ''}`}
+            variant="muted"
+          />
+        )}
+        {allDone && (
+          <StatusPill 
+            label="All caught up ✓"
+            variant="success"
+          />
+        )}
+        {tasksToday === 0 && habitsToday === 0 && (
+          <StatusPill 
+            label="Nothing scheduled"
+            variant="muted"
+          />
+        )}
+      </div>
+    </motion.header>
+  );
+}
+
+function StatusPill({ 
+  label, 
+  variant = "default" 
+}: { 
+  label: string; 
+  variant: "default" | "muted" | "success";
+}) {
+  const variants = {
+    default: "bg-primary/15 text-primary",
+    muted: "bg-muted text-muted-foreground",
+    success: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+  };
+
+  return (
+    <span className={`
+      inline-flex items-center px-2.5 py-1 rounded-full
+      text-[12px] font-medium
+      ${variants[variant]}
+    `}>
+      {label}
+    </span>
   );
 }

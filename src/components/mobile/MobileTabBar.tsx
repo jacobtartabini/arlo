@@ -1,6 +1,6 @@
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Home, Mail, NotebookPen, CalendarCheck, MoreHorizontal, Map, MessageCircle } from "lucide-react";
+import { Home, Mail, StickyNote, CheckCircle2, Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface TabItem {
@@ -13,9 +13,9 @@ interface TabItem {
 const TABS: TabItem[] = [
   { id: "home", label: "Home", icon: Home, route: "/" },
   { id: "inbox", label: "Inbox", icon: Mail, route: "/inbox" },
-  { id: "notes", label: "Notes", icon: NotebookPen, route: "/notes" },
-  { id: "tasks", label: "Tasks", icon: CalendarCheck, route: "/productivity" },
-  { id: "more", label: "More", icon: MoreHorizontal, route: "/settings" },
+  { id: "notes", label: "Notes", icon: StickyNote, route: "/notes" },
+  { id: "tasks", label: "Tasks", icon: CheckCircle2, route: "/productivity" },
+  { id: "more", label: "More", icon: Menu, route: "/settings" },
 ];
 
 export function MobileTabBar() {
@@ -34,11 +34,11 @@ export function MobileTabBar() {
   const activeTab = getActiveTab();
 
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-50 safe-area-pb">
-      {/* Blur background */}
-      <div className="absolute inset-0 bg-background/80 backdrop-blur-xl border-t border-border/40" />
+    <nav className="fixed bottom-0 inset-x-0 z-50">
+      {/* Glass background */}
+      <div className="absolute inset-0 bg-background/60 backdrop-blur-2xl border-t border-white/[0.08]" />
       
-      <div className="relative flex items-center justify-around h-16 px-2">
+      <div className="relative flex items-stretch justify-around px-2 pb-safe-bottom pt-2">
         {TABS.map((tab) => {
           const isActive = activeTab === tab.id;
           const Icon = tab.icon;
@@ -48,36 +48,34 @@ export function MobileTabBar() {
               key={tab.id}
               onClick={() => navigate(tab.route)}
               className={cn(
-                "relative flex flex-col items-center justify-center w-16 h-full",
-                "transition-colors duration-200",
-                isActive ? "text-primary" : "text-muted-foreground"
+                "relative flex flex-col items-center justify-center flex-1 py-2 min-w-0",
+                "transition-all duration-200 active:scale-95"
               )}
             >
-              {/* Active indicator */}
+              {/* Active background pill */}
               {isActive && (
                 <motion.div
-                  layoutId="tab-indicator"
-                  className="absolute -top-0.5 w-8 h-1 bg-primary rounded-full"
+                  layoutId="mobile-tab-bg"
+                  className="absolute inset-x-2 top-1 bottom-1 bg-primary/10 rounded-xl"
                   transition={{ type: "spring", stiffness: 500, damping: 35 }}
                 />
               )}
               
-              <motion.div
-                animate={{ scale: isActive ? 1.1 : 1 }}
-                transition={{ type: "spring", stiffness: 400, damping: 25 }}
-              >
-                <Icon 
-                  className={cn(
-                    "h-5 w-5 mb-0.5",
-                    isActive && "drop-shadow-sm"
-                  )} 
-                  strokeWidth={isActive ? 2.5 : 2}
-                />
-              </motion.div>
+              <Icon 
+                className={cn(
+                  "relative h-[22px] w-[22px] transition-colors duration-200",
+                  isActive 
+                    ? "text-primary" 
+                    : "text-muted-foreground/60"
+                )} 
+                strokeWidth={isActive ? 2.25 : 1.75}
+              />
               
               <span className={cn(
-                "text-[10px] font-medium tracking-tight",
-                isActive && "font-semibold"
+                "relative text-[10px] mt-1 transition-colors duration-200",
+                isActive 
+                  ? "text-primary font-semibold" 
+                  : "text-muted-foreground/60 font-medium"
               )}>
                 {tab.label}
               </span>
