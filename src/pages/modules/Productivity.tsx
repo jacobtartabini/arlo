@@ -21,8 +21,10 @@ import { useHabitsPersistence } from "@/hooks/useHabitsPersistence";
 import { useNotificationsPersistence } from "@/hooks/useNotificationsPersistence";
 import { useProductivityRealtime } from "@/hooks/useRealtimeSubscription";
 import { useAuth } from "@/providers/AuthProvider";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { ProjectList, ProjectDetailView, TaskListView } from "@/components/projects";
 import { TodayView, WeeklyPlanningView, TimelineDropZone } from "@/components/productivity";
+import { MobilePageLayout, MobileProductivityView } from "@/components/mobile";
 import type { Task, Subtask } from "@/types/productivity";
 import type { Project, ProjectStatus } from "@/types/productivity";
 import type { HabitWithStreak } from "@/types/habits";
@@ -30,6 +32,7 @@ import type { Notification } from "@/types/notifications";
 
 export default function Productivity() {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const { fetchTasks, toggleTask, fetchTasksForProject, updateTask } = useTasksPersistence();
   const { fetchProjects, updateProject, archiveProject } = useProjectsPersistence();
   const { fetchSubtasksForTasks, toggleSubtask, createSubtask, deleteSubtask, updateSubtask } = useSubtasksPersistence();
@@ -243,6 +246,15 @@ export default function Productivity() {
     { label: "Active Habits", value: String(habits.length), helper: maxStreak > 0 ? `+${maxStreak} day streak` : "Start a streak" },
     { label: "Unread", value: String(notifications.length), helper: notifications.length > 0 ? "Action needed" : "All caught up" },
   ];
+
+  // Mobile view
+  if (isMobile) {
+    return (
+      <MobilePageLayout title="Tasks" subtitle={`${tasksLeft} remaining`}>
+        <MobileProductivityView />
+      </MobilePageLayout>
+    );
+  }
 
   // Show error state if loading failed
   if (loadError) {

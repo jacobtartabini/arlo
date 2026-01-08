@@ -9,6 +9,8 @@ import { NoteCanvas } from "@/components/notes/NoteCanvas";
 import { PageNoteEditor } from "@/components/notes/PageNoteEditor";
 import { CreateNoteDialog } from "@/components/notes/CreateNoteDialog";
 import { CreateFolderDialog } from "@/components/notes/CreateFolderDialog";
+import { MobilePageLayout, MobileNotesView } from "@/components/mobile";
+import { useIsMobile } from "@/hooks/use-mobile";
 import type { Note, NoteType, PageMode } from "@/types/notes";
 import { useNotesPersistence } from "@/hooks/useNotesPersistence";
 import { toast } from "sonner";
@@ -38,6 +40,7 @@ async function handleSharedFile(): Promise<File | null> {
 export default function Notes() {
   const navigate = useNavigate();
   const location = useLocation();
+  const isMobile = useIsMobile();
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -335,6 +338,15 @@ export default function Notes() {
   }, [selectedNote, generateNotePdf]);
 
   // Loading state
+  // Mobile view
+  if (isMobile) {
+    return (
+      <MobilePageLayout title="Notes">
+        <MobileNotesView />
+      </MobilePageLayout>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
