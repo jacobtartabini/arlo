@@ -12,6 +12,7 @@ interface MobileModuleCardProps {
   actionLabel?: string;
   className?: string;
   noPadding?: boolean;
+  variant?: "default" | "elevated" | "outlined";
 }
 
 export function MobileModuleCard({
@@ -23,15 +24,23 @@ export function MobileModuleCard({
   actionLabel,
   className,
   noPadding = false,
+  variant = "default",
 }: MobileModuleCardProps) {
+  const variants = {
+    default: "bg-card border-border/40",
+    elevated: "bg-card border-border/30 shadow-lg shadow-foreground/[0.03]",
+    outlined: "bg-transparent border-border",
+  };
+
   return (
     <motion.div
-      whileTap={onClick ? { scale: 0.98 } : undefined}
+      whileTap={onClick ? { scale: 0.985 } : undefined}
       onClick={onClick}
       className={cn(
-        "rounded-2xl overflow-hidden",
-        "bg-card border border-border/50",
-        onClick && "cursor-pointer active:bg-card/90",
+        "rounded-2xl overflow-hidden border",
+        "transition-all duration-300",
+        variants[variant],
+        onClick && "cursor-pointer active:bg-muted/30",
         className
       )}
     >
@@ -43,25 +52,25 @@ export function MobileModuleCard({
             noPadding ? "px-4 pt-4" : "",
             "mb-3"
           )}>
-            <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-3">
               {Icon && (
-                <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-primary/10">
-                  <Icon className="h-4 w-4 text-primary" strokeWidth={2} />
+                <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 border border-primary/10">
+                  <Icon className="h-4.5 w-4.5 text-primary" strokeWidth={2} />
                 </div>
               )}
               <div>
-                <h3 className="text-[15px] font-semibold text-foreground">
+                <h3 className="text-sm font-semibold text-foreground tracking-tight">
                   {title}
                 </h3>
                 {subtitle && (
-                  <p className="text-[12px] text-muted-foreground">{subtitle}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
                 )}
               </div>
             </div>
             
             {actionLabel && (
               <button 
-                className="flex items-center gap-0.5 text-[12px] font-medium text-primary"
+                className="flex items-center gap-0.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
                 onClick={(e) => {
                   e.stopPropagation();
                   onClick?.();
