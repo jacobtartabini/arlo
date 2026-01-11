@@ -5,7 +5,7 @@ import { useArlo } from "@/providers/ArloProvider";
 import { SpatialCanvas } from "@/components/SpatialCanvas";
 import { StatusChip } from "@/components/dashboard/StatusChip";
 import { MapProvider } from "@/components/maps/MapProvider";
-import { MobileHome, MobileTabBar } from "@/components/mobile";
+import { MobileHome } from "@/components/mobile";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 export default function Dashboard() {
@@ -80,12 +80,11 @@ export default function Dashboard() {
     return null;
   }
 
-  // Mobile layout
+  // Mobile layout - MobileTabBar is rendered globally via MobileNavWrapper in App.tsx
   if (isMobile) {
     return (
       <MapProvider>
         <MobileHome />
-        <MobileTabBar />
       </MapProvider>
     );
   }

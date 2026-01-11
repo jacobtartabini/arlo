@@ -24,7 +24,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ProjectList, ProjectDetailView, TaskListView } from "@/components/projects";
 import { TodayView, WeeklyPlanningView, TimelineDropZone } from "@/components/productivity";
-import { MobilePageLayout, MobileProductivityView } from "@/components/mobile";
+import { MobileProductivityView } from "@/components/mobile";
 import type { Task, Subtask } from "@/types/productivity";
 import type { Project, ProjectStatus } from "@/types/productivity";
 import type { HabitWithStreak } from "@/types/habits";
@@ -249,11 +249,7 @@ export default function Productivity() {
 
   // Mobile view
   if (isMobile) {
-    return (
-      <MobilePageLayout title="Tasks" subtitle={`${tasksLeft} remaining`}>
-        <MobileProductivityView />
-      </MobilePageLayout>
-    );
+    return <MobileProductivityView />;
   }
 
   // Show error state if loading failed

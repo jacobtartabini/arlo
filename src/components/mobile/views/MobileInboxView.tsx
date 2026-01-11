@@ -1,10 +1,13 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Mail, Search, RefreshCw, ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useInboxThreads, useInboxAccounts } from "@/hooks/useInboxPersistence";
 import { format, isToday, isYesterday } from "date-fns";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { MobilePageLayout } from "../MobilePageLayout";
 
 export function MobileInboxView() {
   const navigate = useNavigate();
@@ -40,37 +43,56 @@ export function MobileInboxView() {
 
   if (loading && threads.length === 0) {
     return (
-      <div className="space-y-3 animate-pulse">
-        <div className="h-12 bg-muted rounded-xl" />
-        {[1, 2, 3, 4].map(i => (
-          <div key={i} className="h-20 bg-muted rounded-xl" />
-        ))}
-      </div>
+      <MobilePageLayout title="Inbox" subtitle="Your emails">
+        <div className="space-y-3 animate-pulse">
+          <Skeleton className="h-12 rounded-xl" />
+          {[1, 2, 3, 4].map(i => (
+            <Skeleton key={i} className="h-20 rounded-xl" />
+          ))}
+        </div>
+      </MobilePageLayout>
     );
   }
 
   if (hasNoAccounts) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
-          <Mail className="h-8 w-8 text-primary/60" />
+      <MobilePageLayout title="Inbox" subtitle="Connect your email">
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
+            <Mail className="h-8 w-8 text-primary/60" />
+          </div>
+          <h3 className="font-semibold text-foreground mb-1">No email accounts</h3>
+          <p className="text-sm text-muted-foreground mb-4">
+            Connect your email to get started
+          </p>
+          <button
+            onClick={() => navigate("/settings?tab=inbox")}
+            className="px-4 py-2 rounded-full bg-primary text-primary-foreground text-sm font-medium"
+          >
+            Connect Account
+          </button>
         </div>
-        <h3 className="font-semibold text-foreground mb-1">No email accounts</h3>
-        <p className="text-sm text-muted-foreground mb-4">
-          Connect your email to get started
-        </p>
-        <button
-          onClick={() => navigate("/settings?tab=inbox")}
-          className="px-4 py-2 rounded-full bg-primary text-primary-foreground text-sm font-medium"
-        >
-          Connect Account
-        </button>
-      </div>
+      </MobilePageLayout>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <MobilePageLayout 
+      title="Inbox" 
+      subtitle={unreadCount > 0 ? `${unreadCount} unread` : "All caught up"}
+      headerRight={
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="h-9 w-9"
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+        >
+          <RefreshCw className={cn("h-5 w-5", isRefreshing && "animate-spin")} />
+        </Button>
+      }
+    >
+      <div className="space-y-4">
       {/* Search bar */}
       <div className="relative">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -90,18 +112,10 @@ export function MobileInboxView() {
         </button>
       </div>
 
-      {/* Unread count */}
-      {unreadCount > 0 && (
-        <div className="flex items-center gap-2 px-1">
-          <div className="w-2 h-2 rounded-full bg-primary" />
-          <span className="text-sm text-muted-foreground">
-            {unreadCount} unread message{unreadCount !== 1 ? "s" : ""}
-          </span>
-        </div>
-      )}
+        {/* Removed duplicate unread count - now in subtitle */}
 
-      {/* Email list */}
-      <div className="space-y-2">
+        {/* Email list */}
+        <div className="space-y-2">
         {filteredThreads.slice(0, 20).map((thread, index) => {
           const isUnread = thread.unread_count > 0;
           const sender = thread.participants?.[0] || { name: "Unknown", email: "" };
@@ -163,7 +177,8 @@ export function MobileInboxView() {
             <p className="text-muted-foreground text-sm">No emails found</p>
           </div>
         )}
+        </div>
       </div>
-    </div>
+    </MobilePageLayout>
   );
 }
