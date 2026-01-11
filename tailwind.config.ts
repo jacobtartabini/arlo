@@ -19,7 +19,9 @@ export default {
 		},
 		extend: {
 			fontFamily: {
-				sans: ['Inter', 'system-ui', 'sans-serif'],
+				sans: ['Outfit', 'system-ui', 'sans-serif'],
+				display: ['Outfit', 'system-ui', 'sans-serif'],
+				editorial: ['Newsreader', 'Georgia', 'serif'],
 			},
 			colors: {
 				border: 'hsl(var(--border))',
@@ -60,6 +62,18 @@ export default {
 					primary: 'hsl(var(--ai-core-primary))',
 					secondary: 'hsl(var(--ai-core-secondary))',
 					glow: 'hsl(var(--ai-core-glow))'
+				},
+				success: {
+					DEFAULT: 'hsl(var(--success))',
+					foreground: 'hsl(var(--success-foreground))'
+				},
+				warning: {
+					DEFAULT: 'hsl(var(--warning))',
+					foreground: 'hsl(var(--warning-foreground))'
+				},
+				info: {
+					DEFAULT: 'hsl(var(--info))',
+					foreground: 'hsl(var(--info-foreground))'
 				}
 			},
 			borderRadius: {
