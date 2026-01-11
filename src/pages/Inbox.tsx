@@ -25,7 +25,7 @@ import {
   type ComposeData,
 } from '@/components/inbox';
 
-import { MobilePageLayout, MobileInboxView } from '@/components/mobile';
+import { MobileInboxView } from '@/components/mobile';
 
 const AUTO_SYNC_INTERVAL = 60000; // 60 seconds
 
@@ -41,11 +41,7 @@ export default function Inbox() {
 
   // Mobile view
   if (isMobile) {
-    return (
-      <MobilePageLayout title="Inbox">
-        <MobileInboxView />
-      </MobilePageLayout>
-    );
+    return <MobileInboxView />;
   }
   
   // Compose state

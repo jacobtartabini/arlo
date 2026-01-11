@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Check, ChevronRight, Sparkles, FolderKanban } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useTasksPersistence } from "@/hooks/useTasksPersistence";
 import { useProjectsPersistence } from "@/hooks/useProjectsPersistence";
-import { useEffect, useCallback } from "react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { MobilePageLayout } from "../MobilePageLayout";
 import type { Task } from "@/types/productivity";
 import type { Project } from "@/types/productivity";
 
@@ -69,22 +70,40 @@ export function MobileProductivityView() {
     }
   };
 
+  const tasksLeft = todayTasks.length - completedToday;
+
   if (loading) {
     return (
-      <div className="space-y-4 animate-pulse">
-        <div className="h-24 bg-muted rounded-2xl" />
-        <div className="h-12 bg-muted rounded-xl" />
-        <div className="space-y-2">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="h-14 bg-muted rounded-xl" />
-          ))}
+      <MobilePageLayout title="Tasks" subtitle="Your productivity hub">
+        <div className="space-y-4 animate-pulse">
+          <div className="h-24 bg-muted rounded-2xl" />
+          <div className="h-12 bg-muted rounded-xl" />
+          <div className="space-y-2">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-14 bg-muted rounded-xl" />
+            ))}
+          </div>
         </div>
-      </div>
+      </MobilePageLayout>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <MobilePageLayout 
+      title="Tasks" 
+      subtitle={`${tasksLeft} remaining today`}
+      headerRight={
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="h-9 w-9"
+          onClick={() => setIsAdding(true)}
+        >
+          <Plus className="h-5 w-5" />
+        </Button>
+      }
+    >
+      <div className="space-y-4">
       {/* Progress summary */}
       <div className="rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 p-4">
         <div className="flex items-center justify-between mb-3">
@@ -258,6 +277,7 @@ export function MobileProductivityView() {
           )}
         </div>
       )}
-    </div>
+      </div>
+    </MobilePageLayout>
   );
 }

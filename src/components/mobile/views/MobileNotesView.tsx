@@ -1,17 +1,19 @@
-import { useState, useEffect, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState } from "react";
+import { motion } from "framer-motion";
 import { StickyNote, Plus, Search, FolderOpen, ChevronRight, FileText, PenTool } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useNotesPersistence } from "@/hooks/useNotesPersistence";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { MobilePageLayout } from "../MobilePageLayout";
 import type { Note, NoteFolder } from "@/types/notes";
 
 export function MobileNotesView() {
   const navigate = useNavigate();
   const { notes, folders, isLoading, createNote } = useNotesPersistence();
   const [searchQuery, setSearchQuery] = useState("");
-  const [showCreateMenu, setShowCreateMenu] = useState(false);
 
   const filteredNotes = notes.filter(note => 
     note.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -29,24 +31,41 @@ export function MobileNotesView() {
     if (newNote) {
       navigate("/notes", { state: { openNoteId: newNote.id } });
     }
-    setShowCreateMenu(false);
   };
 
   if (isLoading) {
     return (
-      <div className="space-y-3 animate-pulse">
-        <div className="h-12 bg-muted rounded-xl" />
-        <div className="grid grid-cols-2 gap-3">
-          {[1, 2, 3, 4].map(i => (
-            <div key={i} className="h-32 bg-muted rounded-xl" />
-          ))}
+      <MobilePageLayout title="Notes" subtitle="Your ideas and documents">
+        <div className="space-y-4">
+          <Skeleton className="h-12 rounded-xl" />
+          <div className="grid grid-cols-2 gap-3">
+            {[1, 2, 3, 4].map(i => (
+              <Skeleton key={i} className="h-24 rounded-xl" />
+            ))}
+          </div>
+          <Skeleton className="h-16 rounded-xl" />
+          <Skeleton className="h-16 rounded-xl" />
         </div>
-      </div>
+      </MobilePageLayout>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <MobilePageLayout 
+      title="Notes"
+      subtitle={`${notes.length} note${notes.length !== 1 ? 's' : ''}`}
+      headerRight={
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="h-9 w-9"
+          onClick={() => handleCreateNote('page', 'type')}
+        >
+          <Plus className="h-5 w-5" />
+        </Button>
+      }
+    >
+      <div className="space-y-4">
       {/* Search */}
       <div className="relative">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -168,6 +187,7 @@ export function MobileNotesView() {
           )}
         </div>
       </div>
-    </div>
+      </div>
+    </MobilePageLayout>
   );
 }

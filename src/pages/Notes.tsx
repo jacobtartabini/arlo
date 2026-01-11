@@ -9,7 +9,7 @@ import { NoteCanvas } from "@/components/notes/NoteCanvas";
 import { PageNoteEditor } from "@/components/notes/PageNoteEditor";
 import { CreateNoteDialog } from "@/components/notes/CreateNoteDialog";
 import { CreateFolderDialog } from "@/components/notes/CreateFolderDialog";
-import { MobilePageLayout, MobileNotesView } from "@/components/mobile";
+import { MobileNotesView } from "@/components/mobile";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { Note, NoteType, PageMode } from "@/types/notes";
 import { useNotesPersistence } from "@/hooks/useNotesPersistence";
@@ -340,11 +340,7 @@ export default function Notes() {
   // Loading state
   // Mobile view
   if (isMobile) {
-    return (
-      <MobilePageLayout title="Notes">
-        <MobileNotesView />
-      </MobilePageLayout>
-    );
+    return <MobileNotesView />;
   }
 
   if (isLoading) {

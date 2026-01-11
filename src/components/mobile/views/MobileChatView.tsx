@@ -110,7 +110,7 @@ export function MobileChatView() {
         </Button>
       }
       noPadding
-      className="flex flex-col"
+      className="flex flex-col h-[100dvh] overflow-hidden"
     >
       {/* Messages */}
       <div className="flex-1 overflow-auto px-4 py-4">
@@ -186,7 +186,7 @@ export function MobileChatView() {
       </div>
 
       {/* Input Area */}
-      <div className="border-t bg-background/80 backdrop-blur-xl p-4 pb-safe-bottom">
+      <div className="flex-shrink-0 border-t bg-background/80 backdrop-blur-xl p-4 pb-28">
         <div className="flex items-end gap-2">
           <div className="flex-1 relative">
             <textarea
