@@ -12,7 +12,6 @@ interface MobilePageLayoutProps {
   headerRight?: ReactNode;
   noPadding?: boolean;
   className?: string;
-  variant?: "default" | "transparent";
 }
 
 export function MobilePageLayout({
@@ -23,44 +22,31 @@ export function MobilePageLayout({
   headerRight,
   noPadding = false,
   className,
-  variant = "default",
 }: MobilePageLayoutProps) {
   const navigate = useNavigate();
 
-  const headerVariants = {
-    default: "bg-background/90 backdrop-blur-2xl border-b border-border/20 shadow-sm shadow-foreground/[0.02]",
-    transparent: "bg-transparent",
-  };
-
   return (
-    <div className={cn("min-h-screen bg-background bg-atmosphere bg-noise pb-28", className)}>
+    <div className={cn("min-h-screen bg-background pb-28", className)}>
       {/* Header */}
       <motion.header
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className={cn(
-          "sticky top-0 z-40",
-          headerVariants[variant]
-        )}
+        className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border/30"
       >
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
             {showBackButton && (
-              <motion.button
-                whileTap={{ scale: 0.9 }}
+              <button
                 onClick={() => navigate(-1)}
-                className="flex items-center justify-center w-10 h-10 rounded-xl bg-card border border-border/40 text-muted-foreground hover:text-foreground transition-colors"
+                className="flex items-center justify-center w-9 h-9 rounded-full bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors active:scale-95"
               >
                 <ArrowLeft className="h-5 w-5" />
-              </motion.button>
+              </button>
             )}
             <div>
-              <h1 className="text-lg font-display font-semibold text-foreground tracking-tight">
-                {title}
-              </h1>
+              <h1 className="text-lg font-semibold text-foreground">{title}</h1>
               {subtitle && (
-                <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
+                <p className="text-xs text-muted-foreground">{subtitle}</p>
               )}
             </div>
           </div>
@@ -75,10 +61,10 @@ export function MobilePageLayout({
 
       {/* Content */}
       <motion.main
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        className={cn(noPadding ? "" : "px-4 py-4", "relative z-10")}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.05 }}
+        className={cn(noPadding ? "" : "px-4 py-4")}
       >
         {children}
       </motion.main>
