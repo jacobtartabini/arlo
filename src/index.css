@@ -452,3 +452,46 @@ All colors MUST be HSL.
     overscroll-behavior: contain;
   }
 }
+
+/* ============================================
+   Capacitor iOS Native App Utilities
+   ============================================ */
+
+/* CSS custom properties for safe area insets (used by Capacitor) */
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --keyboard-height: 0px;
+}
+
+/* iOS keyboard adjustment */
+body.keyboard-open {
+  --sab: 0px;
+}
+
+/* Capacitor-specific safe area handling */
+.capacitor-ios {
+  padding-top: var(--sat);
+}
+
+.capacitor-ios .pb-safe {
+  padding-bottom: max(var(--sab), 20px);
+}
+
+/* Prevent iOS bounce/rubber-banding on non-scrollable areas */
+.no-bounce {
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: auto;
+}
+
+/* iOS status bar spacing */
+.ios-status-bar-space {
+  padding-top: env(safe-area-inset-top, 44px);
+}
+
+/* iOS home indicator spacing */
+.ios-home-indicator-space {
+  padding-bottom: env(safe-area-inset-bottom, 34px);
+}
