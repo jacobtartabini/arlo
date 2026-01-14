@@ -1,5 +1,20 @@
+/**
+ * useGeolocation Hook
+ * 
+ * Cross-platform geolocation hook that uses native Capacitor plugin on iOS/Android
+ * and falls back to browser geolocation API on web.
+ */
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { LatLng } from '@/types/maps';
+import { CapacitorPlatform } from '@/lib/capacitor';
+import { 
+  getCurrentPosition as getNativePosition,
+  watchPosition as watchNativePosition,
+  checkGeolocationPermission,
+  requestGeolocationPermission,
+  GeoPosition 
+} from '@/lib/capacitor/geolocation';
 
 interface GeolocationState {
   position: LatLng | null;
@@ -26,7 +41,8 @@ const DEFAULT_OPTIONS: UseGeolocationOptions = {
 
 export function useGeolocation(options: UseGeolocationOptions = {}) {
   const opts = { ...DEFAULT_OPTIONS, ...options };
-  const watchIdRef = useRef<number | null>(null);
+  const cleanupRef = useRef<(() => void) | number | null>(null);
+  const isNative = CapacitorPlatform.isNative();
   
   const [state, setState] = useState<GeolocationState>({
     position: null,
@@ -41,121 +57,104 @@ export function useGeolocation(options: UseGeolocationOptions = {}) {
 
   // Check permission status
   useEffect(() => {
-    if (!navigator.permissions) return;
+    const checkPerms = async () => {
+      try {
+        const status = await checkGeolocationPermission();
+        setState(prev => ({ ...prev, permissionStatus: status as PermissionState }));
+      } catch {
+        // Permissions API not fully supported
+      }
+    };
 
-    navigator.permissions.query({ name: 'geolocation' }).then(result => {
-      setState(prev => ({ ...prev, permissionStatus: result.state }));
-      
-      result.addEventListener('change', () => {
-        setState(prev => ({ ...prev, permissionStatus: result.state }));
-      });
-    });
+    checkPerms();
+  }, []);
+
+  // Handle position update from GeoPosition
+  const handlePositionUpdate = useCallback((pos: GeoPosition) => {
+    setState(prev => ({
+      ...prev,
+      position: { lat: pos.lat, lng: pos.lng },
+      heading: pos.heading,
+      speed: pos.speed,
+      accuracy: pos.accuracy,
+      isLoading: false,
+      error: null,
+    }));
   }, []);
 
   // Get current position once
-  const getCurrentPosition = useCallback(() => {
-    if (!navigator.geolocation) {
-      setState(prev => ({ ...prev, error: 'Geolocation is not supported' }));
-      return;
-    }
-
+  const getCurrentPosition = useCallback(async () => {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setState(prev => ({
-          ...prev,
-          position: {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-          },
-          heading: position.coords.heading,
-          speed: position.coords.speed,
-          accuracy: position.coords.accuracy,
-          isLoading: false,
-          error: null,
-        }));
-      },
-      (error) => {
-        let errorMessage: string;
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            errorMessage = 'Location permission denied';
-            break;
-          case error.POSITION_UNAVAILABLE:
-            errorMessage = 'Location unavailable';
-            break;
-          case error.TIMEOUT:
-            errorMessage = 'Location request timed out';
-            break;
-          default:
-            errorMessage = 'Unknown location error';
+    try {
+      // Request permission if needed on native
+      if (isNative) {
+        const permStatus = await checkGeolocationPermission();
+        if (permStatus !== 'granted') {
+          const requested = await requestGeolocationPermission();
+          if (requested !== 'granted') {
+            throw new Error('Location permission denied');
+          }
         }
-        setState(prev => ({ ...prev, isLoading: false, error: errorMessage }));
-      },
-      {
+      }
+
+      const position = await getNativePosition({
         enableHighAccuracy: opts.enableHighAccuracy,
         timeout: opts.timeout,
         maximumAge: opts.maximumAge,
-      }
-    );
-  }, [opts.enableHighAccuracy, opts.timeout, opts.maximumAge]);
+      });
+
+      handlePositionUpdate(position);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown location error';
+      setState(prev => ({ ...prev, isLoading: false, error: message }));
+    }
+  }, [isNative, opts.enableHighAccuracy, opts.timeout, opts.maximumAge, handlePositionUpdate]);
 
   // Start watching position
-  const startWatching = useCallback(() => {
-    if (!navigator.geolocation) {
-      setState(prev => ({ ...prev, error: 'Geolocation is not supported' }));
-      return;
-    }
-
-    if (watchIdRef.current !== null) return; // Already watching
+  const startWatching = useCallback(async () => {
+    if (cleanupRef.current !== null) return; // Already watching
 
     setState(prev => ({ ...prev, isWatching: true, error: null }));
 
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      (position) => {
-        setState(prev => ({
-          ...prev,
-          position: {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-          },
-          heading: position.coords.heading,
-          speed: position.coords.speed,
-          accuracy: position.coords.accuracy,
-          error: null,
-        }));
-      },
-      (error) => {
-        let errorMessage: string;
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            errorMessage = 'Location permission denied';
-            break;
-          case error.POSITION_UNAVAILABLE:
-            errorMessage = 'Location unavailable';
-            break;
-          case error.TIMEOUT:
-            errorMessage = 'Location request timed out';
-            break;
-          default:
-            errorMessage = 'Unknown location error';
+    try {
+      // Request permission if needed on native
+      if (isNative) {
+        const permStatus = await checkGeolocationPermission();
+        if (permStatus !== 'granted') {
+          const requested = await requestGeolocationPermission();
+          if (requested !== 'granted') {
+            throw new Error('Location permission denied');
+          }
         }
-        setState(prev => ({ ...prev, error: errorMessage }));
-      },
-      {
-        enableHighAccuracy: opts.enableHighAccuracy,
-        timeout: opts.timeout,
-        maximumAge: opts.maximumAge,
       }
-    );
-  }, [opts.enableHighAccuracy, opts.timeout, opts.maximumAge]);
+
+      const cleanup = await watchNativePosition(
+        (position) => handlePositionUpdate(position),
+        (error) => setState(prev => ({ ...prev, error: error.message })),
+        {
+          enableHighAccuracy: opts.enableHighAccuracy,
+          timeout: opts.timeout,
+          maximumAge: opts.maximumAge,
+        }
+      );
+      
+      cleanupRef.current = cleanup;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown location error';
+      setState(prev => ({ ...prev, isWatching: false, error: message }));
+    }
+  }, [isNative, opts.enableHighAccuracy, opts.timeout, opts.maximumAge, handlePositionUpdate]);
 
   // Stop watching position
   const stopWatching = useCallback(() => {
-    if (watchIdRef.current !== null) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
+    if (cleanupRef.current !== null) {
+      if (typeof cleanupRef.current === 'function') {
+        cleanupRef.current();
+      } else if (typeof cleanupRef.current === 'number') {
+        navigator.geolocation.clearWatch(cleanupRef.current);
+      }
+      cleanupRef.current = null;
       setState(prev => ({ ...prev, isWatching: false }));
     }
   }, []);
@@ -163,8 +162,12 @@ export function useGeolocation(options: UseGeolocationOptions = {}) {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (watchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
+      if (cleanupRef.current !== null) {
+        if (typeof cleanupRef.current === 'function') {
+          cleanupRef.current();
+        } else if (typeof cleanupRef.current === 'number') {
+          navigator.geolocation.clearWatch(cleanupRef.current);
+        }
       }
     };
   }, []);
@@ -174,6 +177,7 @@ export function useGeolocation(options: UseGeolocationOptions = {}) {
     getCurrentPosition,
     startWatching,
     stopWatching,
-    isSupported: 'geolocation' in navigator,
+    isSupported: isNative || 'geolocation' in navigator,
+    isNative,
   };
 }
