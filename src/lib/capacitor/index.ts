@@ -1,7 +1,7 @@
 /**
  * Capacitor Utilities
  * 
- * Platform detection and Capacitor-specific helpers for iOS/Android native apps.
+ * Platform detection and Capacitor-specific helpers for iOS/Android/macOS native apps.
  * This module provides a unified interface for detecting the runtime environment
  * and accessing native capabilities.
  */
@@ -9,21 +9,29 @@
 import { Capacitor } from '@capacitor/core';
 
 /**
+ * Extended platform types including macOS
+ */
+export type AppPlatform = 'ios' | 'android' | 'macos' | 'electron' | 'web';
+export type AppEnvironment = 'native-ios' | 'native-android' | 'native-macos' | 'native-electron' | 'pwa' | 'web';
+
+/**
  * Platform detection utilities
  */
 export const CapacitorPlatform = {
   /**
-   * Check if running in a native Capacitor app (iOS or Android)
+   * Check if running in a native Capacitor app (iOS, Android, or macOS)
    */
   isNative(): boolean {
     return Capacitor.isNativePlatform();
   },
 
   /**
-   * Check if running on iOS
+   * Check if running on iOS (iPhone/iPad, but not Mac Catalyst)
    */
   isIOS(): boolean {
-    return Capacitor.getPlatform() === 'ios';
+    if (Capacitor.getPlatform() !== 'ios') return false;
+    // Mac Catalyst reports as 'ios' but has Macintosh in user agent
+    return !/Macintosh/.test(navigator.userAgent);
   },
 
   /**
@@ -41,10 +49,67 @@ export const CapacitorPlatform = {
   },
 
   /**
-   * Get the current platform: 'ios' | 'android' | 'web'
+   * Check if running on macOS (Mac Catalyst or Electron)
    */
-  getPlatform(): 'ios' | 'android' | 'web' {
-    return Capacitor.getPlatform() as 'ios' | 'android' | 'web';
+  isMacOS(): boolean {
+    // Mac Catalyst: reports as 'ios' but with Macintosh user agent
+    if (Capacitor.getPlatform() === 'ios' && /Macintosh/.test(navigator.userAgent)) {
+      return true;
+    }
+    // Electron on macOS
+    if (Capacitor.getPlatform() === 'electron') {
+      return true;
+    }
+    return false;
+  },
+
+  /**
+   * Check if running in Electron
+   */
+  isElectron(): boolean {
+    return Capacitor.getPlatform() === 'electron' || 
+           (typeof window !== 'undefined' && 'electronAPI' in window);
+  },
+
+  /**
+   * Check if running on desktop (Mac Catalyst, Electron, or desktop web)
+   */
+  isDesktop(): boolean {
+    if (this.isMacOS() || this.isElectron()) return true;
+    // Desktop web detection
+    if (this.isWeb() && typeof window !== 'undefined') {
+      return !/Android|iPhone|iPad|iPod/.test(navigator.userAgent) && window.innerWidth >= 1024;
+    }
+    return false;
+  },
+
+  /**
+   * Check if running on iPad
+   */
+  isIPad(): boolean {
+    if (Capacitor.getPlatform() !== 'ios') return false;
+    // iPad user agent or iPad in platform
+    return /iPad/.test(navigator.userAgent) || 
+           (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  },
+
+  /**
+   * Get the current platform with macOS distinction
+   */
+  getPlatform(): AppPlatform {
+    const platform = Capacitor.getPlatform();
+    
+    // Mac Catalyst detection
+    if (platform === 'ios' && /Macintosh/.test(navigator.userAgent)) {
+      return 'macos';
+    }
+    
+    // Electron detection
+    if (platform === 'electron' || (typeof window !== 'undefined' && 'electronAPI' in window)) {
+      return 'electron';
+    }
+    
+    return platform as AppPlatform;
   },
 
   /**
@@ -86,9 +151,13 @@ export function isPWA(): boolean {
 }
 
 /**
- * Get the app environment type
+ * Get the app environment type with macOS support
  */
-export function getAppEnvironment(): 'native-ios' | 'native-android' | 'pwa' | 'web' {
+export function getAppEnvironment(): AppEnvironment {
+  const platform = CapacitorPlatform.getPlatform();
+  
+  if (platform === 'macos') return 'native-macos';
+  if (platform === 'electron') return 'native-electron';
   if (CapacitorPlatform.isIOS()) return 'native-ios';
   if (CapacitorPlatform.isAndroid()) return 'native-android';
   if (isPWA()) return 'pwa';

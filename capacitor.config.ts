@@ -11,13 +11,14 @@ const config: CapacitorConfig = {
     cleartext: true,
   },
   
-  // iOS-specific configuration
+  // iOS-specific configuration (also applies to Mac Catalyst)
   ios: {
     contentInset: 'automatic',
     allowsLinkPreview: true,
     scrollEnabled: true,
     limitsNavigationsToAppBoundDomains: false,
-    preferredContentMode: 'mobile',
+    // Use 'recommended' for Mac Catalyst to allow desktop-style content
+    preferredContentMode: 'recommended',
   },
   
   // Android-specific configuration
