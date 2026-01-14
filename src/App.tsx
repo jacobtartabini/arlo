@@ -44,6 +44,7 @@ import FocusSession from "./pages/FocusSession";
 import { NotificationMonitor } from "./components/NotificationMonitor";
 import { MorningWakeupScheduler } from "./components/MorningWakeupScheduler";
 import { VoiceAmbientGlow } from "./components/voice/VoiceAmbientGlow";
+import { CapacitorInitializer } from "./components/CapacitorInitializer";
 
 const queryClient = new QueryClient();
 
@@ -62,6 +63,7 @@ const App = () => (
                     <NotificationMonitor />
                     <MorningWakeupScheduler />
                     <BrowserRouter>
+                      <CapacitorInitializer />
                       <ArloCommandLauncher />
                       <VoiceAmbientGlow />
                       <ConditionalNavBar />
