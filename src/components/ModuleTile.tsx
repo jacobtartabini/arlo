@@ -27,6 +27,8 @@ interface DashboardData {
   sleepHours: number;
   connectedDevices: number;
   isLoading: boolean;
+  onTaskToggle?: (taskId: string, done: boolean) => void;
+  onTaskCreate?: (title: string) => Promise<boolean>;
 }
 
 interface ModuleTileProps {
@@ -34,16 +36,14 @@ interface ModuleTileProps {
   onClick: () => void;
   sizeClass?: ModuleSize;
   dashboardData: DashboardData;
-  onTaskToggle?: (taskId: string, done: boolean) => void;
-  onTaskCreate?: (title: string) => Promise<boolean>;
 }
 
-export function ModuleTile({ module, onClick, sizeClass, dashboardData, onTaskToggle, onTaskCreate }: ModuleTileProps) {
+export function ModuleTile({ module, onClick, sizeClass, dashboardData }: ModuleTileProps) {
   const Icon = module.icon;
   const size = sizeClass || module.size;
   const isPrimary = size === "primary";
   const isTertiary = size === "tertiary";
-  const { isLoading, ...data } = dashboardData;
+  const { isLoading, onTaskToggle, onTaskCreate, ...data } = dashboardData;
 
   return (
     <motion.div

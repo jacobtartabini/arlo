@@ -632,8 +632,6 @@ export function BentoGrid({ onScaleChange, scale: controlledScale, recenterSigna
                   module={module} 
                   onClick={() => handleModuleClick(module)} 
                   dashboardData={dashboardData}
-                  onTaskToggle={dashboardData.onTaskToggle}
-                  onTaskCreate={dashboardData.onTaskCreate}
                 />
               </motion.div>
             );
