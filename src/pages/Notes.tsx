@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, PanelLeft, LogIn, Loader2, Download, Share2 } from "lucide-react";
@@ -15,6 +15,7 @@ import type { Note, NoteType, PageMode } from "@/types/notes";
 import { useNotesPersistence } from "@/hooks/useNotesPersistence";
 import { toast } from "sonner";
 import { generatePdfFromElement, downloadBlob, sharePdf } from "@/lib/notes-pdf";
+import { uploadFile } from "@/lib/storage";
 
 // Handle PDF file import from share target
 async function handleSharedFile(): Promise<File | null> {
@@ -48,6 +49,7 @@ export default function Notes() {
   const [createFolderDialogOpen, setCreateFolderDialogOpen] = useState(false);
   const [createFolderParentId, setCreateFolderParentId] = useState<string | undefined>();
   const [isExporting, setIsExporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const {
     notes,
     folders,
@@ -87,8 +89,7 @@ export default function Notes() {
             setCreateDialogOpen(true);
             break;
           case "upload":
-            // For upload, open the create dialog (user can import)
-            setCreateDialogOpen(true);
+            fileInputRef.current?.click();
             break;
           case "write":
             // Create a new page note in write mode directly
@@ -158,6 +159,55 @@ export default function Notes() {
       }
       toast.success(`New ${noteType} note created`);
     }
+  }, [createNote]);
+
+  const handleUploadNote = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) return;
+
+    const MAX_FILE_SIZE_MB = 50;
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      toast.error(`File is too large. Maximum size is ${MAX_FILE_SIZE_MB}MB.`);
+      return;
+    }
+
+    const escapedFileName = file.name
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+    const promise = uploadFile(file).then(async (uploadResult) => {
+      if (!uploadResult.success || !uploadResult.signedUrl) {
+        throw new Error(uploadResult.error || "Upload failed");
+      }
+
+      const newNote = await createNote({
+        noteType: "page",
+        pageMode: "type",
+        title: file.name,
+        canvasState: JSON.stringify({
+          html: `<p><strong>Uploaded file:</strong> <a href="${uploadResult.signedUrl}" target="_blank" rel="noopener noreferrer">${escapedFileName}</a></p>`,
+          backgroundStyle: "lined",
+        }),
+      });
+
+      if (!newNote) {
+        throw new Error("Failed to create note after upload.");
+      }
+
+      return newNote;
+    });
+
+    toast.promise(promise, {
+      loading: `Uploading ${file.name}...`,
+      success: (newNote) => {
+        setSelectedNoteId(newNote.id);
+        return `Uploaded ${file.name}`;
+      },
+      error: (err) => (err as Error).message,
+    });
   }, [createNote]);
 
   const handleDeleteNote = useCallback(
@@ -374,6 +424,13 @@ export default function Notes() {
 
   return (
     <div className="flex flex-col h-screen bg-background print:bg-white">
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        onChange={handleUploadNote}
+        accept=".pdf,image/*,.doc,.docx,.txt"
+      />
       {/* Back to dashboard - above everything */}
       <div className="px-4 py-2 print:hidden">
         <button
