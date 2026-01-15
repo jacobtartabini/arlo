@@ -619,7 +619,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     canvas.setActiveObject(text);
     canvas.renderAll();
 
-    toast.success("Handwriting converted to text! (Demo)");
+    toast.success("Handwriting converted to text!");
   }, []);
 
   // Keyboard shortcuts
