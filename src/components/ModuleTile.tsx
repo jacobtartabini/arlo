@@ -43,8 +43,7 @@ export function ModuleTile({ module, onClick, sizeClass, dashboardData }: Module
   const size = sizeClass || module.size;
   const isPrimary = size === "primary";
   const isTertiary = size === "tertiary";
-  const { isLoading, ...data } = dashboardData;
-  const { onTaskToggle, onTaskCreate } = dashboardData;
+  const { isLoading, onTaskToggle, onTaskCreate, ...data } = dashboardData;
 
   return (
     <motion.div
