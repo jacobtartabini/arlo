@@ -433,10 +433,21 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
   const eraserActiveRef = useRef(false);
   const eraserLastPointRef = useRef<{ x: number; y: number } | null>(null);
 
-  const isPenEvent = (event?: Event | PointerEvent | TPointerEvent | null) => {
+  const isPenEvent = (event?: Event | PointerEvent | TouchEvent | TPointerEvent | null) => {
     if (!event) return false;
     const pointerEvent = event as PointerEvent;
-    return pointerEvent.pointerType === "pen";
+    if (typeof pointerEvent.pointerType === "string") {
+      return pointerEvent.pointerType === "pen";
+    }
+
+    const touchEvent = event as TouchEvent;
+    if ("touches" in touchEvent && touchEvent.touches) {
+      return Array.from(touchEvent.touches).some(
+        touch => (touch as any).touchType === "stylus" || (touch as any).force > 0,
+      );
+    }
+
+    return false;
   };
 
   const scheduleNonPenRelease = () => {
@@ -1067,6 +1078,14 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       return event.pointerType !== "pen";
     };
 
+    const shouldBlockTouch = (event: TouchEvent) => {
+      if (!requiresStylus) return false;
+      if (event.touches.length >= 2 || event.changedTouches.length >= 2) return false;
+      return !Array.from(event.touches).some(
+        touch => (touch as any).touchType === "stylus" || (touch as any).force > 0,
+      );
+    };
+
     const handlePointerDown = (event: PointerEvent) => {
       if (event.pointerType === "pen") {
         penActiveRef.current = true;
@@ -1109,16 +1128,43 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       }
     };
 
+    const handleTouchStart = (event: TouchEvent) => {
+      if (shouldBlockTouch(event)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (shouldBlockTouch(event)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+
+    const handleTouchEnd = (event: TouchEvent) => {
+      if (shouldBlockTouch(event)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+
     container.addEventListener("pointerdown", handlePointerDown, { capture: true });
     container.addEventListener("pointermove", handlePointerMove, { capture: true });
     container.addEventListener("pointerup", handlePointerUp, { capture: true });
     container.addEventListener("pointercancel", handlePointerCancel, { capture: true });
+    container.addEventListener("touchstart", handleTouchStart, { capture: true, passive: false });
+    container.addEventListener("touchmove", handleTouchMove, { capture: true, passive: false });
+    container.addEventListener("touchend", handleTouchEnd, { capture: true, passive: false });
 
     return () => {
       container.removeEventListener("pointerdown", handlePointerDown, { capture: true });
       container.removeEventListener("pointermove", handlePointerMove, { capture: true });
       container.removeEventListener("pointerup", handlePointerUp, { capture: true });
       container.removeEventListener("pointercancel", handlePointerCancel, { capture: true });
+      container.removeEventListener("touchstart", handleTouchStart, { capture: true });
+      container.removeEventListener("touchmove", handleTouchMove, { capture: true });
+      container.removeEventListener("touchend", handleTouchEnd, { capture: true });
     };
   }, [settings.tool]);
 
