@@ -13,7 +13,6 @@ import {
   IText,
   ActiveSelection,
   Polyline,
-  EraserBrush,
 } from "fabric";
 import { DrawingSettings, Note, DEFAULT_DRAWING_SETTINGS } from "@/types/notes";
 import { DrawingToolbar } from "./DrawingToolbar";
@@ -236,7 +235,8 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     const canvas = fabricRef.current;
     if (!canvas) return;
 
-    const radius = Math.max(6, settings.strokeWidth * 4);
+    const isPrecision = settings.eraserType === "precision";
+    const radius = isPrecision ? Math.max(4, settings.strokeWidth * 2) : Math.max(10, settings.strokeWidth * 5);
     const candidates = canvas.getObjects().filter(obj => obj !== lassoPreviewRef.current);
 
     for (const obj of candidates) {
@@ -261,8 +261,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     const canvas = fabricRef.current;
     if (!canvas) return;
 
-    const isPrecisionEraser = settings.tool === "eraser" && settings.eraserType === "precision";
-    const isDrawing = settings.tool === "pen" || settings.tool === "highlighter" || isPrecisionEraser;
+    const isDrawing = settings.tool === "pen" || settings.tool === "highlighter";
     canvas.isDrawingMode = isDrawing;
     canvas.selection = settings.tool === "select";
     canvas.skipTargetFind = settings.tool === "eraser";
@@ -272,10 +271,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       canvas.requestRenderAll();
     }
 
-    if (isPrecisionEraser) {
-      canvas.freeDrawingBrush = new EraserBrush(canvas);
-      canvas.freeDrawingBrush.width = Math.max(12, settings.strokeWidth * 6);
-    } else if (isDrawing && canvas.freeDrawingBrush) {
+    if (isDrawing && canvas.freeDrawingBrush) {
       canvas.freeDrawingBrush = new PencilBrush(canvas);
       canvas.freeDrawingBrush.color = settings.tool === "highlighter"
         ? settings.color + "80"
@@ -285,7 +281,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
         : settings.strokeWidth;
     }
 
-    if (settings.tool === "eraser" && settings.eraserType !== "precision") {
+    if (settings.tool === "eraser") {
       canvas.on("mouse:down", handleEraserStart);
       canvas.on("mouse:move", handleEraserMove);
       canvas.on("mouse:up", handleEraserEnd);
