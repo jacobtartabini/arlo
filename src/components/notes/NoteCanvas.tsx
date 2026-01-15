@@ -62,8 +62,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
 
   const isPenEvent = (event?: Event | PointerEvent | TPointerEvent | null) => {
     if (!event) return false;
-    const pointerEvent = event as PointerEvent;
-    return pointerEvent.pointerType === "pen";
+    return "pointerType" in event && (event as PointerEvent).pointerType === "pen";
   };
 
   const scheduleNonPenRelease = () => {
