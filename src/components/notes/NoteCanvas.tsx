@@ -39,6 +39,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
   const touchTracking = useRef<Map<number, TouchInfo>>(new Map());
   const primaryTouchId = useRef<number | null>(null);
   const addModuleRef = useRef<((type: ModuleType) => void) | null>(null);
+  const stylusOnlyTools = useRef(new Set(["pen", "highlighter", "eraser", "shape", "text"]));
 
   // Initialize canvas
   useEffect(() => {
@@ -419,6 +420,50 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       container.removeEventListener("touchend", handleTouchEnd);
     };
   }, [palmRejectionEnabled]);
+
+  // Block non-stylus input for drawing tools (Apple Pencil / stylus only)
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const requiresStylus = stylusOnlyTools.current.has(settings.tool);
+
+    const isStylusInput = (event: PointerEvent) => {
+      if (event.pointerType === "pen") return true;
+      if ((event as any).touchType === "stylus") return true;
+      return false;
+    };
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!requiresStylus || isStylusInput(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!requiresStylus || isStylusInput(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    const handlePointerUp = (event: PointerEvent) => {
+      if (!requiresStylus || isStylusInput(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+
+    container.addEventListener("pointerdown", handlePointerDown, { capture: true });
+    container.addEventListener("pointermove", handlePointerMove, { capture: true });
+    container.addEventListener("pointerup", handlePointerUp, { capture: true });
+    container.addEventListener("pointercancel", handlePointerUp, { capture: true });
+
+    return () => {
+      container.removeEventListener("pointerdown", handlePointerDown, { capture: true });
+      container.removeEventListener("pointermove", handlePointerMove, { capture: true });
+      container.removeEventListener("pointerup", handlePointerUp, { capture: true });
+      container.removeEventListener("pointercancel", handlePointerUp, { capture: true });
+    };
+  }, [settings.tool]);
 
   // Undo/Redo
   const handleUndo = useCallback(() => {
