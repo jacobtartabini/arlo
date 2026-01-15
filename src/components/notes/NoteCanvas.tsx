@@ -2,7 +2,19 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { TPointerEvent } from "fabric";
-import { Canvas as FabricCanvas, PencilBrush, Circle, Rect, Triangle, Line, FabricObject, IText, ActiveSelection } from "fabric";
+import {
+  Canvas as FabricCanvas,
+  PencilBrush,
+  Circle,
+  Rect,
+  Triangle,
+  Line,
+  FabricObject,
+  IText,
+  ActiveSelection,
+  Polyline,
+  EraserBrush,
+} from "fabric";
 import { DrawingSettings, Note, DEFAULT_DRAWING_SETTINGS } from "@/types/notes";
 import { DrawingToolbar } from "./DrawingToolbar";
 import { EmbeddedModules, type ModuleType } from "./EmbeddedModules";
@@ -40,7 +52,105 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
   const touchTracking = useRef<Map<number, TouchInfo>>(new Map());
   const primaryTouchId = useRef<number | null>(null);
   const addModuleRef = useRef<((type: ModuleType) => void) | null>(null);
-  const stylusOnlyTools = useRef(new Set(["pen", "highlighter", "eraser", "shape", "text"]));
+  const stylusOnlyTools = useRef(new Set(["pen", "highlighter", "eraser", "lasso"]));
+  const penActiveRef = useRef(false);
+  const nonPenSuppressionTimeout = useRef<number | null>(null);
+  const lassoPointsRef = useRef<{ x: number; y: number }[]>([]);
+  const lassoPreviewRef = useRef<FabricObject | null>(null);
+  const lassoActiveRef = useRef(false);
+  const eraserActiveRef = useRef(false);
+  const eraserLastPointRef = useRef<{ x: number; y: number } | null>(null);
+
+  const isPenEvent = (event?: Event | PointerEvent | TPointerEvent | null) => {
+    if (!event) return false;
+    const pointerEvent = event as PointerEvent;
+    return pointerEvent.pointerType === "pen";
+  };
+
+  const scheduleNonPenRelease = () => {
+    if (nonPenSuppressionTimeout.current) {
+      window.clearTimeout(nonPenSuppressionTimeout.current);
+    }
+    nonPenSuppressionTimeout.current = window.setTimeout(() => {
+      penActiveRef.current = false;
+    }, 120);
+  };
+
+  const clearNonPenSuppression = () => {
+    if (nonPenSuppressionTimeout.current) {
+      window.clearTimeout(nonPenSuppressionTimeout.current);
+      nonPenSuppressionTimeout.current = null;
+    }
+    penActiveRef.current = false;
+  };
+
+  const rectsIntersect = (a: { left: number; top: number; width: number; height: number }, b: { left: number; top: number; width: number; height: number }) => {
+    return !(a.left + a.width < b.left || b.left + b.width < a.left || a.top + a.height < b.top || b.top + b.height < a.top);
+  };
+
+  const pointInPolygon = (point: { x: number; y: number }, polygon: { x: number; y: number }[]) => {
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const xi = polygon[i].x;
+      const yi = polygon[i].y;
+      const xj = polygon[j].x;
+      const yj = polygon[j].y;
+      const intersect = yi > point.y !== yj > point.y && point.x < ((xj - xi) * (point.y - yi)) / (yj - yi) + xi;
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  };
+
+  const segmentsIntersect = (p1: { x: number; y: number }, p2: { x: number; y: number }, q1: { x: number; y: number }, q2: { x: number; y: number }) => {
+    const cross = (a: { x: number; y: number }, b: { x: number; y: number }, c: { x: number; y: number }) =>
+      (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    const d1 = cross(p1, p2, q1);
+    const d2 = cross(p1, p2, q2);
+    const d3 = cross(q1, q2, p1);
+    const d4 = cross(q1, q2, p2);
+    return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+  };
+
+  const polygonIntersectsRect = (polygon: { x: number; y: number }[], rect: { left: number; top: number; width: number; height: number }) => {
+    const rectPoints = [
+      { x: rect.left, y: rect.top },
+      { x: rect.left + rect.width, y: rect.top },
+      { x: rect.left + rect.width, y: rect.top + rect.height },
+      { x: rect.left, y: rect.top + rect.height },
+    ];
+
+    if (rectPoints.some(point => pointInPolygon(point, polygon))) return true;
+    if (polygon.some(point => point.x >= rect.left && point.x <= rect.left + rect.width && point.y >= rect.top && point.y <= rect.top + rect.height)) return true;
+
+    for (let i = 0; i < polygon.length; i++) {
+      const next = (i + 1) % polygon.length;
+      for (let j = 0; j < rectPoints.length; j++) {
+        const nextRect = (j + 1) % rectPoints.length;
+        if (segmentsIntersect(polygon[i], polygon[next], rectPoints[j], rectPoints[nextRect])) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  const lineIntersectsRect = (start: { x: number; y: number }, end: { x: number; y: number }, rect: { left: number; top: number; width: number; height: number }) => {
+    const rectPoints = [
+      { x: rect.left, y: rect.top },
+      { x: rect.left + rect.width, y: rect.top },
+      { x: rect.left + rect.width, y: rect.top + rect.height },
+      { x: rect.left, y: rect.top + rect.height },
+    ];
+
+    if (start.x >= rect.left && start.x <= rect.left + rect.width && start.y >= rect.top && start.y <= rect.top + rect.height) return true;
+    if (end.x >= rect.left && end.x <= rect.left + rect.width && end.y >= rect.top && end.y <= rect.top + rect.height) return true;
+
+    for (let i = 0; i < rectPoints.length; i++) {
+      const next = (i + 1) % rectPoints.length;
+      if (segmentsIntersect(start, end, rectPoints[i], rectPoints[next])) return true;
+    }
+    return false;
+  };
 
   // Initialize canvas
   useEffect(() => {
@@ -122,33 +232,39 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     };
   }, [note.id]);
 
-  const eraseAtPointer = useCallback((pointer: { x: number; y: number }) => {
+  const eraseAlongSegment = useCallback((start: { x: number; y: number }, end: { x: number; y: number }) => {
     const canvas = fabricRef.current;
     if (!canvas) return;
 
-    const objects = canvas.getObjects();
-    const eraserType = settings.eraserType || "stroke";
+    const radius = Math.max(6, settings.strokeWidth * 4);
+    const candidates = canvas.getObjects().filter(obj => obj !== lassoPreviewRef.current);
 
-    for (const obj of objects) {
-      if (obj.containsPoint(pointer)) {
-        if (eraserType === "stroke") {
-          canvas.remove(obj);
-        } else {
-          canvas.remove(obj);
-        }
-        break;
-      }
+    for (const obj of candidates) {
+      const bounds = obj.getBoundingRect(true, true);
+      const expandedBounds = {
+        left: bounds.left - radius,
+        top: bounds.top - radius,
+        width: bounds.width + radius * 2,
+        height: bounds.height + radius * 2,
+      };
+
+      if (!lineIntersectsRect(start, end, expandedBounds)) continue;
+
+      canvas.remove(obj);
     }
-  }, [settings.eraserType]);
+
+    canvas.requestRenderAll();
+  }, [settings.strokeWidth, lineIntersectsRect]);
 
   // Update drawing mode based on tool
   useEffect(() => {
     const canvas = fabricRef.current;
     if (!canvas) return;
 
-    const isDrawing = settings.tool === "pen" || settings.tool === "highlighter";
+    const isPrecisionEraser = settings.tool === "eraser" && settings.eraserType === "precision";
+    const isDrawing = settings.tool === "pen" || settings.tool === "highlighter" || isPrecisionEraser;
     canvas.isDrawingMode = isDrawing;
-    canvas.selection = settings.tool === "select" || settings.tool === "lasso";
+    canvas.selection = settings.tool === "select";
     canvas.skipTargetFind = settings.tool === "eraser";
 
     if (settings.tool === "eraser") {
@@ -156,22 +272,27 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       canvas.requestRenderAll();
     }
 
-    if (isDrawing && canvas.freeDrawingBrush) {
-      canvas.freeDrawingBrush.color = settings.tool === "highlighter" 
+    if (isPrecisionEraser) {
+      canvas.freeDrawingBrush = new EraserBrush(canvas);
+      canvas.freeDrawingBrush.width = Math.max(12, settings.strokeWidth * 6);
+    } else if (isDrawing && canvas.freeDrawingBrush) {
+      canvas.freeDrawingBrush = new PencilBrush(canvas);
+      canvas.freeDrawingBrush.color = settings.tool === "highlighter"
         ? settings.color + "80"
         : settings.color;
-      canvas.freeDrawingBrush.width = settings.tool === "highlighter" 
-        ? settings.strokeWidth * 3 
+      canvas.freeDrawingBrush.width = settings.tool === "highlighter"
+        ? settings.strokeWidth * 3
         : settings.strokeWidth;
     }
 
-    // Handle eraser
-    if (settings.tool === "eraser") {
+    if (settings.tool === "eraser" && settings.eraserType !== "precision") {
       canvas.on("mouse:down", handleEraserStart);
       canvas.on("mouse:move", handleEraserMove);
+      canvas.on("mouse:up", handleEraserEnd);
     } else {
       canvas.off("mouse:down", handleEraserStart);
       canvas.off("mouse:move", handleEraserMove);
+      canvas.off("mouse:up", handleEraserEnd);
     }
   }, [settings]);
 
@@ -184,22 +305,31 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     canvas.renderAll();
   }, [zoom]);
 
-  // Eraser handlers - supports both stroke (whole line) and precision (partial) modes
+  // Eraser handlers - stroke eraser uses a continuous path
   const handleEraserStart = useCallback((opt: any) => {
     const canvas = fabricRef.current;
-    if (!canvas) return;
+    if (!canvas || !isPenEvent(opt.e)) return;
 
+    eraserActiveRef.current = true;
     const pointer = canvas.getScenePoint(opt.e);
-    eraseAtPointer(pointer);
-  }, [eraseAtPointer]);
+    eraserLastPointRef.current = pointer;
+  }, []);
 
   const handleEraserMove = useCallback((opt: any) => {
     const canvas = fabricRef.current;
-    if (!canvas || !opt.e.buttons) return;
+    if (!canvas || !eraserActiveRef.current || !isPenEvent(opt.e)) return;
 
     const pointer = canvas.getScenePoint(opt.e);
-    eraseAtPointer(pointer);
-  }, [eraseAtPointer]);
+    if (eraserLastPointRef.current) {
+      eraseAlongSegment(eraserLastPointRef.current, pointer);
+    }
+    eraserLastPointRef.current = pointer;
+  }, [eraseAlongSegment]);
+
+  const handleEraserEnd = useCallback(() => {
+    eraserActiveRef.current = false;
+    eraserLastPointRef.current = null;
+  }, []);
 
   // Add shape
   const addShape = useCallback((x: number, y: number) => {
@@ -259,6 +389,54 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     canvas.renderAll();
   }, [settings]);
 
+  const finalizeLassoSelection = useCallback((mode: "freeform" | "rectangle", points: { x: number; y: number }[]) => {
+    const canvas = fabricRef.current;
+    if (!canvas || points.length === 0) return;
+
+    const objects = canvas.getObjects().filter(obj => obj !== lassoPreviewRef.current);
+    const selected: FabricObject[] = [];
+
+    if (mode === "rectangle") {
+      const start = points[0];
+      const end = points[points.length - 1];
+      const rect = {
+        left: Math.min(start.x, end.x),
+        top: Math.min(start.y, end.y),
+        width: Math.abs(end.x - start.x),
+        height: Math.abs(end.y - start.y),
+      };
+
+      objects.forEach(obj => {
+        const bounds = obj.getBoundingRect(true, true);
+        if (rectsIntersect(rect, bounds)) {
+          selected.push(obj);
+        }
+      });
+    } else {
+      const minX = Math.min(...points.map(point => point.x));
+      const maxX = Math.max(...points.map(point => point.x));
+      const minY = Math.min(...points.map(point => point.y));
+      const maxY = Math.max(...points.map(point => point.y));
+      const polygonBounds = { left: minX, top: minY, width: maxX - minX, height: maxY - minY };
+
+      objects.forEach(obj => {
+        const bounds = obj.getBoundingRect(true, true);
+        if (!rectsIntersect(bounds, polygonBounds)) return;
+        if (polygonIntersectsRect(points, bounds)) {
+          selected.push(obj);
+        }
+      });
+    }
+
+    if (selected.length > 0) {
+      const activeSelection = new ActiveSelection(selected, { canvas });
+      canvas.setActiveObject(activeSelection);
+    } else {
+      canvas.discardActiveObject();
+    }
+    canvas.requestRenderAll();
+  }, [polygonIntersectsRect, rectsIntersect]);
+
   // Handle image upload
   const handleImageUpload = useCallback((file: File) => {
     const canvas = fabricRef.current;
@@ -305,6 +483,120 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       canvas.off("mouse:down", handleClick);
     };
   }, [settings.tool, addShape, addText]);
+
+  // Lasso selection handlers
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+
+    const handleLassoStart = (opt: any) => {
+      if (!isPenEvent(opt.e)) return;
+      if (opt.target) return;
+      const pointer = canvas.getScenePoint(opt.e);
+      lassoActiveRef.current = true;
+      lassoPointsRef.current = [pointer];
+
+      if (lassoPreviewRef.current) {
+        canvas.remove(lassoPreviewRef.current);
+        lassoPreviewRef.current = null;
+      }
+
+      if (settings.lassoMode === "rectangle") {
+        const rect = new Rect({
+          left: pointer.x,
+          top: pointer.y,
+          width: 0,
+          height: 0,
+          fill: "rgba(59,130,246,0.1)",
+          stroke: "#3b82f6",
+          strokeWidth: 1,
+          strokeDashArray: [4, 4],
+          selectable: false,
+          evented: false,
+        });
+        lassoPreviewRef.current = rect;
+        canvas.add(rect);
+      } else {
+        const polyline = new Polyline([pointer], {
+          stroke: "#3b82f6",
+          strokeWidth: 1.5,
+          fill: "rgba(59,130,246,0.1)",
+          selectable: false,
+          evented: false,
+        });
+        lassoPreviewRef.current = polyline;
+        canvas.add(polyline);
+      }
+    };
+
+    const handleLassoMove = (opt: any) => {
+      if (!lassoActiveRef.current || !isPenEvent(opt.e)) return;
+      const pointer = canvas.getScenePoint(opt.e);
+      const points = lassoPointsRef.current;
+      points.push(pointer);
+
+      if (!lassoPreviewRef.current) return;
+      if (settings.lassoMode === "rectangle") {
+        const start = points[0];
+        const rect = lassoPreviewRef.current as Rect;
+        rect.set({
+          left: Math.min(start.x, pointer.x),
+          top: Math.min(start.y, pointer.y),
+          width: Math.abs(pointer.x - start.x),
+          height: Math.abs(pointer.y - start.y),
+        });
+        rect.setCoords();
+      } else {
+        const polyline = lassoPreviewRef.current as Polyline;
+        polyline.set({ points: [...points] });
+      }
+      canvas.requestRenderAll();
+    };
+
+    const handleLassoEnd = () => {
+      if (!lassoActiveRef.current) return;
+      lassoActiveRef.current = false;
+
+      const points = lassoPointsRef.current;
+      if (lassoPreviewRef.current) {
+        canvas.remove(lassoPreviewRef.current);
+        lassoPreviewRef.current = null;
+      }
+
+      if (settings.lassoMode === "freeform" && points.length < 3) {
+        lassoPointsRef.current = [];
+        return;
+      }
+
+      if (points.length > 1) {
+        finalizeLassoSelection(settings.lassoMode || "freeform", points);
+      }
+
+      lassoPointsRef.current = [];
+    };
+
+    if (settings.tool === "lasso") {
+      canvas.on("mouse:down", handleLassoStart);
+      canvas.on("mouse:move", handleLassoMove);
+      canvas.on("mouse:up", handleLassoEnd);
+    } else {
+      canvas.off("mouse:down", handleLassoStart);
+      canvas.off("mouse:move", handleLassoMove);
+      canvas.off("mouse:up", handleLassoEnd);
+      if (lassoPreviewRef.current) {
+        canvas.remove(lassoPreviewRef.current);
+        lassoPreviewRef.current = null;
+      }
+      lassoPointsRef.current = [];
+      lassoActiveRef.current = false;
+    }
+
+    return () => {
+      canvas.off("mouse:down", handleLassoStart);
+      canvas.off("mouse:move", handleLassoMove);
+      canvas.off("mouse:up", handleLassoEnd);
+    };
+  }, [finalizeLassoSelection, settings.lassoMode, settings.tool]);
 
   // Panning with space + drag
   useEffect(() => {
@@ -457,40 +749,64 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
 
     const requiresStylus = stylusOnlyTools.current.has(settings.tool);
 
-    const isStylusInput = (event: PointerEvent) => {
-      if (event.pointerType === "pen") return true;
-      if ((event as any).touchType === "stylus") return true;
-      return false;
+    const shouldBlock = (event: PointerEvent) => {
+      if (penActiveRef.current && event.pointerType !== "pen") return true;
+      if (!requiresStylus) return false;
+      return event.pointerType !== "pen";
     };
 
     const handlePointerDown = (event: PointerEvent) => {
-      if (!requiresStylus || isStylusInput(event)) return;
-      event.preventDefault();
-      event.stopPropagation();
+      if (event.pointerType === "pen") {
+        penActiveRef.current = true;
+        if (nonPenSuppressionTimeout.current) {
+          window.clearTimeout(nonPenSuppressionTimeout.current);
+          nonPenSuppressionTimeout.current = null;
+        }
+      }
+
+      if (shouldBlock(event)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
     };
 
     const handlePointerMove = (event: PointerEvent) => {
-      if (!requiresStylus || isStylusInput(event)) return;
-      event.preventDefault();
-      event.stopPropagation();
+      if (shouldBlock(event)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
     };
 
     const handlePointerUp = (event: PointerEvent) => {
-      if (!requiresStylus || isStylusInput(event)) return;
-      event.preventDefault();
-      event.stopPropagation();
+      if (event.pointerType === "pen") {
+        scheduleNonPenRelease();
+      }
+      if (shouldBlock(event)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+
+    const handlePointerCancel = (event: PointerEvent) => {
+      if (event.pointerType === "pen") {
+        clearNonPenSuppression();
+      }
+      if (shouldBlock(event)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
     };
 
     container.addEventListener("pointerdown", handlePointerDown, { capture: true });
     container.addEventListener("pointermove", handlePointerMove, { capture: true });
     container.addEventListener("pointerup", handlePointerUp, { capture: true });
-    container.addEventListener("pointercancel", handlePointerUp, { capture: true });
+    container.addEventListener("pointercancel", handlePointerCancel, { capture: true });
 
     return () => {
       container.removeEventListener("pointerdown", handlePointerDown, { capture: true });
       container.removeEventListener("pointermove", handlePointerMove, { capture: true });
       container.removeEventListener("pointerup", handlePointerUp, { capture: true });
-      container.removeEventListener("pointercancel", handlePointerUp, { capture: true });
+      container.removeEventListener("pointercancel", handlePointerCancel, { capture: true });
     };
   }, [settings.tool]);
 
@@ -759,6 +1075,12 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     toast.success("Text inserted");
   }, []);
 
+  useEffect(() => {
+    return () => {
+      clearNonPenSuppression();
+    };
+  }, []);
+
   return (
     <div className="relative flex-1 h-full overflow-hidden">
       {/* Canvas background with grid */}
@@ -774,7 +1096,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
           backgroundPositionY: `${(fabricRef.current?.viewportTransform?.[5] || 0) % 24}px`,
         }}
       >
-        <canvas ref={canvasRef} className="absolute inset-0" />
+        <canvas ref={canvasRef} className="absolute inset-0 touch-none" />
       </div>
 
       {/* Embedded modules layer */}
