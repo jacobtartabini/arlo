@@ -490,6 +490,8 @@ export function SpatialCanvas({ onScaleChange, scale: controlledScale, recenterS
                     onClick={() => handleModuleClick(module)}
                     sizeClass={module.size}
                     dashboardData={dashboardData}
+                    onTaskToggle={dashboardData.onTaskToggle}
+                    onTaskCreate={dashboardData.onTaskCreate}
                   />
                 </motion.div>
               );
