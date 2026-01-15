@@ -170,7 +170,8 @@ function TodayMiniContent({
   const isTertiary = size === "tertiary";
   const tasks = data.todayTasks.slice(0, isTertiary ? 2 : isPrimary ? 5 : 3);
   const completedCount = data.tasksCompletedToday;
-  const totalToday = data.tasksDueToday;
+  const remainingCount = data.tasksDueToday;
+  const totalToday = completedCount + remainingCount;
   
   const [isAdding, setIsAdding] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -239,7 +240,7 @@ function TodayMiniContent({
           )}>
             {completedCount === totalToday && totalToday > 0 
               ? "All done! 🎉" 
-              : `${totalToday - completedCount} tasks left`}
+              : `${remainingCount} tasks left`}
           </p>
           <p className="text-[10px] text-muted-foreground/60">
             {completedCount > 0 && `${completedCount} completed today`}
