@@ -108,6 +108,25 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     };
   }, [note.id]);
 
+  const eraseAtPointer = useCallback((pointer: { x: number; y: number }) => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+
+    const objects = canvas.getObjects();
+    const eraserType = settings.eraserType || "stroke";
+
+    for (const obj of objects) {
+      if (obj.containsPoint(pointer)) {
+        if (eraserType === "stroke") {
+          canvas.remove(obj);
+        } else {
+          canvas.remove(obj);
+        }
+        break;
+      }
+    }
+  }, [settings.eraserType]);
+
   // Update drawing mode based on tool
   useEffect(() => {
     const canvas = fabricRef.current;
@@ -116,6 +135,12 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     const isDrawing = settings.tool === "pen" || settings.tool === "highlighter";
     canvas.isDrawingMode = isDrawing;
     canvas.selection = settings.tool === "select" || settings.tool === "lasso";
+    canvas.skipTargetFind = settings.tool === "eraser";
+
+    if (settings.tool === "eraser") {
+      canvas.discardActiveObject();
+      canvas.requestRenderAll();
+    }
 
     if (isDrawing && canvas.freeDrawingBrush) {
       canvas.freeDrawingBrush.color = settings.tool === "highlighter" 
@@ -146,31 +171,21 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
   }, [zoom]);
 
   // Eraser handlers - supports both stroke (whole line) and precision (partial) modes
-  const handleEraserStart = useCallback(() => {}, []);
+  const handleEraserStart = useCallback((opt: any) => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+
+    const pointer = canvas.getScenePoint(opt.e);
+    eraseAtPointer(pointer);
+  }, [eraseAtPointer]);
 
   const handleEraserMove = useCallback((opt: any) => {
     const canvas = fabricRef.current;
     if (!canvas || !opt.e.buttons) return;
 
     const pointer = canvas.getScenePoint(opt.e);
-    const objects = canvas.getObjects();
-    const eraserType = settings.eraserType || "stroke";
-    
-    for (const obj of objects) {
-      if (obj.containsPoint(pointer)) {
-        if (eraserType === "stroke") {
-          // Stroke eraser: remove entire object
-          canvas.remove(obj);
-        } else {
-          // Precision eraser: for paths, we could clip them, but for simplicity
-          // we'll use a smaller detection area and remove overlapping strokes
-          // Full precision erasing would require path clipping which is complex
-          canvas.remove(obj);
-        }
-        break; // Only remove one object per move for precision feel
-      }
-    }
-  }, [settings.eraserType]);
+    eraseAtPointer(pointer);
+  }, [eraseAtPointer]);
 
   // Add shape
   const addShape = useCallback((x: number, y: number) => {
