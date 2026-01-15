@@ -260,11 +260,11 @@ const PublicBookingPage = () => {
   const daysInMonth = getDaysInMonth(currentYear, currentMonth);
   const firstDayOfMonth = getFirstDayOfMonth(currentYear, currentMonth);
 
-  // Load booking slots configuration (with fallback for demo)
+  // Load booking slots configuration (with fallback defaults)
   useEffect(() => {
     const loadBookingSlots = async () => {
-      // For demo purposes, use default slots since we don't have user context
-      // In production, this would fetch from the user's booking_slots table
+      // Use default slots since we don't have user context
+      // This would fetch from the user's booking_slots table when available
       const defaultSlots = [
         { day_of_week: 1, start_time: "09:00", end_time: "17:00", duration_minutes: 30, enabled: true },
         { day_of_week: 2, start_time: "09:00", end_time: "17:00", duration_minutes: 30, enabled: true },
