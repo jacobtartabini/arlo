@@ -6,6 +6,7 @@ import {
   isAuthenticated as checkIsAuthenticated,
   getIdentity 
 } from '@/lib/arloAuth';
+import { isPublicBookingDomain } from '@/lib/domain-utils';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -45,6 +46,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Initialize - check if we have a valid cached token
   useEffect(() => {
     const initAuth = async () => {
+      // On public booking domains, skip authentication entirely
+      if (isPublicBookingDomain()) {
+        setAuthState({
+          isAuthenticated: false,
+          isLoading: false,
+          error: null,
+          identity: null,
+          userKey: null,
+        });
+        return;
+      }
+
       try {
         // Check if already authenticated (has valid in-memory token)
         if (checkIsAuthenticated()) {
@@ -91,6 +104,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Verify authentication by fetching/refreshing token
   const verifyAuth = useCallback(async (): Promise<boolean> => {
+    // On public booking domains, skip authentication entirely
+    if (isPublicBookingDomain()) {
+      return false;
+    }
+
     setAuthState(prev => ({ ...prev, isLoading: true, error: null }));
 
     // Hard watchdog so the UI can't spin forever if the network stack stalls

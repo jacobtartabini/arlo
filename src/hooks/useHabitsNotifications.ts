@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { notify, showToast, getCurrentUserId } from '@/lib/notifications/notify';
 import { dataApiHelpers } from '@/lib/data-api';
 import type { HabitWithStreak, Routine } from '@/types/habits';
+import { isPublicBookingDomain } from '@/lib/domain-utils';
 
 interface DbHabit {
   id: string;
@@ -38,8 +39,12 @@ const STREAK_MILESTONES = [7, 14, 30, 60, 100, 365];
  * - Morning/night routine reminders
  * - Streak warnings (at risk)
  * - Streak milestone celebrations
+ * Disabled on public booking domains
  */
 export function useHabitsNotifications() {
+  // Skip on public booking domains
+  const isPublicDomain = isPublicBookingDomain();
+
   const firedNotificationsRef = useRef<Set<string>>(new Set());
   const checkIntervalRef = useRef<number | null>(null);
   const lastCheckDateRef = useRef<string>('');
@@ -258,6 +263,9 @@ export function useHabitsNotifications() {
 
   // Set up interval to check every 15 minutes
   useEffect(() => {
+    // Skip on public booking domains
+    if (isPublicDomain) return;
+
     checkHabitNotifications();
     checkIntervalRef.current = window.setInterval(checkHabitNotifications, 15 * 60 * 1000);
 
@@ -266,7 +274,7 @@ export function useHabitsNotifications() {
         window.clearInterval(checkIntervalRef.current);
       }
     };
-  }, [checkHabitNotifications]);
+  }, [checkHabitNotifications, isPublicDomain]);
 
   // Expose method to manually trigger streak milestone check after completion
   const checkStreakMilestone = useCallback(async (habitId: string, habitTitle: string, newStreak: number) => {

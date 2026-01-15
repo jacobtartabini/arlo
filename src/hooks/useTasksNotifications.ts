@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { notify, showToast, getCurrentUserId } from '@/lib/notifications/notify';
 import { dataApiHelpers } from '@/lib/data-api';
+import { isPublicBookingDomain } from '@/lib/domain-utils';
 
 interface DbTask {
   id: string;
@@ -17,8 +18,12 @@ interface DbTask {
  * - Due soon reminders (1 day, 1 hour before)
  * - Overdue task notifications
  * - Optional completion confirmations
+ * Disabled on public booking domains
  */
 export function useTasksNotifications() {
+  // Skip on public booking domains
+  const isPublicDomain = isPublicBookingDomain();
+
   const firedNotificationsRef = useRef<Set<string>>(new Set());
   const checkIntervalRef = useRef<number | null>(null);
   const lastCheckDateRef = useRef<string>('');
@@ -149,6 +154,9 @@ export function useTasksNotifications() {
 
   // Set up interval to check every 15 minutes
   useEffect(() => {
+    // Skip on public booking domains
+    if (isPublicDomain) return;
+
     checkTaskNotifications();
     checkIntervalRef.current = window.setInterval(checkTaskNotifications, 15 * 60 * 1000);
 
@@ -157,7 +165,7 @@ export function useTasksNotifications() {
         window.clearInterval(checkIntervalRef.current);
       }
     };
-  }, [checkTaskNotifications]);
+  }, [checkTaskNotifications, isPublicDomain]);
 
   // Notify on task completion (optional confirmation)
   const notifyTaskCompleted = useCallback(async (taskTitle: string) => {

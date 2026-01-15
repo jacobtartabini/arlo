@@ -15,6 +15,7 @@ import {
   unsubscribeFromPush,
 } from '@/lib/notifications/push';
 import type { AppNotification, NotificationPreferences } from '@/lib/notifications/types';
+import { isPublicBookingDomain } from '@/lib/domain-utils';
 
 interface NotificationsContextType {
   notifications: AppNotification[];
@@ -102,8 +103,14 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     return success;
   }, []);
 
-  // Initial load
+  // Initial load - skip on public booking domains
   useEffect(() => {
+    // On public booking domains, don't fetch notifications
+    if (isPublicBookingDomain()) {
+      setIsLoading(false);
+      return;
+    }
+
     const init = async () => {
       setIsLoading(true);
       setPushPermission(getNotificationPermission());
@@ -113,8 +120,10 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     init();
   }, [refresh]);
 
-  // Realtime subscription
+  // Realtime subscription - skip on public booking domains
   useEffect(() => {
+    if (isPublicBookingDomain()) return;
+
     const channel = supabase
       .channel('notifications-realtime')
       .on(
