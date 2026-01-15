@@ -35,6 +35,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
   const [isPanning, setIsPanning] = useState(false);
   const [clipboard, setClipboard] = useState<FabricObject[] | null>(null);
   const [palmRejectionEnabled, setPalmRejectionEnabled] = useState(true);
+  const isRestoringRef = useRef(false);
   const lastPanPosition = useRef({ x: 0, y: 0 });
   const touchTracking = useRef<Map<number, TouchInfo>>(new Map());
   const primaryTouchId = useRef<number | null>(null);
@@ -62,16 +63,28 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
 
     fabricRef.current = canvas;
 
+    const setInitialHistory = () => {
+      const json = JSON.stringify(canvas.toJSON());
+      setUndoStack([json]);
+      setRedoStack([]);
+    };
+
     // Load existing canvas state
     if (note.canvasState) {
       try {
+        isRestoringRef.current = true;
         canvas.loadFromJSON(JSON.parse(note.canvasState)).then(() => {
           canvas.renderAll();
-          setUndoStack([note.canvasState]);
+          setInitialHistory();
+          isRestoringRef.current = false;
         });
       } catch (e) {
         console.error("Failed to load canvas state:", e);
+        setInitialHistory();
+        isRestoringRef.current = false;
       }
+    } else {
+      setInitialHistory();
     }
 
     // Handle resize
@@ -84,22 +97,23 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     });
     resizeObserver.observe(container);
 
-    // Auto-save on changes
-    const handleChange = () => {
+    const commitState = () => {
+      if (isRestoringRef.current) return;
       const json = JSON.stringify(canvas.toJSON());
       onSave(json, zoom, canvas.viewportTransform?.[4] || 0, canvas.viewportTransform?.[5] || 0);
+      setUndoStack(prev => {
+        if (prev[prev.length - 1] === json) return prev;
+        return [...prev, json];
+      });
+      setRedoStack([]);
     };
 
-    canvas.on("object:added", handleChange);
-    canvas.on("object:modified", handleChange);
-    canvas.on("object:removed", handleChange);
-
-    // Track history for undo/redo
-    canvas.on("object:added", () => {
-      const json = JSON.stringify(canvas.toJSON());
-      setUndoStack(prev => [...prev, json]);
-      setRedoStack([]);
-    });
+    // Auto-save + track history on changes
+    canvas.on("object:added", commitState);
+    canvas.on("object:modified", commitState);
+    canvas.on("object:removed", commitState);
+    canvas.on("text:changed", commitState);
+    canvas.on("editing:exited", commitState);
 
     return () => {
       resizeObserver.disconnect();
@@ -488,13 +502,16 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     const currentState = undoStack[undoStack.length - 1];
     const previousState = undoStack[undoStack.length - 2];
 
+    isRestoringRef.current = true;
     setRedoStack(prev => [...prev, currentState]);
     setUndoStack(prev => prev.slice(0, -1));
 
     canvas.loadFromJSON(JSON.parse(previousState)).then(() => {
       canvas.renderAll();
+      onSave(previousState, zoom, canvas.viewportTransform?.[4] || 0, canvas.viewportTransform?.[5] || 0);
+      isRestoringRef.current = false;
     });
-  }, [undoStack]);
+  }, [undoStack, onSave, zoom]);
 
   const handleRedo = useCallback(() => {
     const canvas = fabricRef.current;
@@ -502,13 +519,16 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
 
     const nextState = redoStack[redoStack.length - 1];
 
+    isRestoringRef.current = true;
     setUndoStack(prev => [...prev, nextState]);
     setRedoStack(prev => prev.slice(0, -1));
 
     canvas.loadFromJSON(JSON.parse(nextState)).then(() => {
       canvas.renderAll();
+      onSave(nextState, zoom, canvas.viewportTransform?.[4] || 0, canvas.viewportTransform?.[5] || 0);
+      isRestoringRef.current = false;
     });
-  }, [redoStack]);
+  }, [redoStack, onSave, zoom]);
 
   // Touch gesture shortcuts: 2-finger tap = undo, 3-finger tap = redo
   useEffect(() => {
