@@ -7,7 +7,12 @@
  * In Lovable preview environments (*.lovableproject.com, lovable.dev),
  * provides development-mode authentication when the Tailscale auth server
  * is unreachable.
+ * 
+ * On public booking domains (e.g., meet.jacobtartabini.com), authentication
+ * is completely disabled to avoid CORS errors.
  */
+
+import { isPublicBookingDomain } from '@/lib/domain-utils';
 
 const AUTH_ENDPOINT = 'https://raspberrypi.tailf531bd.ts.net/auth/verify';
 
@@ -225,6 +230,11 @@ async function fetchNewToken(): Promise<CachedToken | null> {
  * Returns null if authentication fails.
  */
 export async function getArloToken(): Promise<string | null> {
+  // On public booking domains, don't attempt authentication at all
+  if (isPublicBookingDomain()) {
+    return null;
+  }
+
   // Return cached token if still valid
   if (isTokenValid() && cachedToken) {
     return cachedToken.token;

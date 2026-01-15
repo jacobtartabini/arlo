@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useCalendarPersistence } from './useCalendarPersistence';
 import { notifyCalendar, showToast, getCurrentUserId } from '@/lib/notifications/notify';
 import type { CalendarEvent } from '@/lib/calendar-data';
+import { isPublicBookingDomain } from '@/lib/domain-utils';
 
 interface ReminderCheck {
   eventId: string;
@@ -14,8 +15,12 @@ const DEFAULT_REMINDERS = [60, 15, 5];
 
 /**
  * Hook to monitor calendar events and send reminders
+ * Disabled on public booking domains
  */
 export function useCalendarNotifications() {
+  // Skip on public booking domains
+  const isPublicDomain = isPublicBookingDomain();
+  
   const { events } = useCalendarPersistence();
   const firedRemindersRef = useRef<Set<string>>(new Set());
   const checkIntervalRef = useRef<number | null>(null);
@@ -167,6 +172,9 @@ export function useCalendarNotifications() {
 
   // Set up interval to check reminders every minute
   useEffect(() => {
+    // Skip on public booking domains
+    if (isPublicDomain) return;
+
     checkReminders(); // Check immediately
     checkIntervalRef.current = window.setInterval(checkReminders, 60 * 1000);
 
@@ -175,7 +183,7 @@ export function useCalendarNotifications() {
         window.clearInterval(checkIntervalRef.current);
       }
     };
-  }, [checkReminders]);
+  }, [checkReminders, isPublicDomain]);
 
   return { checkReminders };
 }
