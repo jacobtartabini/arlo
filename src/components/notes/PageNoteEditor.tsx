@@ -2,10 +2,12 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import DOMPurify from "dompurify";
-import { Canvas as FabricCanvas, PencilBrush, IText, FabricObject } from "fabric";
-import { Note, PageMode, BackgroundStyle, DrawingSettings, DEFAULT_DRAWING_SETTINGS, LassoMode } from "@/types/notes";
+import { Canvas as FabricCanvas, PencilBrush, IText, FabricObject, FabricImage } from "fabric";
+import { Note, PageMode, BackgroundStyle, DrawingSettings, DEFAULT_DRAWING_SETTINGS, LassoMode, NotePage } from "@/types/notes";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { PageNavigation } from "./PageNavigation";
+import { renderPdfPageToDataUrl, getPdfInfo } from "@/lib/pdf-renderer";
 import {
   Bold,
   Italic,
@@ -84,6 +86,7 @@ function sanitizeHtml(html: string): string {
 interface PageNoteEditorProps {
   note: Note;
   onSave: (content: string) => void;
+  onSaveNote?: (note: Note) => void; // Full note update for pages
 }
 
 interface FormatState {
@@ -109,7 +112,7 @@ const BACKGROUND_STYLES: { id: BackgroundStyle; label: string; icon: React.Eleme
 
 const MAX_HISTORY = 50;
 
-export function PageNoteEditor({ note, onSave }: PageNoteEditorProps) {
+export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pageContainerRef = useRef<HTMLDivElement>(null);
@@ -132,6 +135,14 @@ export function PageNoteEditor({ note, onSave }: PageNoteEditorProps) {
     lassoMode: "freeform" as LassoMode,
   });
   
+  // Multi-page support
+  const [currentPage, setCurrentPage] = useState(note.currentPage || 1);
+  const [pages, setPages] = useState<NotePage[]>(note.pages || [
+    { id: `page-1-${Date.now()}`, pageNumber: 1, canvasState: '{}' }
+  ]);
+  const [pdfBackgroundUrl, setPdfBackgroundUrl] = useState<string | null>(null);
+  const [isLoadingPdf, setIsLoadingPdf] = useState(false);
+  
   // Enhanced undo/redo history
   const [undoStack, setUndoStack] = useState<HistoryState[]>([]);
   const [redoStack, setRedoStack] = useState<HistoryState[]>([]);
@@ -145,8 +156,17 @@ export function PageNoteEditor({ note, onSave }: PageNoteEditorProps) {
   // Apple Pencil detection
   const [isPencilOnly, setIsPencilOnly] = useState(true);
 
-  // Parse stored content
+  // Parse stored content and initialize pages
   useEffect(() => {
+    // Initialize pages from note
+    if (note.pages && note.pages.length > 0) {
+      setPages(note.pages);
+    } else {
+      // Create a default page
+      setPages([{ id: `page-1-${Date.now()}`, pageNumber: 1, canvasState: '{}' }]);
+    }
+    setCurrentPage(note.currentPage || 1);
+    
     if (note.canvasState) {
       try {
         const content = JSON.parse(note.canvasState);
@@ -168,6 +188,55 @@ export function PageNoteEditor({ note, onSave }: PageNoteEditorProps) {
       }
     }
   }, [note.id]);
+
+  // Load PDF background when on a page with PDF
+  useEffect(() => {
+    const loadPdfBackground = async () => {
+      if (!note.importedPdfUrl || mode !== "write") {
+        setPdfBackgroundUrl(null);
+        return;
+      }
+
+      setIsLoadingPdf(true);
+      try {
+        const dataUrl = await renderPdfPageToDataUrl(note.importedPdfUrl, currentPage, 2);
+        setPdfBackgroundUrl(dataUrl);
+      } catch (error) {
+        console.error('Failed to load PDF page:', error);
+        toast.error('Failed to load PDF page');
+      } finally {
+        setIsLoadingPdf(false);
+      }
+    };
+
+    loadPdfBackground();
+  }, [note.importedPdfUrl, currentPage, mode]);
+
+  // Set PDF as Fabric.js background when loaded
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!canvas || !pdfBackgroundUrl || mode !== "write") return;
+
+    FabricImage.fromURL(pdfBackgroundUrl).then((img) => {
+      // Scale image to fit the canvas
+      const container = pageContainerRef.current;
+      if (!container) return;
+      
+      const canvasWidth = container.clientWidth;
+      const canvasHeight = Math.max(container.clientHeight, 1056);
+      
+      const scale = Math.min(
+        canvasWidth / (img.width || canvasWidth),
+        canvasHeight / (img.height || canvasHeight)
+      );
+      
+      img.scale(scale);
+      canvas.backgroundImage = img;
+      canvas.renderAll();
+    }).catch((err) => {
+      console.error('Failed to set PDF background:', err);
+    });
+  }, [pdfBackgroundUrl, mode]);
 
   // Initialize Fabric canvas for Write mode with Apple Pencil support
   useEffect(() => {
@@ -308,6 +377,61 @@ export function PageNoteEditor({ note, onSave }: PageNoteEditorProps) {
 
     onSave(JSON.stringify(content));
   }, [mode, backgroundStyle, onSave]);
+
+  // Page navigation handlers
+  const handlePreviousPage = useCallback(() => {
+    if (currentPage > 1) {
+      // Save current page state first
+      if (fabricRef.current) {
+        const updatedPages = [...pages];
+        const pageIndex = updatedPages.findIndex(p => p.pageNumber === currentPage);
+        if (pageIndex >= 0) {
+          updatedPages[pageIndex].canvasState = JSON.stringify(fabricRef.current.toJSON());
+        }
+        setPages(updatedPages);
+      }
+      setCurrentPage(currentPage - 1);
+    }
+  }, [currentPage, pages]);
+
+  const handleNextPage = useCallback(() => {
+    if (currentPage < pages.length) {
+      // Save current page state first
+      if (fabricRef.current) {
+        const updatedPages = [...pages];
+        const pageIndex = updatedPages.findIndex(p => p.pageNumber === currentPage);
+        if (pageIndex >= 0) {
+          updatedPages[pageIndex].canvasState = JSON.stringify(fabricRef.current.toJSON());
+        }
+        setPages(updatedPages);
+      }
+      setCurrentPage(currentPage + 1);
+    }
+  }, [currentPage, pages]);
+
+  const handleAddPage = useCallback(() => {
+    const newPageNumber = pages.length + 1;
+    const newPage: NotePage = {
+      id: `page-${newPageNumber}-${Date.now()}`,
+      pageNumber: newPageNumber,
+      canvasState: '{}',
+    };
+    
+    // Save current page state first
+    if (fabricRef.current) {
+      const updatedPages = [...pages];
+      const pageIndex = updatedPages.findIndex(p => p.pageNumber === currentPage);
+      if (pageIndex >= 0) {
+        updatedPages[pageIndex].canvasState = JSON.stringify(fabricRef.current.toJSON());
+      }
+      setPages([...updatedPages, newPage]);
+    } else {
+      setPages([...pages, newPage]);
+    }
+    
+    setCurrentPage(newPageNumber);
+    toast.success(`Page ${newPageNumber} added`);
+  }, [pages, currentPage]);
 
   // Auto-save when background changes
   useEffect(() => {
@@ -947,6 +1071,17 @@ export function PageNoteEditor({ note, onSave }: PageNoteEditorProps) {
           )}
         </div>
       </div>
+
+      {/* Page Navigation - always visible for page notes */}
+      <PageNavigation
+        currentPage={currentPage}
+        totalPages={pages.length}
+        onPreviousPage={handlePreviousPage}
+        onNextPage={handleNextPage}
+        onAddPage={handleAddPage}
+        showAddButton={!note.importedPdfUrl} // Don't allow adding pages to imported PDFs
+        className="print:hidden"
+      />
 
       {/* Modules */}
       <ResearchPanel

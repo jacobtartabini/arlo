@@ -59,6 +59,13 @@ export interface ModuleElement extends NoteElement {
   };
 }
 
+export interface NotePage {
+  id: string;
+  pageNumber: number;
+  canvasState: string; // Each page's Fabric.js JSON
+  pdfBackgroundDataUrl?: string; // If this page has a PDF background
+}
+
 export interface Note {
   id: NoteId;
   title: string;
@@ -80,6 +87,10 @@ export interface Note {
   backgroundStyle?: BackgroundStyle;
   // PDF import
   importedPdfUrl?: string;
+  // Multi-page support
+  pages?: NotePage[];
+  currentPage?: number;
+  totalPages?: number;
 }
 
 export interface NoteFolder {

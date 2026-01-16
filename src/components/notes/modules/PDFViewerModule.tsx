@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,45 +14,109 @@ import {
   ZoomOut,
   ChevronLeft,
   ChevronRight,
-  Download,
   Maximize2,
+  Edit,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { renderPdfPageToDataUrl, getPdfInfo } from "@/lib/pdf-renderer";
+import { toast } from "sonner";
 
 interface PDFViewerModuleProps {
   id: string;
   onClose: () => void;
+  onOpenForAnnotation?: (pdfUrl: string, fileName: string) => void;
 }
 
-export function PDFViewerModule({ id, onClose }: PDFViewerModuleProps) {
+export function PDFViewerModule({ id, onClose, onOpenForAnnotation }: PDFViewerModuleProps) {
+  const navigate = useNavigate();
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfName, setPdfName] = useState<string>("");
   const [zoom, setZoom] = useState(100);
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [pageImageUrl, setPageImageUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     if (file.type !== "application/pdf") {
-      alert("Please select a PDF file");
+      toast.error("Please select a PDF file");
       return;
     }
 
     const url = URL.createObjectURL(file);
     setPdfUrl(url);
     setPdfName(file.name);
-  }, []);
-
-  const handleUrlInput = useCallback((url: string) => {
-    if (url.endsWith(".pdf") || url.includes("pdf")) {
-      setPdfUrl(url);
-      setPdfName(url.split("/").pop() || "Document");
+    
+    // Get PDF info
+    setIsLoading(true);
+    try {
+      const info = await getPdfInfo(url);
+      setTotalPages(info.totalPages);
+      setCurrentPage(1);
+    } catch (error) {
+      console.error('Failed to load PDF:', error);
+      toast.error('Failed to load PDF');
+    } finally {
+      setIsLoading(false);
     }
   }, []);
+
+  const handleUrlInput = useCallback(async (url: string) => {
+    if (!url.endsWith(".pdf") && !url.includes("pdf")) return;
+    
+    setPdfUrl(url);
+    setPdfName(url.split("/").pop() || "Document");
+    
+    setIsLoading(true);
+    try {
+      const info = await getPdfInfo(url);
+      setTotalPages(info.totalPages);
+      setCurrentPage(1);
+    } catch (error) {
+      console.error('Failed to load PDF:', error);
+      toast.error('Failed to load PDF');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Render current page
+  useEffect(() => {
+    if (!pdfUrl) return;
+
+    const renderPage = async () => {
+      setIsLoading(true);
+      try {
+        const dataUrl = await renderPdfPageToDataUrl(pdfUrl, currentPage, zoom / 50);
+        setPageImageUrl(dataUrl);
+      } catch (error) {
+        console.error('Failed to render page:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    renderPage();
+  }, [pdfUrl, currentPage, zoom]);
+
+  const handleOpenForAnnotation = useCallback(() => {
+    if (pdfUrl && onOpenForAnnotation) {
+      onOpenForAnnotation(pdfUrl, pdfName);
+    } else if (pdfUrl) {
+      // Navigate to notes with this PDF for annotation
+      toast.info("Opening PDF for annotation...");
+      // Store PDF info and navigate
+      sessionStorage.setItem('pendingPdfAnnotation', JSON.stringify({ url: pdfUrl, name: pdfName }));
+      navigate('/notes', { state: { action: 'annotate-pdf', pdfUrl, pdfName } });
+    }
+  }, [pdfUrl, pdfName, onOpenForAnnotation, navigate]);
 
   return (
     <Card className={cn(
@@ -119,7 +184,7 @@ export function PDFViewerModule({ id, onClose }: PDFViewerModuleProps) {
           />
         </div>
       ) : (
-        /* PDF viewer */
+        /* PDF viewer with canvas rendering */
         <div className="flex flex-col h-[calc(100%-44px)]">
           {/* PDF Controls */}
           <div className="flex items-center justify-between px-3 py-2 border-b border-border/40 bg-muted/30">
@@ -129,7 +194,7 @@ export function PDFViewerModule({ id, onClose }: PDFViewerModuleProps) {
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                disabled={currentPage <= 1}
+                disabled={currentPage <= 1 || isLoading}
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -141,7 +206,7 @@ export function PDFViewerModule({ id, onClose }: PDFViewerModuleProps) {
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                disabled={currentPage >= totalPages}
+                disabled={currentPage >= totalPages || isLoading}
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -153,6 +218,7 @@ export function PDFViewerModule({ id, onClose }: PDFViewerModuleProps) {
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => setZoom(Math.max(50, zoom - 25))}
+                disabled={isLoading}
               >
                 <ZoomOut className="h-4 w-4" />
               </Button>
@@ -164,33 +230,39 @@ export function PDFViewerModule({ id, onClose }: PDFViewerModuleProps) {
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => setZoom(Math.min(200, zoom + 25))}
+                disabled={isLoading}
               >
                 <ZoomIn className="h-4 w-4" />
               </Button>
               <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => window.open(pdfUrl, "_blank")}
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1 ml-2"
+                onClick={handleOpenForAnnotation}
+                disabled={isLoading}
               >
-                <Download className="h-4 w-4" />
+                <Edit className="h-3 w-3" />
+                <span className="text-xs">Annotate</span>
               </Button>
             </div>
           </div>
           
-          {/* PDF Content */}
-          <div className="flex-1 overflow-auto bg-muted/20">
-            <iframe
-              src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=1`}
-              className="w-full h-full"
-              style={{ 
-                transform: `scale(${zoom / 100})`,
-                transformOrigin: "top left",
-                width: `${10000 / zoom}%`,
-                height: `${10000 / zoom}%`,
-              }}
-              title="PDF Viewer"
-            />
+          {/* PDF Content - Canvas-based rendering */}
+          <div className="flex-1 overflow-auto bg-muted/20 flex items-center justify-center">
+            {isLoading ? (
+              <div className="flex flex-col items-center gap-2">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Loading page...</span>
+              </div>
+            ) : pageImageUrl ? (
+              <img 
+                src={pageImageUrl} 
+                alt={`Page ${currentPage}`}
+                className="max-w-full max-h-full object-contain"
+              />
+            ) : (
+              <div className="text-muted-foreground text-sm">No page to display</div>
+            )}
           </div>
         </div>
       )}
