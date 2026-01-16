@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { TPointerEvent } from "fabric";
+import type { TPointerEvent, TPointerEventInfo } from "fabric";
 import {
   Canvas as FabricCanvas,
   PencilBrush,
@@ -15,6 +15,7 @@ import {
   Polyline,
   Point,
   util,
+  type BaseBrush,
 } from "fabric";
 import { DrawingSettings, Note, DEFAULT_DRAWING_SETTINGS } from "@/types/notes";
 import { DrawingToolbar } from "./DrawingToolbar";
@@ -151,7 +152,7 @@ const segmentToSegmentDistance = (
 
 const transformObjectPoints = (obj: FabricObject, points: { x: number; y: number }[]) => {
   const matrix = obj.calcTransformMatrix();
-  const offset = obj.pathOffset ?? new Point(0, 0);
+  const offset = (obj as any).pathOffset ?? new Point(0, 0);
   return points.map(point =>
     util.transformPoint(new Point(point.x - offset.x, point.y - offset.y), matrix),
   );
@@ -539,7 +540,6 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     canvas.on("object:modified", commitState);
     canvas.on("object:removed", commitState);
     canvas.on("text:changed", commitState);
-    canvas.on("editing:exited", commitState);
 
     return () => {
       resizeObserver.disconnect();
@@ -559,7 +559,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     const candidates = canvas.getObjects().filter(obj => obj !== lassoPreviewRef.current);
 
     for (const obj of candidates) {
-      const bounds = obj.getBoundingRect(true, true);
+      const bounds = obj.getBoundingRect();
       const expandedBounds = {
         left: bounds.left - radius,
         top: bounds.top - radius,
@@ -601,16 +601,16 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       canvas.freeDrawingBrush.width = settings.tool === "highlighter"
         ? settings.strokeWidth * 3
         : settings.strokeWidth;
-      canvas.freeDrawingBrush.opacity = settings.opacity;
+      (canvas.freeDrawingBrush as any).opacity = settings.opacity;
     }
 
     if (settings.tool === "eraser") {
-      canvas.on("mouse:down", handleEraserStart);
-      canvas.on("mouse:move", handleEraserMove);
+      canvas.on("mouse:down", handleEraserStart as any);
+      canvas.on("mouse:move", handleEraserMove as any);
       canvas.on("mouse:up", handleEraserEnd);
     } else {
-      canvas.off("mouse:down", handleEraserStart);
-      canvas.off("mouse:move", handleEraserMove);
+      canvas.off("mouse:down", handleEraserStart as any);
+      canvas.off("mouse:move", handleEraserMove as any);
       canvas.off("mouse:up", handleEraserEnd);
     }
   }, [settings]);
@@ -625,7 +625,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
   }, [zoom]);
 
   // Eraser handlers - stroke eraser uses a continuous path
-  const handleEraserStart = useCallback((opt: TPointerEvent) => {
+  const handleEraserStart = useCallback((opt: TPointerEventInfo<TPointerEvent>) => {
     const canvas = fabricRef.current;
     if (!canvas || !isPenEvent(opt.e)) return;
 
@@ -635,7 +635,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     eraseAlongSegment(pointer, pointer);
   }, [eraseAlongSegment]);
 
-  const handleEraserMove = useCallback((opt: TPointerEvent) => {
+  const handleEraserMove = useCallback((opt: TPointerEventInfo<TPointerEvent>) => {
     const canvas = fabricRef.current;
     if (!canvas || !eraserActiveRef.current || !isPenEvent(opt.e)) return;
 
@@ -733,7 +733,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       ];
 
       objects.forEach(obj => {
-        const bounds = obj.getBoundingRect(true, true);
+        const bounds = obj.getBoundingRect();
         if (polygonIntersectsRect(rectPolygon, bounds)) {
           selected.push(obj);
         }
@@ -746,7 +746,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       const polygonBounds = { left: minX, top: minY, width: maxX - minX, height: maxY - minY };
 
       objects.forEach(obj => {
-        const bounds = obj.getBoundingRect(true, true);
+        const bounds = obj.getBoundingRect();
         if (!rectsIntersect(bounds, polygonBounds)) return;
         if (polygonIntersectsRect(points, bounds)) {
           selected.push(obj);
@@ -815,7 +815,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     const canvas = fabricRef.current;
     if (!canvas) return;
 
-    const handleLassoStart = (opt: TPointerEvent) => {
+    const handleLassoStart = (opt: TPointerEventInfo<TPointerEvent>) => {
       if (!isPenEvent(opt.e)) return;
       if (opt.target) return;
       const pointer = canvas.getScenePoint(opt.e);
@@ -855,7 +855,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       }
     };
 
-    const handleLassoMove = (opt: TPointerEvent) => {
+    const handleLassoMove = (opt: TPointerEventInfo<TPointerEvent>) => {
       if (!lassoActiveRef.current || !isPenEvent(opt.e)) return;
       const pointer = canvas.getScenePoint(opt.e);
       const points = lassoPointsRef.current;
@@ -902,12 +902,12 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     };
 
     if (settings.tool === "lasso") {
-      canvas.on("mouse:down", handleLassoStart);
-      canvas.on("mouse:move", handleLassoMove);
+      canvas.on("mouse:down", handleLassoStart as any);
+      canvas.on("mouse:move", handleLassoMove as any);
       canvas.on("mouse:up", handleLassoEnd);
     } else {
-      canvas.off("mouse:down", handleLassoStart);
-      canvas.off("mouse:move", handleLassoMove);
+      canvas.off("mouse:down", handleLassoStart as any);
+      canvas.off("mouse:move", handleLassoMove as any);
       canvas.off("mouse:up", handleLassoEnd);
       if (lassoPreviewRef.current) {
         canvas.remove(lassoPreviewRef.current);
@@ -918,8 +918,8 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     }
 
     return () => {
-      canvas.off("mouse:down", handleLassoStart);
-      canvas.off("mouse:move", handleLassoMove);
+      canvas.off("mouse:down", handleLassoStart as any);
+      canvas.off("mouse:move", handleLassoMove as any);
       canvas.off("mouse:up", handleLassoEnd);
     };
   }, [finalizeLassoSelection, settings.lassoMode, settings.tool]);

@@ -11,11 +11,12 @@ import { CreateNoteDialog } from "@/components/notes/CreateNoteDialog";
 import { CreateFolderDialog } from "@/components/notes/CreateFolderDialog";
 import { MobileNotesView } from "@/components/mobile";
 import { useIsMobile } from "@/hooks/use-mobile";
-import type { Note, NoteType, PageMode } from "@/types/notes";
+import type { Note, NoteType, PageMode, NotePage } from "@/types/notes";
 import { useNotesPersistence } from "@/hooks/useNotesPersistence";
 import { toast } from "sonner";
 import { generatePdfFromElement, downloadBlob, sharePdf } from "@/lib/notes-pdf";
 import { uploadFile } from "@/lib/storage";
+import { getPdfInfo } from "@/lib/pdf-renderer";
 
 // Handle PDF file import from share target
 async function handleSharedFile(): Promise<File | null> {
@@ -161,7 +162,7 @@ export default function Notes() {
     }
   }, [createNote]);
 
-  const handleUploadNote = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUploadNote = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
 
@@ -173,6 +174,7 @@ export default function Notes() {
       return;
     }
 
+    const isPdf = file.type === 'application/pdf';
     const escapedFileName = file.name
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -183,28 +185,79 @@ export default function Notes() {
         throw new Error(uploadResult.error || "Upload failed");
       }
 
-      const newNote = await createNote({
-        noteType: "page",
-        pageMode: "type",
-        title: file.name,
-        canvasState: JSON.stringify({
-          html: `<p><strong>Uploaded file:</strong> <a href="${uploadResult.signedUrl}" target="_blank" rel="noopener noreferrer">${escapedFileName}</a></p>`,
-          backgroundStyle: "lined",
-        }),
-      });
+      if (isPdf) {
+        // For PDFs, create a note with the PDF as annotatable background
+        try {
+          const pdfInfo = await getPdfInfo(uploadResult.signedUrl);
+          
+          // Create pages array for multi-page PDF
+          const pages: NotePage[] = Array.from({ length: pdfInfo.totalPages }, (_, i) => ({
+            id: `page-${i + 1}-${Date.now()}`,
+            pageNumber: i + 1,
+            canvasState: '{}',
+          }));
 
-      if (!newNote) {
-        throw new Error("Failed to create note after upload.");
+          const newNote = await createNote({
+            noteType: "page",
+            pageMode: "write", // Open in write mode for annotation
+            title: file.name.replace('.pdf', ''),
+            canvasState: JSON.stringify({
+              backgroundStyle: "blank",
+              canvasJson: "{}",
+            }),
+            importedPdfUrl: uploadResult.signedUrl,
+            pages,
+            currentPage: 1,
+            totalPages: pdfInfo.totalPages,
+          });
+
+          if (!newNote) {
+            throw new Error("Failed to create note after upload.");
+          }
+
+          return newNote;
+        } catch (pdfError) {
+          console.error('Failed to process PDF:', pdfError);
+          // Fallback to simple link if PDF processing fails
+          const newNote = await createNote({
+            noteType: "page",
+            pageMode: "type",
+            title: file.name,
+            canvasState: JSON.stringify({
+              html: `<p><strong>Uploaded PDF:</strong> <a href="${uploadResult.signedUrl}" target="_blank" rel="noopener noreferrer">${escapedFileName}</a></p>`,
+              backgroundStyle: "lined",
+            }),
+          });
+          if (!newNote) throw new Error("Failed to create note.");
+          return newNote;
+        }
+      } else {
+        // For non-PDF files, create a simple linked note
+        const newNote = await createNote({
+          noteType: "page",
+          pageMode: "type",
+          title: file.name,
+          canvasState: JSON.stringify({
+            html: `<p><strong>Uploaded file:</strong> <a href="${uploadResult.signedUrl}" target="_blank" rel="noopener noreferrer">${escapedFileName}</a></p>`,
+            backgroundStyle: "lined",
+          }),
+        });
+
+        if (!newNote) {
+          throw new Error("Failed to create note after upload.");
+        }
+
+        return newNote;
       }
-
-      return newNote;
     });
 
     toast.promise(promise, {
       loading: `Uploading ${file.name}...`,
       success: (newNote) => {
         setSelectedNoteId(newNote.id);
-        return `Uploaded ${file.name}`;
+        return isPdf 
+          ? `PDF imported - Ready for annotation!`
+          : `Uploaded ${file.name}`;
       },
       error: (err) => (err as Error).message,
     });
