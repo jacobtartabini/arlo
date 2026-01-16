@@ -1043,7 +1043,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       }
     };
 
-    const handleTouchEnd = (e: TouchEvent) => {
+    const clearTouchTracking = (e: TouchEvent) => {
       for (let i = 0; i < e.changedTouches.length; i++) {
         const touch = e.changedTouches[i];
         touchTracking.current.delete(touch.identifier);
@@ -1052,16 +1052,29 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
           primaryTouchId.current = null;
         }
       }
+      if (primaryTouchId.current !== null && !touchTracking.current.has(primaryTouchId.current)) {
+        primaryTouchId.current = null;
+      }
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      clearTouchTracking(e);
+    };
+
+    const handleTouchCancel = (e: TouchEvent) => {
+      clearTouchTracking(e);
     };
 
     container.addEventListener("touchstart", handleTouchStart, { passive: false });
     container.addEventListener("touchmove", handleTouchMove, { passive: false });
     container.addEventListener("touchend", handleTouchEnd);
+    container.addEventListener("touchcancel", handleTouchCancel);
 
     return () => {
       container.removeEventListener("touchstart", handleTouchStart);
       container.removeEventListener("touchmove", handleTouchMove);
       container.removeEventListener("touchend", handleTouchEnd);
+      container.removeEventListener("touchcancel", handleTouchCancel);
     };
   }, [palmRejectionEnabled]);
 
@@ -1078,12 +1091,20 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       return event.pointerType !== "pen";
     };
 
+    const isStylusTouch = (touch: Touch) =>
+      (touch as any).touchType === "stylus" || (touch as any).force > 0;
+
+    const getTouchesForStylusCheck = (event: TouchEvent) => {
+      if (event.type === "touchend" || event.type === "touchcancel") {
+        return Array.from(event.changedTouches);
+      }
+      return Array.from(event.touches);
+    };
+
     const shouldBlockTouch = (event: TouchEvent) => {
       if (!requiresStylus) return false;
       if (event.touches.length >= 2 || event.changedTouches.length >= 2) return false;
-      return !Array.from(event.touches).some(
-        touch => (touch as any).touchType === "stylus" || (touch as any).force > 0,
-      );
+      return !getTouchesForStylusCheck(event).some(isStylusTouch);
     };
 
     const handlePointerDown = (event: PointerEvent) => {
@@ -1149,6 +1170,13 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       }
     };
 
+    const handleTouchCancel = (event: TouchEvent) => {
+      if (shouldBlockTouch(event)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+
     container.addEventListener("pointerdown", handlePointerDown, { capture: true });
     container.addEventListener("pointermove", handlePointerMove, { capture: true });
     container.addEventListener("pointerup", handlePointerUp, { capture: true });
@@ -1156,6 +1184,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     container.addEventListener("touchstart", handleTouchStart, { capture: true, passive: false });
     container.addEventListener("touchmove", handleTouchMove, { capture: true, passive: false });
     container.addEventListener("touchend", handleTouchEnd, { capture: true, passive: false });
+    container.addEventListener("touchcancel", handleTouchCancel, { capture: true, passive: false });
 
     return () => {
       container.removeEventListener("pointerdown", handlePointerDown, { capture: true });
@@ -1165,6 +1194,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       container.removeEventListener("touchstart", handleTouchStart, { capture: true });
       container.removeEventListener("touchmove", handleTouchMove, { capture: true });
       container.removeEventListener("touchend", handleTouchEnd, { capture: true });
+      container.removeEventListener("touchcancel", handleTouchCancel, { capture: true });
     };
   }, [settings.tool]);
 
