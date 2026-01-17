@@ -2,12 +2,13 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import DOMPurify from "dompurify";
-import { Canvas as FabricCanvas, PencilBrush, IText, FabricObject, FabricImage } from "fabric";
+import { Canvas as FabricCanvas, PencilBrush, IText, FabricObject, FabricImage, Path } from "fabric";
 import { Note, PageMode, BackgroundStyle, DrawingSettings, DEFAULT_DRAWING_SETTINGS, LassoMode, NotePage } from "@/types/notes";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { PageNavigation } from "./PageNavigation";
+import { PagesPanel } from "./PagesPanel";
 import { renderPdfPageToDataUrl, getPdfInfo } from "@/lib/pdf-renderer";
+import { useEraserTrail } from "./EraserTrail";
 import {
   Bold,
   Italic,
@@ -39,7 +40,6 @@ import {
   Plus,
   MousePointer2,
   Lasso,
-  Move,
   Lock,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
@@ -86,7 +86,7 @@ function sanitizeHtml(html: string): string {
 interface PageNoteEditorProps {
   note: Note;
   onSave: (content: string) => void;
-  onSaveNote?: (note: Note) => void; // Full note update for pages
+  onSaveNote?: (note: Note) => void;
 }
 
 interface FormatState {
@@ -116,9 +116,10 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
   const editorRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pageContainerRef = useRef<HTMLDivElement>(null);
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
   const fabricRef = useRef<FabricCanvas | null>(null);
   
-  // Use locked pageMode from note if available, otherwise default
+  // Use locked pageMode from note if available
   const lockedMode = note.pageMode;
   const [mode, setMode] = useState<PageMode>(lockedMode || note.pageMode || "type");
   const [backgroundStyle, setBackgroundStyle] = useState<BackgroundStyle>(note.backgroundStyle || "lined");
@@ -135,18 +136,27 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     lassoMode: "freeform" as LassoMode,
   });
   
-  // Multi-page support
+  // Multi-page support with per-page state
   const [currentPage, setCurrentPage] = useState(note.currentPage || 1);
-  const [pages, setPages] = useState<NotePage[]>(note.pages || [
-    { id: `page-1-${Date.now()}`, pageNumber: 1, canvasState: '{}' }
-  ]);
+  const [pages, setPages] = useState<NotePage[]>(() => {
+    if (note.pages && note.pages.length > 0) {
+      return note.pages;
+    }
+    return [{ id: `page-1-${Date.now()}`, pageNumber: 1, canvasState: '{}' }];
+  });
   const [pdfBackgroundUrl, setPdfBackgroundUrl] = useState<string | null>(null);
   const [isLoadingPdf, setIsLoadingPdf] = useState(false);
+  const [pagesPanelCollapsed, setPagesPanelCollapsed] = useState(false);
   
-  // Enhanced undo/redo history
-  const [undoStack, setUndoStack] = useState<HistoryState[]>([]);
-  const [redoStack, setRedoStack] = useState<HistoryState[]>([]);
+  // Per-page undo/redo history
+  const [pageHistories, setPageHistories] = useState<Map<number, { undoStack: HistoryState[]; redoStack: HistoryState[] }>>(
+    new Map()
+  );
   const isUndoingRef = useRef(false);
+  
+  // Eraser state
+  const eraserActiveRef = useRef(false);
+  const eraserLastPointRef = useRef<{ x: number; y: number } | null>(null);
   
   // Modules
   const [researchPanelOpen, setResearchPanelOpen] = useState(false);
@@ -156,18 +166,91 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
   // Apple Pencil detection
   const [isPencilOnly, setIsPencilOnly] = useState(true);
 
-  // Parse stored content and initialize pages
+  // Eraser trail hook
+  const { startTrail, continueTrail, endTrail, clearTrail } = useEraserTrail({
+    isActive: settings.tool === "eraser" && mode === "write",
+    containerRef: canvasContainerRef as React.RefObject<HTMLElement>,
+    strokeWidth: settings.strokeWidth,
+    backgroundColor: backgroundStyle === "blank" ? "#ffffff" : "#ffffff",
+  });
+
+  // Get current page's history
+  const getCurrentHistory = useCallback(() => {
+    return pageHistories.get(currentPage) || { undoStack: [], redoStack: [] };
+  }, [pageHistories, currentPage]);
+
+  // Update current page's history
+  const setCurrentHistory = useCallback((updater: (prev: { undoStack: HistoryState[]; redoStack: HistoryState[] }) => { undoStack: HistoryState[]; redoStack: HistoryState[] }) => {
+    setPageHistories(prev => {
+      const current = prev.get(currentPage) || { undoStack: [], redoStack: [] };
+      const updated = updater(current);
+      const newMap = new Map(prev);
+      newMap.set(currentPage, updated);
+      return newMap;
+    });
+  }, [currentPage]);
+
+  // Save current page's canvas state to pages array
+  const saveCurrentPageState = useCallback(() => {
+    if (!fabricRef.current || mode !== "write") return;
+    
+    const canvasJson = JSON.stringify(fabricRef.current.toJSON());
+    setPages(prev => {
+      const updated = [...prev];
+      const pageIndex = updated.findIndex(p => p.pageNumber === currentPage);
+      if (pageIndex >= 0) {
+        updated[pageIndex] = { ...updated[pageIndex], canvasState: canvasJson };
+      }
+      return updated;
+    });
+  }, [currentPage, mode]);
+
+  // Load a specific page's canvas state
+  const loadPageState = useCallback((pageNumber: number) => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+
+    const page = pages.find(p => p.pageNumber === pageNumber);
+    if (!page) return;
+
+    isUndoingRef.current = true;
+    
+    try {
+      const canvasState = page.canvasState || '{}';
+      canvas.loadFromJSON(JSON.parse(canvasState)).then(() => {
+        canvas.renderAll();
+        
+        // Initialize history for this page if needed
+        if (!pageHistories.has(pageNumber)) {
+          setPageHistories(prev => {
+            const newMap = new Map(prev);
+            newMap.set(pageNumber, {
+              undoStack: [{ json: canvasState, timestamp: Date.now() }],
+              redoStack: [],
+            });
+            return newMap;
+          });
+        }
+        
+        isUndoingRef.current = false;
+      });
+    } catch (e) {
+      console.error("Failed to load page state:", e);
+      canvas.clear();
+      isUndoingRef.current = false;
+    }
+  }, [pages, pageHistories]);
+
+  // Initialize pages from note
   useEffect(() => {
-    // Initialize pages from note
     if (note.pages && note.pages.length > 0) {
       setPages(note.pages);
     } else {
-      // Create a default page
       setPages([{ id: `page-1-${Date.now()}`, pageNumber: 1, canvasState: '{}' }]);
     }
     setCurrentPage(note.currentPage || 1);
     
-    if (note.canvasState) {
+    if (note.canvasState && mode === "type") {
       try {
         const content = JSON.parse(note.canvasState);
         if (content.html && editorRef.current) {
@@ -175,11 +258,6 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
         }
         if (content.backgroundStyle) {
           setBackgroundStyle(content.backgroundStyle);
-        }
-        if (content.canvasJson && fabricRef.current) {
-          fabricRef.current.loadFromJSON(JSON.parse(content.canvasJson)).then(() => {
-            fabricRef.current?.renderAll();
-          });
         }
       } catch {
         if (editorRef.current) {
@@ -218,7 +296,6 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     if (!canvas || !pdfBackgroundUrl || mode !== "write") return;
 
     FabricImage.fromURL(pdfBackgroundUrl).then((img) => {
-      // Scale image to fit the canvas
       const container = pageContainerRef.current;
       if (!container) return;
       
@@ -238,7 +315,7 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     });
   }, [pdfBackgroundUrl, mode]);
 
-  // Initialize Fabric canvas for Write mode with Apple Pencil support
+  // Initialize Fabric canvas for Write mode
   useEffect(() => {
     if (mode !== "write" || !canvasRef.current || !pageContainerRef.current) return;
 
@@ -257,56 +334,77 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
 
     fabricRef.current = canvas;
 
-    // Load existing canvas data
-    try {
-      const content = JSON.parse(note.canvasState || "{}");
-      if (content.canvasJson) {
-        canvas.loadFromJSON(JSON.parse(content.canvasJson)).then(() => {
+    // Load the current page's state
+    const currentPageData = pages.find(p => p.pageNumber === currentPage);
+    if (currentPageData?.canvasState && currentPageData.canvasState !== '{}') {
+      try {
+        canvas.loadFromJSON(JSON.parse(currentPageData.canvasState)).then(() => {
           canvas.renderAll();
-          // Initialize history with current state
-          const initialState = JSON.stringify(canvas.toJSON());
-          setUndoStack([{ json: initialState, timestamp: Date.now() }]);
+          // Initialize history
+          setPageHistories(prev => {
+            const newMap = new Map(prev);
+            if (!newMap.has(currentPage)) {
+              newMap.set(currentPage, {
+                undoStack: [{ json: currentPageData.canvasState, timestamp: Date.now() }],
+                redoStack: [],
+              });
+            }
+            return newMap;
+          });
         });
-      } else {
-        // Initialize empty history
+      } catch {
         const initialState = JSON.stringify(canvas.toJSON());
-        setUndoStack([{ json: initialState, timestamp: Date.now() }]);
+        setPageHistories(prev => {
+          const newMap = new Map(prev);
+          newMap.set(currentPage, {
+            undoStack: [{ json: initialState, timestamp: Date.now() }],
+            redoStack: [],
+          });
+          return newMap;
+        });
       }
-    } catch {
+    } else {
       const initialState = JSON.stringify(canvas.toJSON());
-      setUndoStack([{ json: initialState, timestamp: Date.now() }]);
+      setPageHistories(prev => {
+        const newMap = new Map(prev);
+        if (!newMap.has(currentPage)) {
+          newMap.set(currentPage, {
+            undoStack: [{ json: initialState, timestamp: Date.now() }],
+            redoStack: [],
+          });
+        }
+        return newMap;
+      });
     }
 
     // Auto-save on changes
     const handleChange = () => {
-      if (!isUndoingRef.current) {
-        saveContent();
-        // Add to history
-        const json = JSON.stringify(canvas.toJSON());
-        setUndoStack(prev => {
-          const newStack = [...prev, { json, timestamp: Date.now() }];
-          return newStack.slice(-MAX_HISTORY);
-        });
-        setRedoStack([]);
-      }
+      if (isUndoingRef.current) return;
+      
+      saveCurrentPageState();
+      saveContent();
+      
+      // Add to history
+      const json = JSON.stringify(canvas.toJSON());
+      setCurrentHistory(prev => ({
+        undoStack: [...prev.undoStack, { json, timestamp: Date.now() }].slice(-MAX_HISTORY),
+        redoStack: [],
+      }));
     };
 
     canvas.on("object:added", handleChange);
     canvas.on("object:modified", handleChange);
     canvas.on("object:removed", handleChange);
 
-    // Apple Pencil detection - only allow pencil input
+    // Apple Pencil detection
     const handleTouchStart = (e: TouchEvent) => {
       if (!isPencilOnly) return;
       
       const touch = e.touches[0];
-      // Check if it's Apple Pencil (touchType === 'stylus')
       if (touch && (touch as any).touchType !== 'stylus') {
-        // It's a finger touch, disable drawing
         canvas.isDrawingMode = false;
         e.preventDefault();
       } else {
-        // It's Apple Pencil
         if (settings.tool === "pen" || settings.tool === "highlighter") {
           canvas.isDrawingMode = true;
         }
@@ -314,7 +412,6 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     };
 
     const handleTouchEnd = () => {
-      // Restore drawing mode based on current tool
       if (settings.tool === "pen" || settings.tool === "highlighter") {
         canvas.isDrawingMode = true;
       }
@@ -329,9 +426,9 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
       canvas.dispose();
       fabricRef.current = null;
     };
-  }, [mode, note.id, isPencilOnly]);
+  }, [mode, note.id, currentPage, isPencilOnly]);
 
-  // Update brush settings
+  // Update brush settings and handle eraser
   useEffect(() => {
     const canvas = fabricRef.current;
     if (!canvas || mode !== "write") return;
@@ -360,6 +457,123 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     }
   }, [settings, mode]);
 
+  // Eraser with visual trail
+  const handleEraserStart = useCallback((e: React.PointerEvent) => {
+    if (e.pointerType !== "pen" && isPencilOnly) return;
+    
+    const canvas = fabricRef.current;
+    const container = canvasContainerRef.current;
+    if (!canvas || !container) return;
+
+    eraserActiveRef.current = true;
+    
+    const rect = container.getBoundingClientRect();
+    const point = {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    };
+    
+    eraserLastPointRef.current = point;
+    startTrail(point);
+    
+    // Perform initial erase
+    eraseAtPoint(point);
+  }, [isPencilOnly, startTrail]);
+
+  const handleEraserMove = useCallback((e: React.PointerEvent) => {
+    if (!eraserActiveRef.current) return;
+    if (e.pointerType !== "pen" && isPencilOnly) return;
+    
+    const canvas = fabricRef.current;
+    const container = canvasContainerRef.current;
+    if (!canvas || !container) return;
+
+    const rect = container.getBoundingClientRect();
+    const point = {
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    };
+    
+    continueTrail(point);
+    
+    // Erase along path
+    if (eraserLastPointRef.current) {
+      eraseAlongPath(eraserLastPointRef.current, point);
+    }
+    
+    eraserLastPointRef.current = point;
+  }, [isPencilOnly, continueTrail]);
+
+  const handleEraserEnd = useCallback(() => {
+    if (!eraserActiveRef.current) return;
+    
+    eraserActiveRef.current = false;
+    eraserLastPointRef.current = null;
+    endTrail();
+  }, [endTrail]);
+
+  const eraseAtPoint = useCallback((point: { x: number; y: number }) => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+
+    const radius = settings.eraserType === "precision" 
+      ? settings.strokeWidth * 2 
+      : settings.strokeWidth * 5;
+
+    const objects = canvas.getObjects();
+    for (let i = objects.length - 1; i >= 0; i--) {
+      const obj = objects[i];
+      if (obj.containsPoint({ x: point.x, y: point.y } as any)) {
+        canvas.remove(obj);
+        if (settings.eraserType === "stroke") break; // Only remove one for stroke mode
+      }
+    }
+    canvas.renderAll();
+  }, [settings.eraserType, settings.strokeWidth]);
+
+  const eraseAlongPath = useCallback((start: { x: number; y: number }, end: { x: number; y: number }) => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+
+    const radius = settings.eraserType === "precision" 
+      ? settings.strokeWidth * 2 
+      : settings.strokeWidth * 5;
+
+    // Sample points along the line
+    const distance = Math.hypot(end.x - start.x, end.y - start.y);
+    const steps = Math.max(1, Math.ceil(distance / 6));
+    
+    const objectsToRemove: FabricObject[] = [];
+    const objects = canvas.getObjects();
+
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const x = start.x + (end.x - start.x) * t;
+      const y = start.y + (end.y - start.y) * t;
+
+      for (const obj of objects) {
+        if (objectsToRemove.includes(obj)) continue;
+        
+        // Check if object is within eraser radius
+        const bounds = obj.getBoundingRect();
+        const centerX = bounds.left + bounds.width / 2;
+        const centerY = bounds.top + bounds.height / 2;
+        
+        if (Math.hypot(x - centerX, y - centerY) < radius + Math.max(bounds.width, bounds.height) / 2) {
+          if (obj.containsPoint({ x, y } as any)) {
+            objectsToRemove.push(obj);
+            if (settings.eraserType === "stroke") break;
+          }
+        }
+      }
+    }
+
+    objectsToRemove.forEach(obj => canvas.remove(obj));
+    if (objectsToRemove.length > 0) {
+      canvas.renderAll();
+    }
+  }, [settings.eraserType, settings.strokeWidth]);
+
   // Save content helper
   const saveContent = useCallback(() => {
     const content: Record<string, unknown> = {
@@ -375,39 +589,32 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
       content.canvasJson = JSON.stringify(fabricRef.current.toJSON());
     }
 
+    // Include pages data for persistence
+    content.pages = pages;
+    content.currentPage = currentPage;
+
     onSave(JSON.stringify(content));
-  }, [mode, backgroundStyle, onSave]);
+  }, [mode, backgroundStyle, onSave, pages, currentPage]);
 
   // Page navigation handlers
-  const handlePreviousPage = useCallback(() => {
-    if (currentPage > 1) {
-      // Save current page state first
-      if (fabricRef.current) {
-        const updatedPages = [...pages];
-        const pageIndex = updatedPages.findIndex(p => p.pageNumber === currentPage);
-        if (pageIndex >= 0) {
-          updatedPages[pageIndex].canvasState = JSON.stringify(fabricRef.current.toJSON());
-        }
-        setPages(updatedPages);
-      }
-      setCurrentPage(currentPage - 1);
-    }
-  }, [currentPage, pages]);
+  const handlePageChange = useCallback((pageNumber: number) => {
+    if (pageNumber === currentPage) return;
+    
+    // Save current page state before switching
+    saveCurrentPageState();
+    
+    // Clear eraser trail
+    clearTrail();
+    
+    setCurrentPage(pageNumber);
+  }, [currentPage, saveCurrentPageState, clearTrail]);
 
-  const handleNextPage = useCallback(() => {
-    if (currentPage < pages.length) {
-      // Save current page state first
-      if (fabricRef.current) {
-        const updatedPages = [...pages];
-        const pageIndex = updatedPages.findIndex(p => p.pageNumber === currentPage);
-        if (pageIndex >= 0) {
-          updatedPages[pageIndex].canvasState = JSON.stringify(fabricRef.current.toJSON());
-        }
-        setPages(updatedPages);
-      }
-      setCurrentPage(currentPage + 1);
+  // Load new page's state when page changes
+  useEffect(() => {
+    if (mode === "write" && fabricRef.current) {
+      loadPageState(currentPage);
     }
-  }, [currentPage, pages]);
+  }, [currentPage, mode]);
 
   const handleAddPage = useCallback(() => {
     const newPageNumber = pages.length + 1;
@@ -418,20 +625,12 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     };
     
     // Save current page state first
-    if (fabricRef.current) {
-      const updatedPages = [...pages];
-      const pageIndex = updatedPages.findIndex(p => p.pageNumber === currentPage);
-      if (pageIndex >= 0) {
-        updatedPages[pageIndex].canvasState = JSON.stringify(fabricRef.current.toJSON());
-      }
-      setPages([...updatedPages, newPage]);
-    } else {
-      setPages([...pages, newPage]);
-    }
+    saveCurrentPageState();
     
+    setPages(prev => [...prev, newPage]);
     setCurrentPage(newPageNumber);
     toast.success(`Page ${newPageNumber} added`);
-  }, [pages, currentPage]);
+  }, [pages.length, saveCurrentPageState]);
 
   // Auto-save when background changes
   useEffect(() => {
@@ -475,32 +674,12 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     execCommand("formatBlock", level);
   };
 
-  // Enhanced eraser - click to remove objects
+  // Canvas click handler for eraser and text
   const handleCanvasClick = useCallback((e: React.MouseEvent) => {
     const canvas = fabricRef.current;
     if (!canvas) return;
 
-    if (settings.tool === "eraser") {
-      const rect = canvasRef.current?.getBoundingClientRect();
-      if (!rect) return;
-
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-
-      const objects = canvas.getObjects();
-      for (let i = objects.length - 1; i >= 0; i--) {
-        const obj = objects[i];
-        if (obj.containsPoint({ x, y } as any)) {
-          if (settings.eraserType === "stroke") {
-            canvas.remove(obj);
-            saveContent();
-          }
-          break;
-        }
-      }
-      canvas.renderAll();
-    } else if (settings.tool === "text") {
-      // Add text box
+    if (settings.tool === "text") {
       const rect = pageContainerRef.current?.getBoundingClientRect();
       if (!rect) return;
 
@@ -520,9 +699,9 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
       text.enterEditing();
       canvas.renderAll();
     }
-  }, [settings, saveContent]);
+  }, [settings]);
 
-  // Enhanced Undo/Redo
+  // Enhanced Undo/Redo with per-page history
   const handleUndo = useCallback(() => {
     if (mode === "type") {
       document.execCommand("undo");
@@ -531,22 +710,25 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     }
 
     const canvas = fabricRef.current;
-    if (!canvas || undoStack.length <= 1) return;
+    const history = getCurrentHistory();
+    if (!canvas || history.undoStack.length <= 1) return;
 
     isUndoingRef.current = true;
     
-    const currentState = undoStack[undoStack.length - 1];
-    const previousState = undoStack[undoStack.length - 2];
+    const currentState = history.undoStack[history.undoStack.length - 1];
+    const previousState = history.undoStack[history.undoStack.length - 2];
 
-    setRedoStack(prev => [...prev, currentState]);
-    setUndoStack(prev => prev.slice(0, -1));
+    setCurrentHistory(prev => ({
+      undoStack: prev.undoStack.slice(0, -1),
+      redoStack: [...prev.redoStack, currentState],
+    }));
 
     canvas.loadFromJSON(JSON.parse(previousState.json)).then(() => {
       canvas.renderAll();
       saveContent();
       isUndoingRef.current = false;
     });
-  }, [mode, undoStack, saveContent]);
+  }, [mode, getCurrentHistory, setCurrentHistory, saveContent]);
 
   const handleRedo = useCallback(() => {
     if (mode === "type") {
@@ -556,21 +738,24 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     }
 
     const canvas = fabricRef.current;
-    if (!canvas || redoStack.length === 0) return;
+    const history = getCurrentHistory();
+    if (!canvas || history.redoStack.length === 0) return;
 
     isUndoingRef.current = true;
 
-    const nextState = redoStack[redoStack.length - 1];
+    const nextState = history.redoStack[history.redoStack.length - 1];
 
-    setUndoStack(prev => [...prev, nextState]);
-    setRedoStack(prev => prev.slice(0, -1));
+    setCurrentHistory(prev => ({
+      undoStack: [...prev.undoStack, nextState],
+      redoStack: prev.redoStack.slice(0, -1),
+    }));
 
     canvas.loadFromJSON(JSON.parse(nextState.json)).then(() => {
       canvas.renderAll();
       saveContent();
       isUndoingRef.current = false;
     });
-  }, [mode, redoStack, saveContent]);
+  }, [mode, getCurrentHistory, setCurrentHistory, saveContent]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -618,7 +803,6 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
       const elapsed = Date.now() - touchStartTime;
       if (elapsed > TAP_THRESHOLD_MS) return;
 
-      // Check movement
       const endPositions = Array.from(e.changedTouches).map(t => ({ x: t.clientX, y: t.clientY }));
       let moved = false;
       for (const end of endPositions) {
@@ -722,366 +906,389 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
 
   // Mode is locked after creation
   const canChangeMode = !lockedMode;
+  const history = getCurrentHistory();
 
   return (
-    <div className="flex h-full flex-col bg-muted/30 relative print:bg-white print:m-0">
-      {/* Toolbar */}
-      <div className="flex items-center gap-1 border-b border-border/60 bg-card/80 px-4 py-2 flex-wrap backdrop-blur-sm print:hidden">
-        {/* Mode Toggle - LOCKED if pageMode is set */}
-        <div className="flex items-center gap-1 pr-3 border-r border-border/40">
-          {canChangeMode ? (
+    <div className="flex h-full bg-muted/30 relative print:bg-white print:m-0">
+      {/* Pages Panel - Scrollable sidebar */}
+      {mode === "write" && (
+        <PagesPanel
+          pages={pages}
+          currentPage={currentPage}
+          onPageChange={handlePageChange}
+          onAddPage={handleAddPage}
+          showAddButton={!note.importedPdfUrl}
+          pdfUrl={note.importedPdfUrl}
+          collapsed={pagesPanelCollapsed}
+          onToggleCollapse={() => setPagesPanelCollapsed(!pagesPanelCollapsed)}
+          className="print:hidden shrink-0"
+        />
+      )}
+
+      <div className="flex flex-col flex-1 min-w-0">
+        {/* Toolbar */}
+        <div className="flex items-center gap-1 border-b border-border/60 bg-card/80 px-4 py-2 flex-wrap backdrop-blur-sm print:hidden">
+          {/* Mode Toggle - LOCKED if pageMode is set */}
+          <div className="flex items-center gap-1 pr-3 border-r border-border/40">
+            {canChangeMode ? (
+              <>
+                <Button
+                  variant={mode === "type" ? "secondary" : "ghost"}
+                  size="sm"
+                  className="h-8 gap-1.5"
+                  onClick={() => setMode("type")}
+                >
+                  <Type className="h-4 w-4" />
+                  <span className="text-xs">Type</span>
+                </Button>
+                <Button
+                  variant={mode === "write" ? "secondary" : "ghost"}
+                  size="sm"
+                  className="h-8 gap-1.5"
+                  onClick={() => setMode("write")}
+                >
+                  <Pen className="h-4 w-4" />
+                  <span className="text-xs">Write</span>
+                </Button>
+              </>
+            ) : (
+              <div className="flex items-center gap-1.5 px-2 py-1 bg-muted/50 rounded-md">
+                <Lock className="h-3 w-3 text-muted-foreground" />
+                <span className="text-xs font-medium capitalize">{lockedMode} Mode</span>
+              </div>
+            )}
+          </div>
+
+          {/* Background Style */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 gap-1.5 ml-1">
+                {(() => {
+                  const bg = BACKGROUND_STYLES.find(b => b.id === backgroundStyle);
+                  const Icon = bg?.icon || Square;
+                  return <Icon className="h-4 w-4" />;
+                })()}
+                <span className="text-xs hidden sm:inline">Background</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {BACKGROUND_STYLES.map(bg => (
+                <DropdownMenuItem
+                  key={bg.id}
+                  onClick={() => setBackgroundStyle(bg.id)}
+                  className={cn(backgroundStyle === bg.id && "bg-accent")}
+                >
+                  <bg.icon className="h-4 w-4 mr-2" />
+                  {bg.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <Separator orientation="vertical" className="mx-2 h-6" />
+
+          {/* Type mode tools */}
+          {mode === "type" && (
             <>
               <Button
-                variant={mode === "type" ? "secondary" : "ghost"}
-                size="sm"
-                className="h-8 gap-1.5"
-                onClick={() => setMode("type")}
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={handleUndo}
+                title="Undo (Ctrl+Z)"
               >
-                <Type className="h-4 w-4" />
-                <span className="text-xs">Type</span>
+                <Undo className="h-4 w-4" />
               </Button>
               <Button
-                variant={mode === "write" ? "secondary" : "ghost"}
-                size="sm"
-                className="h-8 gap-1.5"
-                onClick={() => setMode("write")}
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={handleRedo}
+                title="Redo (Ctrl+Shift+Z)"
               >
-                <Pen className="h-4 w-4" />
-                <span className="text-xs">Write</span>
+                <Redo className="h-4 w-4" />
               </Button>
+
+              <Separator orientation="vertical" className="mx-2 h-6" />
+
+              <ToolbarButton icon={Bold} label="Bold (Ctrl+B)" isActive={formatState.bold} onClick={() => execCommand("bold")} />
+              <ToolbarButton icon={Italic} label="Italic (Ctrl+I)" isActive={formatState.italic} onClick={() => execCommand("italic")} />
+              <ToolbarButton icon={Underline} label="Underline (Ctrl+U)" isActive={formatState.underline} onClick={() => execCommand("underline")} />
+
+              <Separator orientation="vertical" className="mx-2 h-6" />
+
+              <ToolbarButton icon={Heading1} label="Heading 1" onClick={() => formatHeading("h1")} />
+              <ToolbarButton icon={Heading2} label="Heading 2" onClick={() => formatHeading("h2")} />
+              <ToolbarButton icon={Heading3} label="Heading 3" onClick={() => formatHeading("h3")} />
+
+              <Separator orientation="vertical" className="mx-2 h-6" />
+
+              <ToolbarButton icon={List} label="Bullet List" isActive={formatState.list === "ul"} onClick={() => execCommand("insertUnorderedList")} />
+              <ToolbarButton icon={ListOrdered} label="Numbered List" isActive={formatState.list === "ol"} onClick={() => execCommand("insertOrderedList")} />
+
+              <Separator orientation="vertical" className="mx-2 h-6" />
+
+              <ToolbarButton icon={Quote} label="Quote" onClick={() => formatHeading("blockquote")} />
+              <ToolbarButton icon={Code} label="Code" onClick={() => formatHeading("pre")} />
+              <ToolbarButton icon={Minus} label="Horizontal Rule" onClick={() => execCommand("insertHorizontalRule")} />
+
+              <Separator orientation="vertical" className="mx-2 h-6" />
+
+              <ToolbarButton icon={AlignLeft} label="Align Left" isActive={formatState.align === "left"} onClick={() => execCommand("justifyLeft")} />
+              <ToolbarButton icon={AlignCenter} label="Align Center" isActive={formatState.align === "center"} onClick={() => execCommand("justifyCenter")} />
+              <ToolbarButton icon={AlignRight} label="Align Right" isActive={formatState.align === "right"} onClick={() => execCommand("justifyRight")} />
             </>
-          ) : (
-            <div className="flex items-center gap-1.5 px-2 py-1 bg-muted/50 rounded-md">
-              <Lock className="h-3 w-3 text-muted-foreground" />
-              <span className="text-xs font-medium capitalize">{lockedMode} Mode</span>
-            </div>
           )}
-        </div>
 
-        {/* Background Style */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-8 gap-1.5 ml-1">
-              {(() => {
-                const bg = BACKGROUND_STYLES.find(b => b.id === backgroundStyle);
-                const Icon = bg?.icon || Square;
-                return <Icon className="h-4 w-4" />;
-              })()}
-              <span className="text-xs hidden sm:inline">Background</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            {BACKGROUND_STYLES.map(bg => (
-              <DropdownMenuItem
-                key={bg.id}
-                onClick={() => setBackgroundStyle(bg.id)}
-                className={cn(backgroundStyle === bg.id && "bg-accent")}
+          {/* Write mode tools */}
+          {mode === "write" && (
+            <>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleUndo} disabled={history.undoStack.length <= 1} title="Undo (Ctrl+Z)">
+                <Undo className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleRedo} disabled={history.redoStack.length === 0} title="Redo (Ctrl+Shift+Z)">
+                <Redo className="h-4 w-4" />
+              </Button>
+
+              <Separator orientation="vertical" className="mx-2 h-6" />
+
+              {/* Selection tools */}
+              <Button
+                variant={settings.tool === "select" ? "secondary" : "ghost"}
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setSettings({ ...settings, tool: "select" })}
+                title="Select (V)"
               >
-                <bg.icon className="h-4 w-4 mr-2" />
-                {bg.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        <Separator orientation="vertical" className="mx-2 h-6" />
-
-        {/* Type mode tools */}
-        {mode === "type" && (
-          <>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={handleUndo}
-              title="Undo (Ctrl+Z)"
-            >
-              <Undo className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={handleRedo}
-              title="Redo (Ctrl+Shift+Z)"
-            >
-              <Redo className="h-4 w-4" />
-            </Button>
-
-            <Separator orientation="vertical" className="mx-2 h-6" />
-
-            <ToolbarButton icon={Bold} label="Bold (Ctrl+B)" isActive={formatState.bold} onClick={() => execCommand("bold")} />
-            <ToolbarButton icon={Italic} label="Italic (Ctrl+I)" isActive={formatState.italic} onClick={() => execCommand("italic")} />
-            <ToolbarButton icon={Underline} label="Underline (Ctrl+U)" isActive={formatState.underline} onClick={() => execCommand("underline")} />
-
-            <Separator orientation="vertical" className="mx-2 h-6" />
-
-            <ToolbarButton icon={Heading1} label="Heading 1" onClick={() => formatHeading("h1")} />
-            <ToolbarButton icon={Heading2} label="Heading 2" onClick={() => formatHeading("h2")} />
-            <ToolbarButton icon={Heading3} label="Heading 3" onClick={() => formatHeading("h3")} />
-
-            <Separator orientation="vertical" className="mx-2 h-6" />
-
-            <ToolbarButton icon={List} label="Bullet List" isActive={formatState.list === "ul"} onClick={() => execCommand("insertUnorderedList")} />
-            <ToolbarButton icon={ListOrdered} label="Numbered List" isActive={formatState.list === "ol"} onClick={() => execCommand("insertOrderedList")} />
-
-            <Separator orientation="vertical" className="mx-2 h-6" />
-
-            <ToolbarButton icon={Quote} label="Quote" onClick={() => formatHeading("blockquote")} />
-            <ToolbarButton icon={Code} label="Code" onClick={() => formatHeading("pre")} />
-            <ToolbarButton icon={Minus} label="Horizontal Rule" onClick={() => execCommand("insertHorizontalRule")} />
-
-            <Separator orientation="vertical" className="mx-2 h-6" />
-
-            <ToolbarButton icon={AlignLeft} label="Align Left" isActive={formatState.align === "left"} onClick={() => execCommand("justifyLeft")} />
-            <ToolbarButton icon={AlignCenter} label="Align Center" isActive={formatState.align === "center"} onClick={() => execCommand("justifyCenter")} />
-            <ToolbarButton icon={AlignRight} label="Align Right" isActive={formatState.align === "right"} onClick={() => execCommand("justifyRight")} />
-          </>
-        )}
-
-        {/* Write mode tools */}
-        {mode === "write" && (
-          <>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleUndo} disabled={undoStack.length <= 1} title="Undo (Ctrl+Z)">
-              <Undo className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleRedo} disabled={redoStack.length === 0} title="Redo (Ctrl+Shift+Z)">
-              <Redo className="h-4 w-4" />
-            </Button>
-
-            <Separator orientation="vertical" className="mx-2 h-6" />
-
-            {/* Selection tools */}
-            <Button
-              variant={settings.tool === "select" ? "secondary" : "ghost"}
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => setSettings({ ...settings, tool: "select" })}
-              title="Select (V)"
-            >
-              <MousePointer2 className="h-4 w-4" />
-            </Button>
-            
-            {/* Lasso with mode toggle */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant={settings.tool === "lasso" ? "secondary" : "ghost"}
-                  size="icon"
-                  className="h-8 w-8"
-                  title="Lasso Select (L)"
-                >
-                  <Lasso className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem onClick={() => setSettings({ ...settings, tool: "lasso", lassoMode: "freeform" })}>
-                  Freeform Lasso
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setSettings({ ...settings, tool: "lasso", lassoMode: "rectangle" })}>
-                  Rectangle Select
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <Separator orientation="vertical" className="mx-2 h-6" />
-
-            <Button
-              variant={settings.tool === "pen" ? "secondary" : "ghost"}
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => setSettings({ ...settings, tool: "pen" })}
-              title="Pen (P)"
-            >
-              <Pen className="h-4 w-4" />
-            </Button>
-            <Button
-              variant={settings.tool === "text" ? "secondary" : "ghost"}
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => setSettings({ ...settings, tool: "text" })}
-              title="Text Box (T)"
-            >
-              <Type className="h-4 w-4" />
-            </Button>
-            <Button
-              variant={settings.tool === "eraser" ? "secondary" : "ghost"}
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => setSettings({ ...settings, tool: "eraser" })}
-              title="Eraser (E)"
-            >
-              <Eraser className="h-4 w-4" />
-            </Button>
-
-            {/* Color picker */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <div className="h-5 w-5 rounded-full border-2 border-border" style={{ backgroundColor: settings.color }} />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-3" align="center" side="bottom">
-                <div className="flex flex-wrap gap-2 max-w-[180px]">
-                  {["#1a1a1a", "#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#8b5cf6", "#ec4899", "#ffffff"].map(color => (
-                    <button
-                      key={color}
-                      className={cn(
-                        "h-7 w-7 rounded-full border-2 transition-transform hover:scale-110",
-                        settings.color === color ? "border-primary ring-2 ring-primary/30" : "border-border/60"
-                      )}
-                      style={{ backgroundColor: color }}
-                      onClick={() => setSettings({ ...settings, color })}
-                    />
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
-
-            {/* Stroke width */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <div
-                    className="rounded-full bg-foreground"
-                    style={{ width: Math.min(14, settings.strokeWidth * 2), height: Math.min(14, settings.strokeWidth * 2) }}
-                  />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-48 p-4" align="center" side="bottom">
-                <Slider
-                  value={[settings.strokeWidth]}
-                  onValueChange={([value]) => setSettings({ ...settings, strokeWidth: value })}
-                  min={1}
-                  max={12}
-                  step={1}
-                />
-              </PopoverContent>
-            </Popover>
-
-            {/* Eraser type toggle */}
-            {settings.tool === "eraser" && (
+                <MousePointer2 className="h-4 w-4" />
+              </Button>
+              
+              {/* Lasso with mode toggle */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs">
-                    {settings.eraserType === "stroke" ? "Stroke" : "Precision"}
+                  <Button
+                    variant={settings.tool === "lasso" ? "secondary" : "ghost"}
+                    size="icon"
+                    className="h-8 w-8"
+                    title="Lasso Select (L)"
+                  >
+                    <Lasso className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
-                  <DropdownMenuItem onClick={() => setSettings({ ...settings, eraserType: "stroke" })}>
-                    Stroke (whole line)
+                  <DropdownMenuItem onClick={() => setSettings({ ...settings, tool: "lasso", lassoMode: "freeform" })}>
+                    Freeform Lasso
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSettings({ ...settings, eraserType: "precision" })}>
-                    Precision (partial)
+                  <DropdownMenuItem onClick={() => setSettings({ ...settings, tool: "lasso", lassoMode: "rectangle" })}>
+                    Rectangle Select
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-            )}
-          </>
-        )}
 
-        {/* Spacer */}
-        <div className="flex-1" />
+              <Separator orientation="vertical" className="mx-2 h-6" />
 
-        {/* Add Module Dropdown - Available in ALL modes */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-8 gap-1.5">
-              <Plus className="h-4 w-4" />
-              <span className="text-xs hidden sm:inline">Add Module</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => setResearchPanelOpen(true)}>
-              <Globe className="h-4 w-4 mr-2" />
-              Web Search
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setCalculatorOpen(true)}>
-              <Calculator className="h-4 w-4 mr-2" />
-              Calculator
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setArloAiOpen(true)}>
-              <Bot className="h-4 w-4 mr-2" />
-              Arlo AI
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => toast.info("PDF viewer coming soon")}>
-              <FileText className="h-4 w-4 mr-2" />
-              PDF Viewer
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+              <Button
+                variant={settings.tool === "pen" ? "secondary" : "ghost"}
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setSettings({ ...settings, tool: "pen" })}
+                title="Pen (P)"
+              >
+                <Pen className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={settings.tool === "text" ? "secondary" : "ghost"}
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setSettings({ ...settings, tool: "text" })}
+                title="Text Box (T)"
+              >
+                <Type className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={settings.tool === "eraser" ? "secondary" : "ghost"}
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setSettings({ ...settings, tool: "eraser" })}
+                title="Eraser (E)"
+              >
+                <Eraser className="h-4 w-4" />
+              </Button>
 
-      {/* Document Page Area */}
-      <div className="flex-1 overflow-auto flex justify-center py-8 px-4 print:py-0 print:px-0">
-        <div
-          ref={pageContainerRef}
-          data-note-content="true"
-          className={cn(
-            "relative bg-white dark:bg-zinc-900 rounded-sm shadow-xl print:shadow-none print:rounded-none",
-            "w-full max-w-[816px] min-h-[1056px]",
-            "border border-border/20 print:border-0"
+              {/* Color picker */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <div className="h-5 w-5 rounded-full border-2 border-border" style={{ backgroundColor: settings.color }} />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-3" align="center" side="bottom">
+                  <div className="flex flex-wrap gap-2 max-w-[180px]">
+                    {["#1a1a1a", "#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#8b5cf6", "#ec4899", "#ffffff"].map(color => (
+                      <button
+                        key={color}
+                        className={cn(
+                          "h-7 w-7 rounded-full border-2 transition-transform hover:scale-110",
+                          settings.color === color ? "border-primary ring-2 ring-primary/30" : "border-border/60"
+                        )}
+                        style={{ backgroundColor: color }}
+                        onClick={() => setSettings({ ...settings, color })}
+                      />
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              {/* Stroke width */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <div
+                      className="rounded-full bg-foreground"
+                      style={{ width: Math.min(14, settings.strokeWidth * 2), height: Math.min(14, settings.strokeWidth * 2) }}
+                    />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-48 p-4" align="center" side="bottom">
+                  <Slider
+                    value={[settings.strokeWidth]}
+                    onValueChange={([value]) => setSettings({ ...settings, strokeWidth: value })}
+                    min={1}
+                    max={12}
+                    step={1}
+                  />
+                </PopoverContent>
+              </Popover>
+
+              {/* Eraser type toggle */}
+              {settings.tool === "eraser" && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs">
+                      {settings.eraserType === "stroke" ? "Stroke" : "Precision"}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem onClick={() => setSettings({ ...settings, eraserType: "stroke" })}>
+                      Stroke (whole line)
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setSettings({ ...settings, eraserType: "precision" })}>
+                      Precision (partial)
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </>
           )}
-          style={{
-            background: getBackgroundCSS(),
-            backgroundSize: getBackgroundSize(),
-            backgroundColor: "hsl(var(--background))",
-          }}
-          onClick={mode === "write" ? handleCanvasClick : undefined}
-        >
-          {/* Type Mode Editor */}
-          {mode === "type" && (
-            <div className="p-12 pt-16 print:p-8">
-              <div
-                ref={editorRef}
-                contentEditable
-                suppressContentEditableWarning
-                onInput={handleInput}
-                onMouseUp={updateFormatState}
-                onKeyUp={updateFormatState}
-                className={cn(
-                  "min-h-[calc(1056px-8rem)] outline-none print:min-h-0",
-                  "prose prose-sm dark:prose-invert max-w-none",
-                  "[&>*:first-child]:mt-0",
-                  "[&_h1]:text-3xl [&_h1]:font-bold [&_h1]:mb-4 [&_h1]:mt-8",
-                  "[&_h2]:text-2xl [&_h2]:font-semibold [&_h2]:mb-3 [&_h2]:mt-6",
-                  "[&_h3]:text-xl [&_h3]:font-medium [&_h3]:mb-2 [&_h3]:mt-4",
-                  "[&_p]:text-base [&_p]:leading-relaxed [&_p]:mb-4",
-                  "[&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-4",
-                  "[&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-4",
-                  "[&_li]:mb-1",
-                  "[&_blockquote]:border-l-4 [&_blockquote]:border-primary/30 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-muted-foreground [&_blockquote]:my-4",
-                  "[&_pre]:bg-muted [&_pre]:rounded-lg [&_pre]:p-4 [&_pre]:overflow-x-auto [&_pre]:font-mono [&_pre]:text-sm [&_pre]:my-4",
-                  "[&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-sm",
-                  "[&_hr]:border-border [&_hr]:my-6"
-                )}
-                data-placeholder="Start typing..."
-              />
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Page indicator in toolbar */}
+          {mode === "write" && (
+            <div className="text-xs text-muted-foreground mr-2">
+              Page {currentPage} of {pages.length}
             </div>
           )}
 
-          {/* Write Mode Canvas */}
-          {mode === "write" && (
-            <canvas
-              ref={canvasRef}
-              className="absolute inset-0 w-full h-full touch-none"
-              style={{ touchAction: 'none' }}
-            />
-          )}
+          {/* Add Module Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8 gap-1.5">
+                <Plus className="h-4 w-4" />
+                <span className="text-xs hidden sm:inline">Add Module</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setResearchPanelOpen(true)}>
+                <Globe className="h-4 w-4 mr-2" />
+                Web Search
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setCalculatorOpen(true)}>
+                <Calculator className="h-4 w-4 mr-2" />
+                Calculator
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setArloAiOpen(true)}>
+                <Bot className="h-4 w-4 mr-2" />
+                Arlo AI
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => toast.info("PDF viewer coming soon")}>
+                <FileText className="h-4 w-4 mr-2" />
+                PDF Viewer
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        {/* Document Page Area */}
+        <div className="flex-1 overflow-auto flex justify-center py-8 px-4 print:py-0 print:px-0">
+          <div
+            ref={pageContainerRef}
+            data-note-content="true"
+            className={cn(
+              "relative bg-white dark:bg-zinc-900 rounded-sm shadow-xl print:shadow-none print:rounded-none",
+              "w-full max-w-[816px] min-h-[1056px]",
+              "border border-border/20 print:border-0"
+            )}
+            style={{
+              background: getBackgroundCSS(),
+              backgroundSize: getBackgroundSize(),
+              backgroundColor: "hsl(var(--background))",
+            }}
+            onClick={mode === "write" && settings.tool !== "eraser" ? handleCanvasClick : undefined}
+          >
+            {/* Type Mode Editor */}
+            {mode === "type" && (
+              <div className="p-12 pt-16 print:p-8">
+                <div
+                  ref={editorRef}
+                  contentEditable
+                  suppressContentEditableWarning
+                  onInput={handleInput}
+                  onMouseUp={updateFormatState}
+                  onKeyUp={updateFormatState}
+                  className={cn(
+                    "min-h-[calc(1056px-8rem)] outline-none print:min-h-0",
+                    "prose prose-sm dark:prose-invert max-w-none",
+                    "[&>*:first-child]:mt-0",
+                    "[&_h1]:text-3xl [&_h1]:font-bold [&_h1]:mb-4 [&_h1]:mt-8",
+                    "[&_h2]:text-2xl [&_h2]:font-semibold [&_h2]:mb-3 [&_h2]:mt-6",
+                    "[&_h3]:text-xl [&_h3]:font-medium [&_h3]:mb-2 [&_h3]:mt-4",
+                    "[&_p]:text-base [&_p]:leading-relaxed [&_p]:mb-4",
+                    "[&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-4",
+                    "[&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-4",
+                    "[&_li]:mb-1",
+                    "[&_blockquote]:border-l-4 [&_blockquote]:border-primary/30 [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-muted-foreground [&_blockquote]:my-4",
+                    "[&_pre]:bg-muted [&_pre]:rounded-lg [&_pre]:p-4 [&_pre]:overflow-x-auto [&_pre]:font-mono [&_pre]:text-sm [&_pre]:my-4",
+                    "[&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-sm",
+                    "[&_hr]:border-border [&_hr]:my-6"
+                  )}
+                  data-placeholder="Start typing..."
+                />
+              </div>
+            )}
+
+            {/* Write Mode Canvas */}
+            {mode === "write" && (
+              <div 
+                ref={canvasContainerRef}
+                className="absolute inset-0 w-full h-full"
+                onPointerDown={settings.tool === "eraser" ? handleEraserStart : undefined}
+                onPointerMove={settings.tool === "eraser" ? handleEraserMove : undefined}
+                onPointerUp={settings.tool === "eraser" ? handleEraserEnd : undefined}
+                onPointerLeave={settings.tool === "eraser" ? handleEraserEnd : undefined}
+              >
+                <canvas
+                  ref={canvasRef}
+                  className="absolute inset-0 w-full h-full touch-none"
+                  style={{ touchAction: 'none' }}
+                />
+              </div>
+            )}
+          </div>
         </div>
       </div>
-
-      {/* Page Navigation - always visible for page notes */}
-      <PageNavigation
-        currentPage={currentPage}
-        totalPages={pages.length}
-        onPreviousPage={handlePreviousPage}
-        onNextPage={handleNextPage}
-        onAddPage={handleAddPage}
-        showAddButton={!note.importedPdfUrl} // Don't allow adding pages to imported PDFs
-        className="print:hidden"
-      />
 
       {/* Modules */}
       <ResearchPanel
