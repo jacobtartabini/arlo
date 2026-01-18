@@ -1,4 +1,4 @@
-import { FabricObject, Path, Point, Canvas } from 'fabric';
+import { FabricObject, Path, Canvas } from 'fabric';
 
 interface EraserPoint {
   x: number;
