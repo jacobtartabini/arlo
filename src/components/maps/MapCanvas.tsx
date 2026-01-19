@@ -1,27 +1,27 @@
-import React, { useCallback, useMemo, useRef, useEffect } from 'react';
-import { GoogleMap, Marker, Polyline, TrafficLayer } from '@react-google-maps/api';
+import React, { useCallback, useMemo, useRef } from 'react';
+import { GoogleMap, Marker, TrafficLayer } from '@react-google-maps/api';
 import { useMapContext } from './MapProvider';
-import type { LatLng, Place, RouteOption, Incident, NavigationState } from '@/types/maps';
+import type { LatLng, Place, MapPin } from '@/types/maps';
 
 interface MapCanvasProps {
   center: LatLng;
   zoom: number;
-  bearing: number;
   mapType: 'roadmap' | 'satellite' | 'hybrid' | 'terrain';
+  mapStyle: 'light' | 'dark';
   showTraffic: boolean;
   userLocation: LatLng | null;
-  userHeading: number | null;
-  followMode: boolean;
-  selectedPlace: Place | null;
-  routes: RouteOption[];
-  selectedRouteIndex: number;
-  incidents: Incident[];
-  navigation: NavigationState;
+  dropPinMode?: boolean;
+  places: Place[];
+  pins: MapPin[];
+  selectedPlaceId: string | null;
+  selectedPinId: string | null;
   onMapLoad: (map: google.maps.Map) => void;
   onCenterChange: (center: LatLng) => void;
   onZoomChange: (zoom: number) => void;
-  onBearingChange: (bearing: number) => void;
   onPlaceClick: (place: Place) => void;
+  onPinClick: (pin: MapPin) => void;
+  onMapClick?: (location: LatLng) => void;
+  onPinDrag?: (pin: MapPin, location: LatLng) => void;
 }
 
 const containerStyle = {
@@ -29,8 +29,7 @@ const containerStyle = {
   height: '100%',
 };
 
-// Custom map styles for a cleaner look
-const mapStyles: google.maps.MapTypeStyle[] = [
+const lightMapStyles: google.maps.MapTypeStyle[] = [
   {
     featureType: 'poi',
     elementType: 'labels',
@@ -43,35 +42,61 @@ const mapStyles: google.maps.MapTypeStyle[] = [
   },
 ];
 
-// Incident type to icon mapping
-const incidentIcons: Record<string, string> = {
-  police: '🚔',
-  accident: '🚗',
-  hazard: '⚠️',
-  construction: '🚧',
-  closure: '🚫',
-  other: '❗',
-};
+const darkMapStyles: google.maps.MapTypeStyle[] = [
+  { elementType: 'geometry', stylers: [{ color: '#1f2937' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#111827' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#9ca3af' }] },
+  {
+    featureType: 'administrative.land_parcel',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#6b7280' }],
+  },
+  {
+    featureType: 'poi',
+    elementType: 'labels',
+    stylers: [{ visibility: 'off' }],
+  },
+  {
+    featureType: 'road',
+    elementType: 'geometry',
+    stylers: [{ color: '#374151' }],
+  },
+  {
+    featureType: 'road',
+    elementType: 'geometry.stroke',
+    stylers: [{ color: '#111827' }],
+  },
+  {
+    featureType: 'road',
+    elementType: 'labels.text.fill',
+    stylers: [{ color: '#d1d5db' }],
+  },
+  {
+    featureType: 'water',
+    elementType: 'geometry',
+    stylers: [{ color: '#0f172a' }],
+  },
+];
 
 export function MapCanvas({
   center,
   zoom,
-  bearing,
   mapType,
+  mapStyle,
   showTraffic,
   userLocation,
-  userHeading,
-  followMode,
-  selectedPlace,
-  routes,
-  selectedRouteIndex,
-  incidents,
-  navigation,
+  dropPinMode,
+  places,
+  pins,
+  selectedPlaceId,
+  selectedPinId,
   onMapLoad,
   onCenterChange,
   onZoomChange,
-  onBearingChange,
   onPlaceClick,
+  onPinClick,
+  onMapClick,
+  onPinDrag,
 }: MapCanvasProps) {
   const { isLoaded, loadError } = useMapContext();
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -85,10 +110,9 @@ export function MapCanvas({
     clickableIcons: true,
     gestureHandling: 'greedy',
     mapTypeId: mapType,
-    styles: mapStyles,
-    heading: bearing,
-    tilt: navigation.isNavigating ? 45 : 0,
-  }), [mapType, bearing, navigation.isNavigating]);
+    styles: mapStyle === 'dark' ? darkMapStyles : lightMapStyles,
+    draggableCursor: dropPinMode ? 'crosshair' : undefined,
+  }), [mapType, mapStyle, dropPinMode]);
 
   const handleLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
@@ -96,39 +120,23 @@ export function MapCanvas({
   }, [onMapLoad]);
 
   const handleIdle = useCallback(() => {
-    if (!mapRef.current || followMode) return;
-    
+    if (!mapRef.current) return;
+
     const newCenter = mapRef.current.getCenter();
     const newZoom = mapRef.current.getZoom();
-    const newHeading = mapRef.current.getHeading();
-    
+
     if (newCenter) {
       onCenterChange({ lat: newCenter.lat(), lng: newCenter.lng() });
     }
     if (newZoom !== undefined) {
       onZoomChange(newZoom);
     }
-    if (newHeading !== undefined) {
-      onBearingChange(newHeading);
-    }
-  }, [followMode, onCenterChange, onZoomChange, onBearingChange]);
+  }, [onCenterChange, onZoomChange]);
 
-  // Update map when center/zoom changes externally
-  useEffect(() => {
-    if (mapRef.current && followMode) {
-      mapRef.current.panTo(center);
-      mapRef.current.setZoom(zoom);
-    }
-  }, [center, zoom, followMode]);
-
-  // Decode polyline for route rendering
-  const decodePolyline = useCallback((encoded: string): LatLng[] => {
-    if (typeof google === 'undefined' || !google.maps?.geometry?.encoding) {
-      return [];
-    }
-    const decoded = google.maps.geometry.encoding.decodePath(encoded);
-    return decoded.map(point => ({ lat: point.lat(), lng: point.lng() }));
-  }, []);
+  const handleMapClick = useCallback((event: google.maps.MapMouseEvent) => {
+    if (!onMapClick || !event.latLng) return;
+    onMapClick({ lat: event.latLng.lat(), lng: event.latLng.lng() });
+  }, [onMapClick]);
 
   if (loadError) {
     return (
@@ -160,102 +168,71 @@ export function MapCanvas({
       options={options}
       onLoad={handleLoad}
       onIdle={handleIdle}
+      onClick={handleMapClick}
     >
-      {/* Traffic Layer */}
       {showTraffic && <TrafficLayer />}
 
-      {/* Route Polylines */}
-      {routes.map((route, index) => {
-        const path = decodePolyline(route.polyline);
-        const isSelected = index === selectedRouteIndex;
-        return (
-          <Polyline
-            key={route.id}
-            path={path}
-            options={{
-              strokeColor: isSelected ? '#4285F4' : '#AAAAAA',
-              strokeWeight: isSelected ? 6 : 4,
-              strokeOpacity: isSelected ? 1 : 0.5,
-              zIndex: isSelected ? 2 : 1,
-            }}
-          />
-        );
-      })}
-
-      {/* Navigation Route (highlighted) */}
-      {navigation.currentRoute && (
-        <Polyline
-          path={decodePolyline(navigation.currentRoute.polyline)}
-          options={{
-            strokeColor: '#4285F4',
-            strokeWeight: 8,
-            strokeOpacity: 1,
-            zIndex: 3,
-          }}
-        />
-      )}
-
-      {/* User Location Marker */}
       {userLocation && (
         <Marker
           position={userLocation}
           icon={{
             path: google.maps.SymbolPath.CIRCLE,
-            scale: 8,
-            fillColor: '#4285F4',
+            scale: 7,
+            fillColor: '#2563eb',
             fillOpacity: 1,
-            strokeColor: '#FFFFFF',
+            strokeColor: '#ffffff',
             strokeWeight: 3,
           }}
           zIndex={100}
         />
       )}
 
-      {/* Heading Cone (when navigating or following) */}
-      {userLocation && userHeading !== null && (followMode || navigation.isNavigating) && (
-        <Marker
-          position={userLocation}
-          icon={{
-            path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-            scale: 6,
-            fillColor: '#4285F4',
-            fillOpacity: 0.8,
-            strokeColor: '#FFFFFF',
-            strokeWeight: 1,
-            rotation: userHeading,
-          }}
-          zIndex={99}
-        />
-      )}
+      {places.map((place) => {
+        const isSelected = place.placeId === selectedPlaceId;
+        return (
+          <Marker
+            key={place.placeId}
+            position={place.location}
+            onClick={() => onPlaceClick(place)}
+            icon={{
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: isSelected ? 10 : 7,
+              fillColor: isSelected ? '#ef4444' : '#38bdf8',
+              fillOpacity: 1,
+              strokeColor: '#ffffff',
+              strokeWeight: 2,
+            }}
+            zIndex={isSelected ? 50 : 20}
+            title={place.name}
+          />
+        );
+      })}
 
-      {/* Selected Place Marker */}
-      {selectedPlace && (
-        <Marker
-          position={selectedPlace.location}
-          icon={{
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 12,
-            fillColor: '#EA4335',
-            fillOpacity: 1,
-            strokeColor: '#FFFFFF',
-            strokeWeight: 3,
-          }}
-          title={selectedPlace.name}
-        />
-      )}
-
-      {/* Incident Markers */}
-      {incidents.map(incident => (
-        <Marker
-          key={incident.id}
-          position={incident.location}
-          label={{
-            text: incidentIcons[incident.type] || '❗',
-            fontSize: '18px',
-          }}
-          title={`${incident.type}: ${incident.description || 'Reported incident'}`}
-        />
-      ))}
+      {pins.map((pin) => {
+        const isSelected = pin.id === selectedPinId;
+        return (
+          <Marker
+            key={pin.id}
+            position={pin.location}
+            draggable
+            onDragEnd={(event) => {
+              if (!event.latLng || !onPinDrag) return;
+              onPinDrag(pin, { lat: event.latLng.lat(), lng: event.latLng.lng() });
+            }}
+            onClick={() => onPinClick(pin)}
+            icon={{
+              path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
+              scale: isSelected ? 6 : 5,
+              fillColor: isSelected ? '#f59e0b' : '#f97316',
+              fillOpacity: 1,
+              strokeColor: '#ffffff',
+              strokeWeight: 2,
+            }}
+            zIndex={isSelected ? 60 : 30}
+            title={pin.title}
+          />
+        );
+      })}
     </GoogleMap>
   );
 }

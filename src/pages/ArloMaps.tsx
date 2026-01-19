@@ -1,352 +1,441 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { MapProvider } from '@/components/maps/MapProvider';
 import { MapCanvas } from '@/components/maps/MapCanvas';
-import { MapFloatingSearch } from '@/components/maps/MapFloatingSearch';
-import { MapFloatingControls } from '@/components/maps/MapFloatingControls';
-import { MapBottomSheet } from '@/components/maps/MapBottomSheet';
-import { MapFloatingPanel } from '@/components/maps/MapFloatingPanel';
+import { MapSidebar } from '@/components/maps/MapSidebar';
+import { MapTools } from '@/components/maps/MapTools';
+import { MapMobileSheet } from '@/components/maps/MapMobileSheet';
+import { MapSearchInput } from '@/components/maps/MapSearchInput';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useMapsPersistence } from '@/hooks/useMapsPersistence';
 import { useGeolocation } from '@/hooks/useGeolocation';
-import type { 
-  Place, 
-  BottomSheetState, 
-  MapMode, 
-  LatLng, 
-  NavigationState,
-  RouteOption 
-} from '@/types/maps';
+import { useMapsPersistence } from '@/hooks/useMapsPersistence';
+import { useMapPins } from '@/hooks/useMapPins';
+import { cn } from '@/lib/utils';
+import type { LatLng, MapPin, Place, PlacePrediction } from '@/types/maps';
+import { getPlaceDetails, reverseGeocode, searchPlaces } from '@/services/mapService';
+import { supabase } from '@/integrations/supabase/client';
 
 const DEFAULT_CENTER: LatLng = { lat: 37.7749, lng: -122.4194 };
-const DEFAULT_ZOOM = 14;
+const DEFAULT_ZOOM = 13;
 
 export default function ArloMaps() {
   const isMobile = useIsMobile();
-  // Map state
+  const geolocation = useGeolocation({ enableHighAccuracy: true });
+  const mapsPersistence = useMapsPersistence();
+  const { pins, createPin, updatePin, deletePin } = useMapPins();
+  const mapRef = useRef<google.maps.Map | null>(null);
+  const sessionTokenRef = useRef(crypto.randomUUID());
+
   const [center, setCenter] = useState<LatLng>(DEFAULT_CENTER);
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
-  const [bearing, setBearing] = useState(0);
   const [mapType, setMapType] = useState<'roadmap' | 'satellite' | 'hybrid' | 'terrain'>('roadmap');
-  
-  // UI state
-  const [mode, setMode] = useState<MapMode>('explore');
-  const [sheetState, setSheetState] = useState<BottomSheetState>('collapsed');
-  const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
+  const [mapStyle, setMapStyle] = useState<'light' | 'dark'>('light');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSheetExpanded, setMobileSheetExpanded] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState('');
+  const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
   const [searchResults, setSearchResults] = useState<Place[]>([]);
-  const [followMode, setFollowMode] = useState(false);
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
+  const [selectedPin, setSelectedPin] = useState<MapPin | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isAutocompleteLoading, setIsAutocompleteLoading] = useState(false);
 
-  // Navigation state
-  const [navigation, setNavigation] = useState<NavigationState>({
-    isNavigating: false,
-    currentRoute: null,
-    currentStepIndex: 0,
-    origin: null,
-    destination: null,
-    waypoints: [],
-    followMode: true,
-    voiceMuted: false,
-    estimatedArrival: null,
-    remainingDistance: null,
-    remainingDuration: null,
-  });
-  const [routes, setRoutes] = useState<RouteOption[]>([]);
-  const [selectedRouteIndex, setSelectedRouteIndex] = useState(0);
+  const [dropPinMode, setDropPinMode] = useState(false);
+  const [pinDialogOpen, setPinDialogOpen] = useState(false);
+  const [pinDraft, setPinDraft] = useState({ title: '', note: '', location: null as LatLng | null, id: null as string | null });
+  const [isPinSaving, setIsPinSaving] = useState(false);
 
-  // Hooks
-  const mapsPersistence = useMapsPersistence();
-  const geolocation = useGeolocation({ enableHighAccuracy: true });
-  const mapRef = useRef<google.maps.Map | null>(null);
-
-  // Request user location immediately
-  useEffect(() => {
-    geolocation.getCurrentPosition();
-  }, [geolocation.getCurrentPosition]);
-
-  // Initialize with user location
-  useEffect(() => {
-    if (geolocation.position && !geolocation.error) {
-      setCenter(geolocation.position);
-    }
-  }, [geolocation.position, geolocation.error]);
-
-  // Follow mode: update center when position changes
-  useEffect(() => {
-    if (followMode && geolocation.position) {
-      setCenter(geolocation.position);
-    }
-  }, [followMode, geolocation.position]);
-
-  // Load user's default map type
   useEffect(() => {
     if (mapsPersistence.settings.defaultMapType) {
       setMapType(mapsPersistence.settings.defaultMapType);
     }
   }, [mapsPersistence.settings.defaultMapType]);
 
-  // Handlers
+  useEffect(() => {
+    if (geolocation.position && !geolocation.error) {
+      setCenter(geolocation.position);
+    }
+  }, [geolocation.position, geolocation.error]);
+
+  const searchCenter = useMemo(() => geolocation.position ?? center, [geolocation.position, center]);
+
+  useEffect(() => {
+    if (searchQuery.trim().length < 2) {
+      setPredictions([]);
+      return;
+    }
+
+    const handle = window.setTimeout(async () => {
+      setIsAutocompleteLoading(true);
+      try {
+        const { data, error } = await supabase.functions.invoke('places-autocomplete', {
+          body: {
+            query: searchQuery,
+            sessionToken: sessionTokenRef.current,
+            location: `${searchCenter.lat},${searchCenter.lng}`,
+            radius: 40000,
+          },
+        });
+        if (!error && data?.predictions) {
+          setPredictions(data.predictions);
+        } else {
+          setPredictions([]);
+        }
+      } catch {
+        setPredictions([]);
+      } finally {
+        setIsAutocompleteLoading(false);
+      }
+    }, 300);
+
+    return () => window.clearTimeout(handle);
+  }, [searchQuery, searchCenter]);
+
+  const handleSearchSubmit = useCallback(async () => {
+    if (!searchQuery.trim()) return;
+    setIsSearching(true);
+    setPredictions([]);
+    try {
+      const results = await searchPlaces(searchQuery, searchCenter);
+      setSearchResults(results);
+      setSelectedPlace(null);
+      setSelectedPin(null);
+      if (results.length === 0) {
+        toast('No results found', { description: 'Try a different search or zoom the map.' });
+      }
+    } catch (error) {
+      toast('Search failed', { description: error instanceof Error ? error.message : 'Please try again.' });
+    } finally {
+      setIsSearching(false);
+    }
+  }, [searchQuery, searchCenter]);
+
+  const handlePredictionSelect = useCallback(
+    async (prediction: PlacePrediction) => {
+      setSearchQuery(prediction.description);
+      setPredictions([]);
+      setIsSearching(true);
+      try {
+        const details = await getPlaceDetails(prediction.placeId);
+        if (details) {
+          setSearchResults([details]);
+          setSelectedPlace(details);
+          setSelectedPin(null);
+          setCenter(details.location);
+          setZoom(16);
+          mapRef.current?.panTo(details.location);
+          mapRef.current?.setZoom(16);
+        }
+      } catch (error) {
+        toast('Place lookup failed', { description: error instanceof Error ? error.message : 'Please try again.' });
+      } finally {
+        setIsSearching(false);
+      }
+    },
+    []
+  );
+
+  const handlePlaceSelect = useCallback(
+    async (place: Place) => {
+      setSelectedPlace(place);
+      setSelectedPin(null);
+      setCenter(place.location);
+      setZoom(16);
+      mapRef.current?.panTo(place.location);
+      mapRef.current?.setZoom(16);
+
+      try {
+        const details = await getPlaceDetails(place.placeId);
+        if (details) {
+          setSelectedPlace(details);
+        }
+      } catch (error) {
+        toast('Details unavailable', { description: error instanceof Error ? error.message : 'Unable to fetch details.' });
+      }
+    },
+    []
+  );
+
+  const handlePinSelect = useCallback((pin: MapPin) => {
+    setSelectedPin(pin);
+    setSelectedPlace(null);
+    setCenter(pin.location);
+    setZoom(16);
+    mapRef.current?.panTo(pin.location);
+    mapRef.current?.setZoom(16);
+  }, []);
+
   const handleLocateMe = useCallback(() => {
     if (geolocation.position) {
-      if (center.lat === geolocation.position.lat && center.lng === geolocation.position.lng) {
-        setFollowMode(true);
-        geolocation.startWatching();
-      } else {
-        setCenter(geolocation.position);
-        setZoom(16);
-      }
+      setCenter(geolocation.position);
+      setZoom(15);
+      mapRef.current?.panTo(geolocation.position);
+      mapRef.current?.setZoom(15);
     } else {
       geolocation.getCurrentPosition();
     }
-  }, [geolocation, center]);
-
-  const handleResetBearing = useCallback(() => {
-    setBearing(0);
-  }, []);
-
-  const handleZoomIn = useCallback(() => {
-    setZoom(prev => Math.min(prev + 1, 21));
-  }, []);
-
-  const handleZoomOut = useCallback(() => {
-    setZoom(prev => Math.max(prev - 1, 1));
-  }, []);
-
-  const handleMapTypeChange = useCallback((type: typeof mapType) => {
-    setMapType(type);
-  }, []);
-
-  const handlePlaceSelect = useCallback((place: Place) => {
-    setSelectedPlace(place);
-    setCenter(place.location);
-    setZoom(17);
-    setMode('place-details');
-    setSheetState('half');
-    setIsSearchFocused(false);
-
-    mapsPersistence.recordDestinationVisit({
-      placeId: place.placeId,
-      name: place.name,
-      address: place.address,
-      location: place.location,
-    });
-  }, [mapsPersistence]);
-
-  const handleGetDirections = useCallback((place: Place) => {
-    setNavigation(prev => ({
-      ...prev,
-      origin: null,
-      destination: place,
-    }));
-    setMode('directions');
-    setSheetState('half');
-  }, []);
-
-  const handleStartNavigation = useCallback((route: RouteOption) => {
-    if (!navigation.destination) return;
-
-    const now = new Date();
-    const durationMs = typeof route.duration === 'number' ? route.duration * 1000 : 0;
-    const arrivalTime = new Date(now.getTime() + durationMs);
-
-    setNavigation(prev => ({
-      ...prev,
-      isNavigating: true,
-      currentRoute: route,
-      currentStepIndex: 0,
-      followMode: true,
-      estimatedArrival: arrivalTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      remainingDistance: route.distance,
-      remainingDuration: route.durationInTraffic?.toString() || route.duration,
-    }));
-    setMode('navigation');
-    setSheetState('collapsed');
-    setFollowMode(true);
-    geolocation.startWatching();
-  }, [navigation.destination, geolocation]);
-
-  const handleEndNavigation = useCallback(() => {
-    setNavigation({
-      isNavigating: false,
-      currentRoute: null,
-      currentStepIndex: 0,
-      origin: null,
-      destination: null,
-      waypoints: [],
-      followMode: false,
-      voiceMuted: false,
-      estimatedArrival: null,
-      remainingDistance: null,
-      remainingDuration: null,
-    });
-    setRoutes([]);
-    setMode('explore');
-    setSheetState('collapsed');
-    setFollowMode(false);
-    geolocation.stopWatching();
   }, [geolocation]);
 
-  const handleSearch = useCallback((query: string) => {
-    setSearchQuery(query);
-    if (query.length > 0) {
-      setMode('search');
-      setSheetState('half');
-    } else if (!isSearchFocused) {
-      setMode('explore');
-      setSheetState('collapsed');
-    }
-  }, [isSearchFocused]);
+  const handleMapClick = useCallback(async (location: LatLng) => {
+    if (!dropPinMode) return;
 
-  const handleSearchResultSelect = useCallback((place: Place) => {
-    handlePlaceSelect(place);
-    mapsPersistence.addRecentSearch({
-      query: searchQuery,
-      placeId: place.placeId,
-      placeName: place.name,
-      placeAddress: place.address,
-      location: place.location,
-    });
-    setSearchQuery('');
-    setSearchResults([]);
-  }, [handlePlaceSelect, mapsPersistence, searchQuery]);
+    setPinDialogOpen(true);
+    setIsPinSaving(false);
+    setPinDraft({ title: 'Dropped Pin', note: '', location, id: null });
 
-  const handleSheetStateChange = useCallback((state: BottomSheetState) => {
-    setSheetState(state);
-    if (state === 'collapsed' && mode !== 'navigation') {
-      if (mode === 'search') {
-        setSearchQuery('');
-        setSearchResults([]);
+    try {
+      const address = await reverseGeocode(location);
+      if (address) {
+        setPinDraft((prev) => ({ ...prev, note: address }));
       }
-      setMode('explore');
-      setSelectedPlace(null);
+    } catch {
+      // Optional address lookup failure is non-blocking.
     }
-  }, [mode]);
+  }, [dropPinMode]);
 
-  const handleSearchFocusChange = useCallback((focused: boolean) => {
-    setIsSearchFocused(focused);
-    if (focused && mode === 'explore') {
-      setSheetState('half');
+  const handleSavePin = useCallback(async () => {
+    if (!pinDraft.location || !pinDraft.title.trim()) return;
+
+    setIsPinSaving(true);
+    try {
+      if (pinDraft.id) {
+        const updated = await updatePin({
+          id: pinDraft.id,
+          title: pinDraft.title,
+          note: pinDraft.note,
+          location: pinDraft.location,
+        });
+        if (updated) {
+          toast('Pin updated');
+          setSelectedPin(updated);
+        }
+      } else {
+        const created = await createPin({
+          title: pinDraft.title,
+          note: pinDraft.note,
+          location: pinDraft.location,
+        });
+        if (created) {
+          toast('Pin saved');
+          setSelectedPin(created);
+        }
+      }
+      setPinDialogOpen(false);
+      setDropPinMode(false);
+    } catch (error) {
+      toast('Unable to save pin', { description: error instanceof Error ? error.message : 'Try again.' });
+    } finally {
+      setIsPinSaving(false);
     }
-  }, [mode]);
+  }, [pinDraft, createPin, updatePin]);
 
-  // Hide controls during navigation or when search is focused
-  const showControls = !navigation.isNavigating && !isSearchFocused;
+  const handleEditPin = useCallback((pin: MapPin) => {
+    setPinDraft({ title: pin.title, note: pin.note ?? '', location: pin.location, id: pin.id });
+    setPinDialogOpen(true);
+  }, []);
+
+  const handleDeletePin = useCallback(
+    async (pin: MapPin) => {
+      const success = await deletePin(pin.id);
+      if (success) {
+        toast('Pin removed');
+        if (selectedPin?.id === pin.id) {
+          setSelectedPin(null);
+        }
+      }
+    },
+    [deletePin, selectedPin]
+  );
+
+  const handleSavePlace = useCallback(
+    async (place: Place) => {
+      const existing = pins.find((pin) => pin.title === place.name && pin.location.lat === place.location.lat && pin.location.lng === place.location.lng);
+      if (existing) {
+        toast('Already saved');
+        return;
+      }
+
+      const created = await createPin({
+        title: place.name,
+        note: place.address,
+        location: place.location,
+      });
+
+      if (created) {
+        toast('Saved to pins');
+        setSelectedPin(created);
+      }
+    },
+    [createPin, pins]
+  );
+
+  const handleDirections = useCallback((place: Place) => {
+    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.address || place.name)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }, []);
+
+  const handlePinDrag = useCallback(
+    async (pin: MapPin, location: LatLng) => {
+      await updatePin({ id: pin.id, location });
+      toast('Pin location updated');
+    },
+    [updatePin]
+  );
 
   return (
     <MapProvider>
-      <div className="fixed inset-0 top-16 overflow-hidden">
-        {/* Full-bleed Map Canvas */}
-        <MapCanvas
-          center={center}
-          zoom={zoom}
-          bearing={bearing}
-          mapType={mapType}
-          showTraffic={mapsPersistence.settings.showTraffic}
-          userLocation={geolocation.position}
-          userHeading={geolocation.heading}
-          followMode={followMode}
+      <div className="fixed inset-0 top-16 flex h-[calc(100vh-4rem)] overflow-hidden bg-background">
+        <MapSidebar
+          collapsed={sidebarCollapsed}
+          onToggle={() => setSidebarCollapsed((prev) => !prev)}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          onSearchSubmit={handleSearchSubmit}
+          onSearchClear={() => {
+            setSearchQuery('');
+            setPredictions([]);
+            setSearchResults([]);
+          }}
+          predictions={predictions}
+          onPredictionSelect={handlePredictionSelect}
+          searchResults={searchResults}
+          isSearching={isSearching || isAutocompleteLoading}
+          selectedPlaceId={selectedPlace?.placeId ?? null}
+          onPlaceSelect={handlePlaceSelect}
           selectedPlace={selectedPlace}
-          routes={routes}
-          selectedRouteIndex={selectedRouteIndex}
-          incidents={mapsPersistence.settings.showIncidents ? mapsPersistence.incidents : []}
-          navigation={navigation}
-          onMapLoad={(map) => { mapRef.current = map; }}
-          onCenterChange={setCenter}
-          onZoomChange={setZoom}
-          onBearingChange={setBearing}
-          onPlaceClick={handlePlaceSelect}
+          onDirections={handleDirections}
+          onSavePlace={handleSavePlace}
+          pins={pins}
+          selectedPinId={selectedPin?.id ?? null}
+          onPinSelect={handlePinSelect}
+          onPinEdit={handleEditPin}
+          onPinDelete={handleDeletePin}
         />
 
-        {/* Floating Search Bar - Mobile only */}
-        {isMobile && (
-          <MapFloatingSearch
-            value={searchQuery}
-            onChange={handleSearch}
-            onResultSelect={handleSearchResultSelect}
-            onFocusChange={handleSearchFocusChange}
-            recentSearches={mapsPersistence.recentSearches}
-            onClearRecent={mapsPersistence.clearRecentSearches}
-            homePlace={mapsPersistence.homePlace}
-            workPlace={mapsPersistence.workPlace}
-            currentLocation={geolocation.position}
-            isNavigating={navigation.isNavigating}
+        <div className="relative flex-1">
+          <MapCanvas
+            center={center}
+            zoom={zoom}
+            mapType={mapType}
+            mapStyle={mapStyle}
+            showTraffic={mapsPersistence.settings.showTraffic}
+            userLocation={geolocation.position}
+            dropPinMode={dropPinMode}
+            places={searchResults}
+            pins={pins}
+            selectedPlaceId={selectedPlace?.placeId ?? null}
+            selectedPinId={selectedPin?.id ?? null}
+            onMapLoad={(map) => {
+              mapRef.current = map;
+            }}
+            onCenterChange={setCenter}
+            onZoomChange={setZoom}
+            onPlaceClick={handlePlaceSelect}
+            onPinClick={handlePinSelect}
+            onMapClick={handleMapClick}
+            onPinDrag={handlePinDrag}
           />
-        )}
 
-        {/* Floating Controls - Bottom right, minimal */}
-        <AnimatePresence>
-          {showControls && (
-            <MapFloatingControls
+          <div className="absolute right-4 top-4 z-30">
+            <MapTools
+              dropPinMode={dropPinMode}
+              onToggleDropPin={() => setDropPinMode((prev) => !prev)}
               onLocateMe={handleLocateMe}
-              onResetBearing={handleResetBearing}
-              onMapTypeChange={handleMapTypeChange}
-              isFollowing={followMode}
-              bearing={bearing}
-              currentMapType={mapType}
+              onZoomIn={() => setZoom((prev) => Math.min(prev + 1, 20))}
+              onZoomOut={() => setZoom((prev) => Math.max(prev - 1, 2))}
+              mapStyle={mapStyle}
+              onToggleStyle={() => setMapStyle((prev) => (prev === 'dark' ? 'light' : 'dark'))}
               isLocating={geolocation.isLoading}
-              hasLocation={!!geolocation.position}
             />
-          )}
-        </AnimatePresence>
+          </div>
 
-        {/* Floating Panel (Desktop) / Bottom Sheet (Mobile) */}
-        {isMobile ? (
-          <MapBottomSheet
-            state={sheetState}
-            onStateChange={handleSheetStateChange}
-            mode={mode}
-            selectedPlace={selectedPlace}
-            searchResults={searchResults}
-            routes={routes}
-            selectedRouteIndex={selectedRouteIndex}
-            navigation={navigation}
-            smartSuggestions={mapsPersistence.getSmartSuggestions()}
-            recentSearches={mapsPersistence.recentSearches}
-            homePlace={mapsPersistence.homePlace}
-            workPlace={mapsPersistence.workPlace}
-            incidents={mapsPersistence.incidents}
-            currentLocation={geolocation.position}
+          {isMobile && (
+            <div className="absolute left-4 right-4 top-4 z-40">
+              <MapSearchInput
+                value={searchQuery}
+                onChange={setSearchQuery}
+                onSubmit={handleSearchSubmit}
+                onClear={() => {
+                  setSearchQuery('');
+                  setPredictions([]);
+                  setSearchResults([]);
+                }}
+                isLoading={isSearching || isAutocompleteLoading}
+                predictions={predictions}
+                onPredictionSelect={handlePredictionSelect}
+                placeholder="Search nearby places"
+                variant="floating"
+              />
+            </div>
+          )}
+
+          {geolocation.error && (
+            <div className={cn(
+              'absolute left-4 bottom-6 z-30 rounded-2xl border border-border bg-background/90 px-4 py-3 text-xs text-muted-foreground shadow-lg backdrop-blur',
+              isMobile && 'bottom-28'
+            )}>
+              Location permission denied. Search still works without it.
+            </div>
+          )}
+        </div>
+
+        {isMobile && (
+          <MapMobileSheet
+            expanded={mobileSheetExpanded}
+            onToggle={() => setMobileSheetExpanded((prev) => !prev)}
+            results={searchResults}
+            pins={pins}
+            selectedPlaceId={selectedPlace?.placeId ?? null}
             onPlaceSelect={handlePlaceSelect}
-            onGetDirections={handleGetDirections}
-            onRouteSelect={setSelectedRouteIndex}
-            onStartNavigation={() => routes[selectedRouteIndex] && handleStartNavigation(routes[selectedRouteIndex])}
-            onEndNavigation={handleEndNavigation}
-            onReportIncident={mapsPersistence.reportIncident}
-            onVoteIncident={mapsPersistence.voteIncident}
-            onSavePlace={mapsPersistence.savePlace}
-          />
-        ) : (
-          <MapFloatingPanel
-            state={sheetState}
-            onStateChange={handleSheetStateChange}
-            mode={mode}
+            onPinSelect={handlePinSelect}
             selectedPlace={selectedPlace}
-            searchResults={searchResults}
-            routes={routes}
-            selectedRouteIndex={selectedRouteIndex}
-            navigation={navigation}
-            smartSuggestions={mapsPersistence.getSmartSuggestions()}
-            recentSearches={mapsPersistence.recentSearches}
-            homePlace={mapsPersistence.homePlace}
-            workPlace={mapsPersistence.workPlace}
-            incidents={mapsPersistence.incidents}
-            currentLocation={geolocation.position}
-            onPlaceSelect={handlePlaceSelect}
-            onGetDirections={handleGetDirections}
-            onRouteSelect={setSelectedRouteIndex}
-            onStartNavigation={() => routes[selectedRouteIndex] && handleStartNavigation(routes[selectedRouteIndex])}
-            onEndNavigation={handleEndNavigation}
-            onReportIncident={mapsPersistence.reportIncident}
-            onVoteIncident={mapsPersistence.voteIncident}
-            onSavePlace={mapsPersistence.savePlace}
-            searchQuery={searchQuery}
-            onSearchChange={handleSearch}
-            onSearchResultSelect={handleSearchResultSelect}
-            onClearRecent={mapsPersistence.clearRecentSearches}
+            onDirections={handleDirections}
+            onSavePlace={handleSavePlace}
           />
         )}
       </div>
+
+      <Dialog open={pinDialogOpen} onOpenChange={setPinDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{pinDraft.id ? 'Edit Pin' : 'Save Pin'}</DialogTitle>
+            <DialogDescription>Give this pin a title and optional note.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Input
+              value={pinDraft.title}
+              onChange={(event) => setPinDraft((prev) => ({ ...prev, title: event.target.value }))}
+              placeholder="Pin title"
+            />
+            <Textarea
+              value={pinDraft.note}
+              onChange={(event) => setPinDraft((prev) => ({ ...prev, note: event.target.value }))}
+              placeholder="Add a note or address"
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPinDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSavePin} disabled={!pinDraft.title.trim() || isPinSaving}>
+              {isPinSaving ? 'Saving...' : 'Save Pin'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MapProvider>
   );
 }
