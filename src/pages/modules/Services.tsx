@@ -22,7 +22,6 @@ import {
   ArrowLeft,
   Server,
   FileText,
-  ExternalLink,
   Plus,
   Radar,
   Target,
@@ -111,52 +110,12 @@ interface IntelligenceFinding {
   };
 }
 
-// Static intelligence findings data
-const intelligenceFindings: IntelligenceFinding[] = [
-  {
-    id: '1',
-    category: 'breach',
-    title: 'Credential Exposure in Historical Breach',
-    insight: 'Email address and hashed credentials were exposed in a 2021 data breach affecting a major professional networking platform.',
-    significance: 'While passwords were cryptographically protected, the exposure creates ongoing risk for targeted phishing and social engineering attempts.',
-    confidence: 95,
-    severity: 'moderate',
-    discovered: '2024-01-15',
-    lastVerified: '2 hours ago',
-    sources: [
-      { type: 'Breach Database', name: 'HaveIBeenPwned', methodology: 'Monitored breach aggregation and hash verification' },
-    ],
-    evidence: [
-      { type: 'metadata', label: 'Breach Event', content: 'LinkedIn Data Breach — June 2021 — 700M records' },
-      { type: 'list', label: 'Exposed Data Types', content: ['Email address', 'Full name', 'Phone number', 'Professional title'] },
-    ],
-    context: {
-      background: 'This breach resulted from an API vulnerability that allowed large-scale data scraping.',
-      implications: ['Email address is confirmed present in threat actor databases', 'Professional context enables targeted spear-phishing campaigns'],
-      recommendations: ['Rotate passwords for the affected platform', 'Enable two-factor authentication on all critical accounts'],
-    },
-  },
-  {
-    id: '2',
-    category: 'identity',
-    title: 'Cross-Platform Identity Correlation',
-    insight: 'A consistent digital identity was reconstructed across multiple public platforms using username patterns and biographical details.',
-    significance: 'This demonstrates how easily a comprehensive profile can be assembled from public sources.',
-    confidence: 92,
-    severity: 'informational',
-    discovered: '2024-01-15',
-    lastVerified: '1 hour ago',
-    sources: [
-      { type: 'Search Engine Intelligence', name: 'Google Dorking', methodology: 'Advanced search operators and pattern analysis' },
-    ],
-    evidence: [
-      { type: 'list', label: 'Confirmed Profiles', content: ['LinkedIn — Full professional history', 'GitHub — 47 public repositories', 'Twitter — Active account'] },
-    ],
-    context: {
-      recommendations: ['Review privacy settings on all identified platforms', 'Consider using distinct usernames for different contexts'],
-    },
-  },
-];
+interface OsintConfig {
+  hibpKey: string;
+  shodanKey: string;
+  proxyUrl: string;
+  userAgent: string;
+}
 
 const StatCard = ({ 
   label, 
@@ -204,7 +163,29 @@ const Services = () => {
   const [osintCategory, setOsintCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastCheckTime, setLastCheckTime] = useState<string>('Never');
+  const [osintFindings, setOsintFindings] = useState<IntelligenceFinding[]>([]);
+  const [breachTarget, setBreachTarget] = useState('');
+  const [identityTarget, setIdentityTarget] = useState('');
+  const [infrastructureTarget, setInfrastructureTarget] = useState('');
+  const [osintConfig, setOsintConfig] = useState<OsintConfig>(() => {
+    if (typeof window === 'undefined') {
+      return { hibpKey: '', shodanKey: '', proxyUrl: '', userAgent: 'Arlo OSINT Dashboard' };
+    }
+    const stored = window.localStorage.getItem('arlo-osint-config');
+    if (!stored) {
+      return { hibpKey: '', shodanKey: '', proxyUrl: '', userAgent: 'Arlo OSINT Dashboard' };
+    }
+    try {
+      return { userAgent: 'Arlo OSINT Dashboard', ...JSON.parse(stored) } as OsintConfig;
+    } catch {
+      return { hibpKey: '', shodanKey: '', proxyUrl: '', userAgent: 'Arlo OSINT Dashboard' };
+    }
+  });
+  const [osintLoading, setOsintLoading] = useState({
+    breach: false,
+    identity: false,
+    infrastructure: false,
+  });
   
   // Live data state
   const [devices, setDevices] = useState<Device[]>([]);
@@ -218,6 +199,18 @@ const Services = () => {
   useEffect(() => {
     document.title = "Arlo";
   }, []);
+
+  const saveOsintConfig = () => {
+    window.localStorage.setItem('arlo-osint-config', JSON.stringify(osintConfig));
+    toast.success('OSINT settings saved');
+  };
+
+  const resetOsintConfig = () => {
+    const cleared = { hibpKey: '', shodanKey: '', proxyUrl: '', userAgent: 'Arlo OSINT Dashboard' };
+    setOsintConfig(cleared);
+    window.localStorage.setItem('arlo-osint-config', JSON.stringify(cleared));
+    toast.success('OSINT settings cleared');
+  };
 
   const formatLastSeen = (isoDate: string): string => {
     if (!isoDate) return 'Unknown';
@@ -333,7 +326,6 @@ const Services = () => {
   const loadAllData = useCallback(async () => {
     setIsRefreshing(true);
     await Promise.all([loadDevices(), loadAuditEvents(), loadAuthKeys()]);
-    setLastCheckTime('Just now');
     setIsRefreshing(false);
   }, [loadDevices, loadAuditEvents, loadAuthKeys]);
 
@@ -377,7 +369,7 @@ const Services = () => {
       devices,
       recentEvents,
       authKeys,
-      intelligenceFindings,
+      intelligenceFindings: osintFindings,
     };
     const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -387,6 +379,266 @@ const Services = () => {
     a.click();
     URL.revokeObjectURL(url);
     toast.success('Security report exported');
+  };
+
+  const resolveProxyUrl = (targetUrl: string) => {
+    const proxy = osintConfig.proxyUrl?.trim();
+    if (!proxy) return targetUrl;
+    if (proxy.includes('{url}')) {
+      return proxy.replace('{url}', encodeURIComponent(targetUrl));
+    }
+    const separator = proxy.includes('?') ? '&' : '?';
+    return `${proxy}${separator}url=${encodeURIComponent(targetUrl)}`;
+  };
+
+  const createFindingId = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    return `finding-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  };
+
+  const markOsintLoading = (key: keyof typeof osintLoading, value: boolean) => {
+    setOsintLoading(prev => ({ ...prev, [key]: value }));
+  };
+
+  const addFindings = (findings: IntelligenceFinding[]) => {
+    if (findings.length === 0) return;
+    setOsintFindings(prev => [...findings, ...prev]);
+  };
+
+  const runBreachMonitor = async () => {
+    if (!breachTarget.trim()) {
+      toast.error('Enter an email address to monitor for breaches.');
+      return;
+    }
+    if (!osintConfig.hibpKey.trim()) {
+      toast.error('Add a Have I Been Pwned API key to run breach monitoring.');
+      return;
+    }
+    markOsintLoading('breach', true);
+    try {
+      const url = `https://haveibeenpwned.com/api/v3/breachedaccount/${encodeURIComponent(breachTarget.trim())}?truncateResponse=false`;
+      const response = await fetch(resolveProxyUrl(url), {
+        headers: {
+          'hibp-api-key': osintConfig.hibpKey.trim(),
+          'user-agent': osintConfig.userAgent || 'Arlo OSINT Dashboard',
+        },
+      });
+
+      if (response.status === 404) {
+        addFindings([{
+          id: createFindingId(),
+          category: 'breach',
+          title: 'No breaches detected',
+          insight: `No breaches were reported for ${breachTarget.trim()}.`,
+          significance: 'Continue monitoring for future exposures.',
+          confidence: 80,
+          severity: 'informational',
+          discovered: format(new Date(), 'yyyy-MM-dd'),
+          lastVerified: format(new Date(), 'MMM d, yyyy HH:mm'),
+          sources: [{ type: 'Breach Database', name: 'HaveIBeenPwned', methodology: 'Account breach lookup' }],
+          evidence: [{ type: 'text', label: 'Query', content: breachTarget.trim() }],
+          context: {
+            recommendations: ['Enable MFA wherever possible', 'Keep monitoring for new breaches'],
+          },
+        }]);
+        toast.success('No breaches reported for this account.');
+        return;
+      }
+
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || 'Failed to query breaches.');
+      }
+
+      const breaches = await response.json();
+      const findings = breaches.map((breach: any) => {
+        const dataClasses = breach.DataClasses || [];
+        const hasPasswords = dataClasses.some((cls: string) => cls.toLowerCase().includes('password'));
+        const hasFinancial = dataClasses.some((cls: string) => cls.toLowerCase().includes('credit') || cls.toLowerCase().includes('payment'));
+        const severity = hasPasswords || hasFinancial ? 'high' : dataClasses.length > 5 ? 'elevated' : 'moderate';
+        return {
+          id: createFindingId(),
+          category: 'breach',
+          title: `${breach.Name} breach exposure`,
+          insight: `The account ${breachTarget.trim()} appears in the ${breach.Title} breach (${breach.BreachDate}).`,
+          significance: breach.Description || 'Exposure may increase the risk of credential stuffing and targeted phishing.',
+          confidence: 90,
+          severity,
+          discovered: breach.BreachDate,
+          lastVerified: format(new Date(), 'MMM d, yyyy HH:mm'),
+          sources: [
+            { type: 'Breach Database', name: 'HaveIBeenPwned', methodology: 'Account breach lookup' },
+          ],
+          evidence: [
+            { type: 'metadata', label: 'Domain', content: breach.Domain || 'Unknown' },
+            { type: 'metadata', label: 'Records', content: `${breach.PwnCount} affected accounts` },
+            { type: 'list', label: 'Exposed Data', content: dataClasses },
+          ],
+          context: {
+            recommendations: [
+              'Reset credentials that may have been reused elsewhere',
+              'Monitor for phishing attempts referencing this breach',
+              'Enable MFA on impacted accounts',
+            ],
+          },
+        } as IntelligenceFinding;
+      });
+
+      addFindings(findings);
+      toast.success(`Breach monitoring completed (${breaches.length} result${breaches.length === 1 ? '' : 's'}).`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to run breach monitoring.');
+    } finally {
+      markOsintLoading('breach', false);
+    }
+  };
+
+  const runIdentityTrace = async () => {
+    if (!identityTarget.trim()) {
+      toast.error('Enter a username or keyword to trace.');
+      return;
+    }
+    markOsintLoading('identity', true);
+    try {
+      const url = `https://api.github.com/search/users?q=${encodeURIComponent(identityTarget.trim())}&per_page=5`;
+      const response = await fetch(resolveProxyUrl(url));
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || 'Failed to query identity sources.');
+      }
+      const data = await response.json();
+      const matches = data.items || [];
+      if (matches.length === 0) {
+        addFindings([{
+          id: createFindingId(),
+          category: 'identity',
+          title: 'No public GitHub profiles found',
+          insight: `No GitHub profiles matched "${identityTarget.trim()}".`,
+          significance: 'This reduces exposure in one major developer ecosystem.',
+          confidence: 75,
+          severity: 'informational',
+          discovered: format(new Date(), 'yyyy-MM-dd'),
+          lastVerified: format(new Date(), 'MMM d, yyyy HH:mm'),
+          sources: [{ type: 'OSINT Search', name: 'GitHub', methodology: 'Public user search' }],
+          evidence: [{ type: 'text', label: 'Query', content: identityTarget.trim() }],
+        }]);
+        toast.success('No public GitHub profiles found.');
+        return;
+      }
+
+      addFindings([{
+        id: createFindingId(),
+        category: 'identity',
+        title: 'Public developer profiles discovered',
+        insight: `Found ${matches.length} GitHub profiles related to "${identityTarget.trim()}".`,
+        significance: 'Public code repositories can reveal organizational ties and technical footprint.',
+        confidence: 82,
+        severity: 'low',
+        discovered: format(new Date(), 'yyyy-MM-dd'),
+        lastVerified: format(new Date(), 'MMM d, yyyy HH:mm'),
+        sources: [{ type: 'OSINT Search', name: 'GitHub', methodology: 'Public user search' }],
+        evidence: [{
+          type: 'list',
+          label: 'Top Matches',
+          content: matches.map((user: any) => `${user.login} — ${user.html_url}`),
+        }],
+        context: {
+          recommendations: [
+            'Review public repositories for sensitive information',
+            'Align developer usernames with brand guidelines',
+          ],
+        },
+      }]);
+      toast.success('Identity trace completed.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to run identity trace.');
+    } finally {
+      markOsintLoading('identity', false);
+    }
+  };
+
+  const runInfrastructureScan = async () => {
+    if (!infrastructureTarget.trim()) {
+      toast.error('Enter a domain or IP to scan.');
+      return;
+    }
+    markOsintLoading('infrastructure', true);
+    try {
+      const target = infrastructureTarget.trim().toLowerCase();
+      const normalized = target.replace(/^https?:\/\//, '').split('/')[0];
+      const isIp = /^(\d{1,3}\.){3}\d{1,3}$/.test(normalized);
+      const query = isIp ? `ip:${normalized}` : `domain:${normalized}`;
+      const url = `https://urlscan.io/api/v1/search/?q=${encodeURIComponent(query)}`;
+      const response = await fetch(resolveProxyUrl(url));
+      if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || 'Failed to query infrastructure sources.');
+      }
+      const data = await response.json();
+      const results = data.results || [];
+
+      addFindings([{
+        id: createFindingId(),
+        category: 'infrastructure',
+        title: 'Recent URLScan intelligence',
+        insight: results.length
+          ? `Found ${results.length} indexed scans related to ${normalized}.`
+          : `No recent URLScan entries found for ${normalized}.`,
+        significance: results.length
+          ? 'Indexed scans show how the asset appears to external observers.'
+          : 'A lack of indexed scans suggests limited exposure or scanning coverage.',
+        confidence: results.length ? 78 : 65,
+        severity: results.length ? 'moderate' : 'informational',
+        discovered: format(new Date(), 'yyyy-MM-dd'),
+        lastVerified: format(new Date(), 'MMM d, yyyy HH:mm'),
+        sources: [{ type: 'Infrastructure', name: 'urlscan.io', methodology: 'Public scan search' }],
+        evidence: results.length ? [{
+          type: 'list',
+          label: 'Latest Scans',
+          content: results.slice(0, 5).map((scan: any) => `${scan.task.time} — ${scan.page.url}`),
+        }] : [{ type: 'text', label: 'Query', content: query }],
+        context: {
+          recommendations: results.length
+            ? ['Review exposed headers and third-party calls', 'Validate TLS configuration']
+            : ['Trigger a fresh scan on urlscan.io for better visibility'],
+        },
+      }]);
+
+      if (isIp && osintConfig.shodanKey.trim()) {
+        const shodanUrl = `https://api.shodan.io/shodan/host/${encodeURIComponent(normalized)}?key=${encodeURIComponent(osintConfig.shodanKey.trim())}`;
+        const shodanResponse = await fetch(resolveProxyUrl(shodanUrl));
+        if (shodanResponse.ok) {
+          const shodanData = await shodanResponse.json();
+          addFindings([{
+            id: createFindingId(),
+            category: 'infrastructure',
+            title: 'Shodan host exposure',
+            insight: `Discovered ${shodanData.ports?.length || 0} open ports on ${normalized}.`,
+            significance: 'Open ports and service banners provide an attacker with reconnaissance data.',
+            confidence: 85,
+            severity: (shodanData.ports?.length || 0) > 5 ? 'elevated' : 'moderate',
+            discovered: format(new Date(), 'yyyy-MM-dd'),
+            lastVerified: format(new Date(), 'MMM d, yyyy HH:mm'),
+            sources: [{ type: 'Infrastructure', name: 'Shodan', methodology: 'Host intelligence lookup' }],
+            evidence: [
+              { type: 'metadata', label: 'Organization', content: shodanData.org || 'Unknown' },
+              { type: 'list', label: 'Open Ports', content: (shodanData.ports || []).map((port: number) => `${port}`) },
+            ],
+            context: {
+              recommendations: ['Close unused ports', 'Validate exposed services against hardening baselines'],
+            },
+          }]);
+        }
+      }
+
+      toast.success('Infrastructure scan completed.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to run infrastructure scan.');
+    } finally {
+      markOsintLoading('infrastructure', false);
+    }
   };
 
   const onlineDevices = devices.filter(d => d.status === 'online').length;
@@ -399,7 +651,7 @@ const Services = () => {
   });
 
   const filteredFindings = useMemo(() => {
-    return intelligenceFindings.filter(finding => {
+    return osintFindings.filter(finding => {
       const matchesCategory = osintCategory === 'all' || 
         (osintCategory === 'high-severity' ? ['high', 'elevated'].includes(finding.severity) : finding.category === osintCategory);
       const matchesSearch = !searchQuery || 
@@ -407,7 +659,7 @@ const Services = () => {
         finding.insight.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
     });
-  }, [osintCategory, searchQuery]);
+  }, [osintCategory, osintFindings, searchQuery]);
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -522,8 +774,8 @@ const Services = () => {
             />
             <StatCard
               label="Intelligence"
-              value={String(intelligenceFindings.length)}
-              helper={`${intelligenceFindings.filter(f => ['elevated', 'high'].includes(f.severity)).length} need review`}
+              value={String(osintFindings.length)}
+              helper={`${osintFindings.filter(f => ['elevated', 'high'].includes(f.severity)).length} need review`}
               tone="neutral"
               icon={<TrendingUp className="h-4 w-4" />}
             />
@@ -704,7 +956,13 @@ const Services = () => {
                   variant="outline"
                   size="sm"
                   className="h-9 bg-background/50 hover:bg-emerald-500/10 hover:text-emerald-600 hover:border-emerald-500/50"
-                  onClick={() => toast.info('New investigation coming soon')}
+                  onClick={() => {
+                    setBreachTarget('');
+                    setIdentityTarget('');
+                    setInfrastructureTarget('');
+                    setExpandedFinding(null);
+                    toast.success('Ready for a new investigation.');
+                  }}
                 >
                   <Plus className="h-4 w-4 mr-1.5" />
                   New Investigation
@@ -712,49 +970,151 @@ const Services = () => {
               </div>
             </div>
 
+            <div className="rounded-2xl border border-border/60 bg-muted/20 p-4 mb-5">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-foreground">OSINT API connections</p>
+                  <p className="text-xs text-muted-foreground">
+                    Store API keys locally and optionally route requests through a proxy for CORS or key protection.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={resetOsintConfig}>
+                    Reset
+                  </Button>
+                  <Button size="sm" onClick={saveOsintConfig}>
+                    Save
+                  </Button>
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">HIBP API key</p>
+                  <Input
+                    type="password"
+                    placeholder="hibp-api-key"
+                    value={osintConfig.hibpKey}
+                    onChange={(e) => setOsintConfig(prev => ({ ...prev, hibpKey: e.target.value }))}
+                    className="h-9 bg-background/60 text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Shodan API key (optional)</p>
+                  <Input
+                    type="password"
+                    placeholder="shodan-api-key"
+                    value={osintConfig.shodanKey}
+                    onChange={(e) => setOsintConfig(prev => ({ ...prev, shodanKey: e.target.value }))}
+                    className="h-9 bg-background/60 text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">OSINT proxy URL</p>
+                  <Input
+                    placeholder="https://your-proxy.example.com?url={url}"
+                    value={osintConfig.proxyUrl}
+                    onChange={(e) => setOsintConfig(prev => ({ ...prev, proxyUrl: e.target.value }))}
+                    className="h-9 bg-background/60 text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">User agent</p>
+                  <Input
+                    placeholder="Arlo OSINT Dashboard"
+                    value={osintConfig.userAgent}
+                    onChange={(e) => setOsintConfig(prev => ({ ...prev, userAgent: e.target.value }))}
+                    className="h-9 bg-background/60 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* Research Actions */}
-            <div className="grid gap-3 sm:grid-cols-3 mb-5">
-              <button
-                onClick={() => toast.info('Breach monitoring coming soon')}
-                className="group flex items-center gap-3 rounded-xl border border-border/60 bg-muted/30 p-4 text-left transition-all hover:border-emerald-500/50 hover:bg-emerald-500/5"
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-rose-500/10 text-rose-500">
-                  <AlertTriangle className="h-5 w-5" />
+            <div className="grid gap-3 lg:grid-cols-3 mb-5">
+              <div className="rounded-xl border border-border/60 bg-muted/30 p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-rose-500/10 text-rose-500">
+                    <AlertTriangle className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground text-sm">Breach Monitor</p>
+                    <p className="text-xs text-muted-foreground">Lookup exposed accounts via Have I Been Pwned</p>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <p className="font-medium text-foreground text-sm">Breach Monitor</p>
-                  <p className="text-xs text-muted-foreground">Check for exposed credentials</p>
+                <div className="flex flex-col gap-2">
+                  <Input
+                    placeholder="email@domain.com"
+                    value={breachTarget}
+                    onChange={(e) => setBreachTarget(e.target.value)}
+                    className="h-9 bg-background/60 text-sm"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={runBreachMonitor}
+                    disabled={osintLoading.breach}
+                    className="justify-center"
+                  >
+                    {osintLoading.breach ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ChevronRight className="h-4 w-4 mr-2" />}
+                    Check breaches
+                  </Button>
                 </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-              </button>
-              
-              <button
-                onClick={() => toast.info('Identity search coming soon')}
-                className="group flex items-center gap-3 rounded-xl border border-border/60 bg-muted/30 p-4 text-left transition-all hover:border-emerald-500/50 hover:bg-emerald-500/5"
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sky-500/10 text-sky-500">
-                  <Target className="h-5 w-5" />
+              </div>
+
+              <div className="rounded-xl border border-border/60 bg-muted/30 p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sky-500/10 text-sky-500">
+                    <Target className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground text-sm">Identity Trace</p>
+                    <p className="text-xs text-muted-foreground">Search public developer profiles</p>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <p className="font-medium text-foreground text-sm">Identity Trace</p>
-                  <p className="text-xs text-muted-foreground">Map digital footprint</p>
+                <div className="flex flex-col gap-2">
+                  <Input
+                    placeholder="username, brand, or keyword"
+                    value={identityTarget}
+                    onChange={(e) => setIdentityTarget(e.target.value)}
+                    className="h-9 bg-background/60 text-sm"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={runIdentityTrace}
+                    disabled={osintLoading.identity}
+                  >
+                    {osintLoading.identity ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ChevronRight className="h-4 w-4 mr-2" />}
+                    Trace identity
+                  </Button>
                 </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-              </button>
-              
-              <button
-                onClick={() => toast.info('Infrastructure scan coming soon')}
-                className="group flex items-center gap-3 rounded-xl border border-border/60 bg-muted/30 p-4 text-left transition-all hover:border-emerald-500/50 hover:bg-emerald-500/5"
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10 text-amber-500">
-                  <Server className="h-5 w-5" />
+              </div>
+
+              <div className="rounded-xl border border-border/60 bg-muted/30 p-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10 text-amber-500">
+                    <Server className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground text-sm">Infrastructure Scan</p>
+                    <p className="text-xs text-muted-foreground">Query URLScan (plus Shodan if key provided)</p>
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <p className="font-medium text-foreground text-sm">Infrastructure Scan</p>
-                  <p className="text-xs text-muted-foreground">Analyze attack surface</p>
+                <div className="flex flex-col gap-2">
+                  <Input
+                    placeholder="domain.com or 1.2.3.4"
+                    value={infrastructureTarget}
+                    onChange={(e) => setInfrastructureTarget(e.target.value)}
+                    className="h-9 bg-background/60 text-sm"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={runInfrastructureScan}
+                    disabled={osintLoading.infrastructure}
+                  >
+                    {osintLoading.infrastructure ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ChevronRight className="h-4 w-4 mr-2" />}
+                    Scan infrastructure
+                  </Button>
                 </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-              </button>
+              </div>
             </div>
 
             {/* Findings Section */}
@@ -854,8 +1214,10 @@ const Services = () => {
                     <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted/50 text-muted-foreground mb-4">
                       <Eye className="h-8 w-8" />
                     </div>
-                    <p className="font-medium text-foreground">No findings match your filter</p>
-                    <p className="text-sm text-muted-foreground mt-1">Try adjusting your search or category</p>
+                    <p className="font-medium text-foreground">No findings yet</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Run an investigation above or adjust your search filters.
+                    </p>
                   </div>
                 )}
               </div>
