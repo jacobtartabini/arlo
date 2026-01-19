@@ -18,6 +18,15 @@ export interface Place {
   photos?: string[];
 }
 
+export interface MapPin {
+  id: string;
+  title: string;
+  note?: string | null;
+  location: LatLng;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface SavedPlace extends Place {
   id: string;
   placeType: 'home' | 'work' | 'favorite';

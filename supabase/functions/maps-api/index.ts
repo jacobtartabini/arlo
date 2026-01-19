@@ -104,6 +104,68 @@ Deno.serve(async (req) => {
         });
       }
 
+      case 'text-search': {
+        const query = url.searchParams.get('query') || body?.query;
+        if (!query) {
+          return errorResponse(req, 'Search query is required', 400);
+        }
+
+        const location = url.searchParams.get('location') || body?.location;
+        const radius = url.searchParams.get('radius') || body?.radius || 24000;
+
+        const searchUrl = new URL('https://maps.googleapis.com/maps/api/place/textsearch/json');
+        searchUrl.searchParams.set('query', query);
+        searchUrl.searchParams.set('key', GOOGLE_MAPS_API_KEY);
+
+        if (location) {
+          searchUrl.searchParams.set('location', location);
+          searchUrl.searchParams.set('radius', String(radius));
+        }
+
+        const response = await fetch(searchUrl.toString());
+        const data = await response.json();
+
+        if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
+          return jsonResponse(req, { error: data.status, places: [] });
+        }
+
+        return jsonResponse(req, {
+          places: (data.results || []).map((place: any) => ({
+            placeId: place.place_id,
+            name: place.name,
+            address: place.formatted_address,
+            location: {
+              lat: place.geometry.location.lat,
+              lng: place.geometry.location.lng,
+            },
+            types: place.types,
+            openNow: place.opening_hours?.open_now,
+            rating: place.rating,
+          })),
+        });
+      }
+
+      case 'reverse-geocode': {
+        const location = url.searchParams.get('location') || body?.location;
+        if (!location) {
+          return errorResponse(req, 'Location is required', 400);
+        }
+
+        const geocodeUrl = new URL('https://maps.googleapis.com/maps/api/geocode/json');
+        geocodeUrl.searchParams.set('latlng', location);
+        geocodeUrl.searchParams.set('key', GOOGLE_MAPS_API_KEY);
+
+        const response = await fetch(geocodeUrl.toString());
+        const data = await response.json();
+
+        if (data.status !== 'OK') {
+          return jsonResponse(req, { error: data.status, address: null });
+        }
+
+        const firstResult = data.results?.[0];
+        return jsonResponse(req, { address: firstResult?.formatted_address ?? null });
+      }
+
       case 'directions': {
         if (req.method !== 'POST') {
           return errorResponse(req, 'POST required', 405);

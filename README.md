@@ -81,6 +81,19 @@ You can now securely access your Arlo API from anywhere on your Tailnet.
 
 ---
 
+## 🔐 Environment Variables (Web + Maps)
+
+To enable the web maps experience and Supabase edge functions, configure the following keys:
+
+| Variable | Purpose |
+| --- | --- |
+| `VITE_GOOGLE_MAPS_API_KEY` | Frontend Google Maps JS SDK loading (maps UI). |
+| `GOOGLE_PLACES_API_KEY` | Server-side Places/Geocoding calls in Supabase functions (recommended). |
+
+> If you only set `VITE_GOOGLE_MAPS_API_KEY`, the edge functions will fall back to it, but a dedicated server-side key is preferred for Places search.
+
+---
+
 ## 👤 Created by
 
 **Jacob Tartabini**
