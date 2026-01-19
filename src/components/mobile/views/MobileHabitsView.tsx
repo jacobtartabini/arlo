@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import {
@@ -7,12 +6,10 @@ import {
   Flame,
   Gift,
   BarChart3,
-  Calendar,
   Check,
-  ChevronRight,
+  SkipForward,
   Zap,
-  Target,
-  Sparkles,
+  Play,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -25,11 +22,10 @@ import { HabitInsights } from "@/components/habits/HabitInsights";
 import { RewardsStore } from "@/components/habits/RewardsStore";
 import { FocusMode } from "@/components/habits/FocusMode";
 import { toast } from "@/hooks/use-toast";
-import type { RoutineWithHabits } from "@/types/habits";
+import type { RoutineWithHabits, HabitWithStreak } from "@/types/habits";
 import { MobilePageLayout } from "../MobilePageLayout";
 
 export function MobileHabitsView() {
-  const navigate = useNavigate();
   const {
     habits,
     routines,
@@ -39,37 +35,49 @@ export function MobileHabitsView() {
     loading,
     loadData,
     completeHabit,
-    redeemReward,
   } = useHabits();
 
   const [createHabitOpen, setCreateHabitOpen] = useState(false);
   const [createRoutineOpen, setCreateRoutineOpen] = useState(false);
-  const [manageSheetOpen, setManageSheetOpen] = useState(false);
-  const [manageTab, setManageTab] = useState<"insights" | "rewards">("insights");
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetTab, setSheetTab] = useState<"insights" | "rewards">("insights");
   const [xpPopup, setXpPopup] = useState({ amount: 0, visible: false });
   const [focusRoutine, setFocusRoutine] = useState<RoutineWithHabits | null>(null);
+  const [completingHabits, setCompletingHabits] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
   const handleCompleteHabit = useCallback(async (habitId: string, skipped: boolean = false) => {
-    const result = await completeHabit(habitId, skipped);
+    if (completingHabits.has(habitId)) return;
     
-    if (result.success && result.xpEarned > 0) {
-      setXpPopup({ amount: result.xpEarned, visible: true });
-      setTimeout(() => setXpPopup({ amount: 0, visible: false }), 2000);
+    setCompletingHabits(prev => new Set(prev).add(habitId));
+    
+    try {
+      const result = await completeHabit(habitId, skipped);
       
-      if (result.bonuses.length > 0) {
-        toast({
-          title: skipped ? "Habit skipped" : "Habit completed!",
-          description: result.bonuses.join(' • '),
-        });
+      if (result.success && result.xpEarned > 0) {
+        setXpPopup({ amount: result.xpEarned, visible: true });
+        setTimeout(() => setXpPopup({ amount: 0, visible: false }), 2000);
+        
+        if (result.bonuses.length > 0) {
+          toast({
+            title: skipped ? "Habit skipped" : "Habit completed!",
+            description: result.bonuses.join(' • '),
+          });
+        }
       }
+      
+      return result;
+    } finally {
+      setCompletingHabits(prev => {
+        const next = new Set(prev);
+        next.delete(habitId);
+        return next;
+      });
     }
-    
-    return result;
-  }, [completeHabit]);
+  }, [completeHabit, completingHabits]);
 
   const handleStartRoutine = useCallback((routine: RoutineWithHabits) => {
     setFocusRoutine(routine);
@@ -82,18 +90,17 @@ export function MobileHabitsView() {
 
   // Filter today's data
   const todaysHabits = habits.filter(h => h.enabled && isScheduledForToday(h));
-  const completedToday = todaysHabits.filter(h => 
-    logs.some(l => l.habitId === h.id && format(new Date(l.completedAt), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd'))
-  );
-  const completionPercentage = todaysHabits.length > 0 
-    ? Math.round((completedToday.length / todaysHabits.length) * 100) 
-    : 0;
-
+  const standaloneHabits = todaysHabits.filter(h => !h.routineId);
   const today = new Date().getDay();
   const todaysRoutines = routines.filter(r => {
     const isScheduled = r.scheduleDays?.includes(today) ?? true;
     return r.habits.length > 0 && isScheduled;
   });
+
+  // Calculate progress
+  const completedCount = todaysHabits.filter(h => h.completedToday).length;
+  const totalCount = todaysHabits.length;
+  const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   if (loading) {
     return (
@@ -142,7 +149,7 @@ export function MobileHabitsView() {
                 initial={{ opacity: 0, y: 20, scale: 0.9 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -20, scale: 0.9 }}
-                className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-primary text-primary-foreground px-4 py-2 rounded-full font-semibold flex items-center gap-2"
+                className="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-amber-500 text-white px-4 py-2 rounded-full font-bold flex items-center gap-2 shadow-lg"
               >
                 <Zap className="h-4 w-4" />
                 +{xpPopup.amount} XP
@@ -154,43 +161,41 @@ export function MobileHabitsView() {
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="p-5 rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/10"
+            className="p-5 rounded-2xl bg-card border"
           >
             <div className="flex items-center justify-between mb-4">
               <div>
-                <p className="text-sm text-muted-foreground">Today's Progress</p>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-bold">{completedToday.length}</span>
-                  <span className="text-muted-foreground">/ {todaysHabits.length}</span>
+                <p className="text-sm text-muted-foreground mb-1">Today's Progress</p>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-3xl font-bold">{completedCount}</span>
+                  <span className="text-lg text-muted-foreground">/ {totalCount}</span>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="text-right">
-                  <div className="flex items-center gap-1.5 text-amber-500">
+              <div className="flex items-center gap-4">
+                <div className="text-center">
+                  <div className="flex items-center justify-center gap-1 text-orange-500">
                     <Flame className="h-4 w-4" />
-                    <span className="font-semibold">{progress?.currentStreak || 0}</span>
+                    <span className="font-bold">{progress?.currentStreak || 0}</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">Day streak</p>
+                  <p className="text-xs text-muted-foreground">streak</p>
                 </div>
-                <div className="text-right">
-                  <div className="flex items-center gap-1.5 text-primary">
-                    <Sparkles className="h-4 w-4" />
-                    <span className="font-semibold">{progress?.availableXp || 0}</span>
+                <div className="text-center">
+                  <div className="flex items-center justify-center gap-1 text-amber-500">
+                    <Zap className="h-4 w-4" />
+                    <span className="font-bold">{progress?.availableXp || 0}</span>
                   </div>
                   <p className="text-xs text-muted-foreground">XP</p>
                 </div>
               </div>
             </div>
-            <Progress value={completionPercentage} className="h-2" />
+            <Progress value={progressPercent} className="h-2" />
           </motion.div>
 
           {/* Routines */}
           {todaysRoutines.length > 0 && (
             <section>
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                  Routines
-                </h2>
+                <h2 className="text-sm font-medium text-muted-foreground">Routines</h2>
                 <Button 
                   variant="ghost" 
                   size="sm" 
@@ -201,119 +206,95 @@ export function MobileHabitsView() {
                   New
                 </Button>
               </div>
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {todaysRoutines.map((routine, index) => {
-                  const completedCount = routine.habits.filter(h =>
-                    logs.some(l => l.habitId === h.id && format(new Date(l.completedAt), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd'))
-                  ).length;
-                  const routineProgress = routine.habits.length > 0 
-                    ? Math.round((completedCount / routine.habits.length) * 100) 
+                  const routineProgress = routine.totalCount > 0 
+                    ? Math.round((routine.completedCount / routine.totalCount) * 100)
                     : 0;
+                  const isComplete = routine.completedCount === routine.totalCount && routine.totalCount > 0;
 
                   return (
-                    <motion.button
+                    <motion.div
                       key={routine.id}
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.05 }}
-                      onClick={() => handleStartRoutine(routine)}
-                      className="w-full p-4 rounded-xl bg-card border border-border/50 text-left active:scale-[0.98] transition-transform"
+                      className={cn(
+                        "p-4 rounded-xl border bg-card",
+                        isComplete && "border-emerald-500/30 bg-emerald-500/5"
+                      )}
                     >
-                      <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-lg bg-primary/10">
-                            <Target className="h-4 w-4 text-primary" />
+                          <div className={cn(
+                            "h-10 w-10 rounded-lg flex items-center justify-center",
+                            isComplete 
+                              ? "bg-emerald-500 text-white" 
+                              : "bg-primary/10 text-primary"
+                          )}>
+                            {isComplete ? <Check className="h-5 w-5" /> : <Play className="h-5 w-5" />}
                           </div>
                           <div>
                             <h3 className="font-medium">{routine.name}</h3>
                             <p className="text-xs text-muted-foreground">
-                              {completedCount}/{routine.habits.length} completed
+                              {routine.completedCount}/{routine.totalCount} completed
                             </p>
                           </div>
                         </div>
-                        <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                        {!isComplete && (
+                          <Button size="sm" onClick={() => handleStartRoutine(routine)}>
+                            Start
+                          </Button>
+                        )}
                       </div>
-                      <Progress value={routineProgress} className="h-1.5" />
-                    </motion.button>
+                      <Progress 
+                        value={routineProgress} 
+                        className={cn("h-1.5", isComplete && "[&>div]:bg-emerald-500")}
+                      />
+                    </motion.div>
                   );
                 })}
               </div>
             </section>
           )}
 
-          {/* Individual Habits */}
+          {/* Habits */}
           <section>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                Habits
+              <h2 className="text-sm font-medium text-muted-foreground">
+                {todaysRoutines.length > 0 ? "Individual Habits" : "Habits"}
               </h2>
             </div>
 
-            {todaysHabits.length === 0 ? (
+            {standaloneHabits.length === 0 && todaysRoutines.length === 0 ? (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="p-8 rounded-2xl border border-dashed bg-muted/20 text-center"
+                className="p-8 rounded-xl border border-dashed bg-muted/20 text-center"
               >
-                <Flame className="h-10 w-10 mx-auto text-muted-foreground/50 mb-3" />
-                <p className="text-sm text-muted-foreground mb-4">No habits for today</p>
+                <Flame className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
+                <p className="text-sm text-muted-foreground mb-4">No habits yet</p>
                 <Button size="sm" onClick={() => setCreateHabitOpen(true)}>
                   <Plus className="h-4 w-4 mr-1" />
                   Add Habit
                 </Button>
               </motion.div>
+            ) : standaloneHabits.length === 0 ? (
+              <div className="p-6 rounded-xl border border-dashed bg-muted/20 text-center">
+                <p className="text-sm text-muted-foreground">No standalone habits</p>
+              </div>
             ) : (
               <div className="space-y-2">
-                {todaysHabits.map((habit, index) => {
-                  const isCompleted = logs.some(
-                    l => l.habitId === habit.id && 
-                    format(new Date(l.completedAt), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
-                  );
-
-                  return (
-                    <motion.button
-                      key={habit.id}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.03 }}
-                      onClick={() => !isCompleted && handleCompleteHabit(habit.id)}
-                      disabled={isCompleted}
-                      className={cn(
-                        "w-full flex items-center gap-3 p-4 rounded-xl border transition-all active:scale-[0.98]",
-                        isCompleted
-                          ? "bg-primary/5 border-primary/20"
-                          : "bg-card border-border/50"
-                      )}
-                    >
-                      <div className={cn(
-                        "flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors",
-                        isCompleted
-                          ? "bg-primary border-primary"
-                          : "border-muted-foreground/30"
-                      )}>
-                        {isCompleted && <Check className="h-3.5 w-3.5 text-primary-foreground" />}
-                      </div>
-                      <div className="flex-1 text-left">
-                        <p className={cn(
-                          "font-medium",
-                          isCompleted && "line-through text-muted-foreground"
-                        )}>
-                          {habit.title}
-                        </p>
-                        {habit.description && (
-                          <p className="text-xs text-muted-foreground line-clamp-1">
-                            {habit.description}
-                          </p>
-                        )}
-                      </div>
-                      {habit.difficulty && (
-                        <span className="text-xs text-muted-foreground">
-                          +{habit.difficulty === 'hard' ? 15 : 10} XP
-                        </span>
-                      )}
-                    </motion.button>
-                  );
-                })}
+                {standaloneHabits.map((habit, index) => (
+                  <MobileHabitItem
+                    key={habit.id}
+                    habit={habit}
+                    index={index}
+                    isCompleting={completingHabits.has(habit.id)}
+                    onComplete={() => handleCompleteHabit(habit.id)}
+                    onSkip={() => handleCompleteHabit(habit.id, true)}
+                  />
+                ))}
               </div>
             )}
           </section>
@@ -324,8 +305,8 @@ export function MobileHabitsView() {
               variant="outline"
               className="h-auto py-4 flex flex-col items-center gap-2"
               onClick={() => {
-                setManageTab("insights");
-                setManageSheetOpen(true);
+                setSheetTab("insights");
+                setSheetOpen(true);
               }}
             >
               <BarChart3 className="h-5 w-5 text-primary" />
@@ -335,8 +316,8 @@ export function MobileHabitsView() {
               variant="outline"
               className="h-auto py-4 flex flex-col items-center gap-2"
               onClick={() => {
-                setManageTab("rewards");
-                setManageSheetOpen(true);
+                setSheetTab("rewards");
+                setSheetOpen(true);
               }}
             >
               <Gift className="h-5 w-5 text-primary" />
@@ -359,11 +340,11 @@ export function MobileHabitsView() {
         />
 
         {/* Insights & Rewards Sheet */}
-        <Sheet open={manageSheetOpen} onOpenChange={setManageSheetOpen}>
+        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
           <SheetContent side="bottom" className="h-[80vh] rounded-t-3xl">
             <SheetHeader className="pb-4">
               <SheetTitle className="flex items-center gap-2">
-                {manageTab === "insights" ? (
+                {sheetTab === "insights" ? (
                   <>
                     <BarChart3 className="h-5 w-5" />
                     Insights
@@ -379,22 +360,22 @@ export function MobileHabitsView() {
             
             <div className="flex gap-2 mb-4">
               <Button
-                variant={manageTab === "insights" ? "default" : "outline"}
+                variant={sheetTab === "insights" ? "default" : "outline"}
                 size="sm"
-                onClick={() => setManageTab("insights")}
+                onClick={() => setSheetTab("insights")}
               >
                 Insights
               </Button>
               <Button
-                variant={manageTab === "rewards" ? "default" : "outline"}
+                variant={sheetTab === "rewards" ? "default" : "outline"}
                 size="sm"
-                onClick={() => setManageTab("rewards")}
+                onClick={() => setSheetTab("rewards")}
               >
                 Rewards
               </Button>
             </div>
 
-            {manageTab === "insights" ? (
+            {sheetTab === "insights" ? (
               <HabitInsights habits={habits} progress={progress} logs={logs} />
             ) : (
               <RewardsStore 
@@ -407,5 +388,81 @@ export function MobileHabitsView() {
         </Sheet>
       </MobilePageLayout>
     </>
+  );
+}
+
+// Mobile habit item component
+function MobileHabitItem({ 
+  habit, 
+  index,
+  isCompleting,
+  onComplete, 
+  onSkip 
+}: { 
+  habit: HabitWithStreak; 
+  index: number;
+  isCompleting: boolean;
+  onComplete: () => void; 
+  onSkip: () => void;
+}) {
+  const isCompleted = habit.completedToday;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.03 }}
+      className={cn(
+        "flex items-center gap-3 p-4 rounded-xl border bg-card transition-all",
+        isCompleted && "border-emerald-500/30 bg-emerald-500/5"
+      )}
+    >
+      {/* Check button */}
+      <button
+        onClick={onComplete}
+        disabled={isCompleted || isCompleting}
+        className={cn(
+          "h-10 w-10 rounded-lg flex items-center justify-center border-2 transition-all shrink-0",
+          isCompleted 
+            ? "bg-emerald-500 border-emerald-500 text-white" 
+            : "border-border active:scale-95",
+          isCompleting && "opacity-50"
+        )}
+      >
+        <Check className={cn("h-5 w-5", !isCompleted && "text-muted-foreground")} />
+      </button>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <p className={cn(
+          "font-medium truncate",
+          isCompleted && "text-muted-foreground line-through"
+        )}>
+          {habit.title}
+        </p>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          {habit.streak > 0 && (
+            <span className="flex items-center gap-1 text-orange-500">
+              <Flame className="h-3 w-3" />
+              {habit.streak}d
+            </span>
+          )}
+          <span>+{habit.difficulty === 'hard' ? 25 : habit.difficulty === 'medium' ? 15 : 10} XP</span>
+        </div>
+      </div>
+
+      {/* Skip button */}
+      {!isCompleted && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground shrink-0"
+          onClick={onSkip}
+          disabled={isCompleting}
+        >
+          <SkipForward className="h-4 w-4" />
+        </Button>
+      )}
+    </motion.div>
   );
 }
