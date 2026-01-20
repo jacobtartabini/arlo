@@ -654,41 +654,79 @@ function ChatDesktop() {
       return;
     }
 
-    // Import supabase for uploads
-    const { supabase } = await import('@/integrations/supabase/client');
+    // Use storage-proxy edge function for secure uploads
+    const { getArloToken } = await import('@/lib/arloAuth');
+    const token = await getArloToken();
+    
+    if (!token) {
+      toast.error("Authentication required for file upload");
+      return;
+    }
 
     const uploadedFiles: UploadedFile[] = [];
+    const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
     for (const file of droppedFiles) {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const filePath = `uploads/${fileName}`;
+      try {
+        // Create form data for the storage proxy
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('fileName', file.name);
 
-      const { error: uploadError } = await supabase.storage
-        .from('chat-attachments')
-        .upload(filePath, file);
+        // Upload via storage-proxy edge function
+        const response = await fetch(
+          `${SUPABASE_URL}/functions/v1/storage-proxy/upload`,
+          {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData
+          }
+        );
 
-      if (uploadError) {
-        console.error('Upload error:', uploadError);
+        const result = await response.json();
+        
+        if (!response.ok || !result.success) {
+          console.error('Upload error:', result.error);
+          toast.error(`Failed to upload ${file.name}`);
+          continue;
+        }
+
+        // Get signed URL for the uploaded file
+        const signedUrlResponse = await fetch(
+          `${SUPABASE_URL}/functions/v1/storage-proxy/signed-url`,
+          {
+            method: 'POST',
+            headers: { 
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ path: result.path, expiresIn: 86400 }) // 24 hours
+          }
+        );
+
+        const signedUrlResult = await signedUrlResponse.json();
+        
+        if (!signedUrlResponse.ok || !signedUrlResult.success) {
+          console.error('Signed URL error:', signedUrlResult.error);
+          toast.error(`Failed to get URL for ${file.name}`);
+          continue;
+        }
+
+        const fileType = file.type.startsWith('image/') ? 'image' 
+          : (file.type === 'application/pdf' || file.type.includes('document')) ? 'document' 
+          : 'other';
+
+        uploadedFiles.push({
+          id: result.path,
+          name: file.name,
+          url: signedUrlResult.signedUrl,
+          type: fileType,
+          size: file.size,
+        });
+      } catch (error) {
+        console.error('Upload error:', error);
         toast.error(`Failed to upload ${file.name}`);
-        continue;
       }
-
-      const { data: urlData } = supabase.storage
-        .from('chat-attachments')
-        .getPublicUrl(filePath);
-
-      const fileType = file.type.startsWith('image/') ? 'image' 
-        : (file.type === 'application/pdf' || file.type.includes('document')) ? 'document' 
-        : 'other';
-
-      uploadedFiles.push({
-        id: fileName,
-        name: file.name,
-        url: urlData.publicUrl,
-        type: fileType,
-        size: file.size,
-      });
     }
 
     if (uploadedFiles.length > 0) {

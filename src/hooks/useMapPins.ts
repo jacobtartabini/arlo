@@ -16,6 +16,18 @@ interface UpdatePinInput {
   location?: LatLng;
 }
 
+// Type for the map_pins table (not in generated types yet)
+interface MapPinRow {
+  id: string;
+  title: string;
+  note: string | null;
+  latitude: number;
+  longitude: number;
+  user_key: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export function useMapPins() {
   const { userKey, isAuthenticated } = useAuth();
   const [pins, setPins] = useState<MapPin[]>([]);
@@ -32,11 +44,12 @@ export function useMapPins() {
     setIsLoading(true);
     setError(null);
 
-    const { data, error: fetchError } = await supabase
-      .from('map_pins')
+    // Use type assertion since map_pins may not be in generated types
+    const { data, error: fetchError } = await (supabase
+      .from('map_pins' as any)
       .select('*')
       .order('created_at', { ascending: false })
-      .setHeader('x-user-key', userKey);
+      .setHeader('x-user-key', userKey) as any);
 
     if (fetchError) {
       setError(fetchError.message);
@@ -45,7 +58,7 @@ export function useMapPins() {
     }
 
     setPins(
-      (data ?? []).map((pin) => ({
+      ((data ?? []) as MapPinRow[]).map((pin) => ({
         id: pin.id,
         title: pin.title,
         note: pin.note,
@@ -65,8 +78,8 @@ export function useMapPins() {
     async ({ title, note, location }: CreatePinInput) => {
       if (!userKey) return null;
 
-      const { data, error: insertError } = await supabase
-        .from('map_pins')
+      const { data, error: insertError } = await (supabase
+        .from('map_pins' as any)
         .insert({
           user_key: userKey,
           title,
@@ -76,20 +89,21 @@ export function useMapPins() {
         })
         .select()
         .single()
-        .setHeader('x-user-key', userKey);
+        .setHeader('x-user-key', userKey) as any);
 
       if (insertError) {
         setError(insertError.message);
         return null;
       }
 
+      const pinData = data as MapPinRow;
       const newPin: MapPin = {
-        id: data.id,
-        title: data.title,
-        note: data.note,
-        location: { lat: data.latitude, lng: data.longitude },
-        createdAt: data.created_at,
-        updatedAt: data.updated_at,
+        id: pinData.id,
+        title: pinData.title,
+        note: pinData.note,
+        location: { lat: pinData.latitude, lng: pinData.longitude },
+        createdAt: pinData.created_at,
+        updatedAt: pinData.updated_at,
       };
 
       setPins((prev) => [newPin, ...prev]);
@@ -110,26 +124,27 @@ export function useMapPins() {
         updates.longitude = location.lng;
       }
 
-      const { data, error: updateError } = await supabase
-        .from('map_pins')
+      const { data, error: updateError } = await (supabase
+        .from('map_pins' as any)
         .update(updates)
         .eq('id', id)
         .select()
         .single()
-        .setHeader('x-user-key', userKey);
+        .setHeader('x-user-key', userKey) as any);
 
       if (updateError) {
         setError(updateError.message);
         return null;
       }
 
+      const pinData = data as MapPinRow;
       const updatedPin: MapPin = {
-        id: data.id,
-        title: data.title,
-        note: data.note,
-        location: { lat: data.latitude, lng: data.longitude },
-        createdAt: data.created_at,
-        updatedAt: data.updated_at,
+        id: pinData.id,
+        title: pinData.title,
+        note: pinData.note,
+        location: { lat: pinData.latitude, lng: pinData.longitude },
+        createdAt: pinData.created_at,
+        updatedAt: pinData.updated_at,
       };
 
       setPins((prev) => prev.map((pin) => (pin.id === id ? updatedPin : pin)));
@@ -142,11 +157,11 @@ export function useMapPins() {
     async (id: string) => {
       if (!userKey) return false;
 
-      const { error: deleteError } = await supabase
-        .from('map_pins')
+      const { error: deleteError } = await (supabase
+        .from('map_pins' as any)
         .delete()
         .eq('id', id)
-        .setHeader('x-user-key', userKey);
+        .setHeader('x-user-key', userKey) as any);
 
       if (deleteError) {
         setError(deleteError.message);
