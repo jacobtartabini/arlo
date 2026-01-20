@@ -173,43 +173,7 @@ export async function verifyArloJWT(req: Request): Promise<ArloAuthResult> {
 
   const token = authHeader.slice(7); // Remove 'Bearer ' prefix
   
-  // Check for dev token (alg: none) from Lovable preview
-  try {
-    const parts = token.split('.');
-    if (parts.length >= 2) {
-      const headerJson = atob(parts[0]);
-      const header = JSON.parse(headerJson);
-      
-      if (header.alg === 'none') {
-        // Dev token - validate structure and accept in preview environments
-        const payloadJson = atob(parts[1]);
-        const payload = JSON.parse(payloadJson) as ArloJWTClaims;
-        
-        // Check issuer is lovable-dev
-        if (payload.iss === 'lovable-dev' && payload.sub) {
-          // Check expiration
-          const now = Math.floor(Date.now() / 1000);
-          if (payload.exp && payload.exp < now) {
-            console.log('[arloAuth] Dev token expired');
-            return { 
-              authenticated: false, 
-              error: 'Token expired',
-              userId: ''
-            };
-          }
-          
-          console.log('[arloAuth] Dev token accepted for:', payload.sub);
-          return {
-            authenticated: true,
-            claims: payload,
-            userId: payload.sub,
-          };
-        }
-      }
-    }
-  } catch {
-    // Not a dev token or malformed, continue with normal verification
-  }
+  // All tokens must be cryptographically signed - no dev/preview tokens accepted
   
   const ARLO_JWT_ISSUER = Deno.env.get('ARLO_JWT_ISSUER');
   const ARLO_JWT_AUDIENCE = Deno.env.get('ARLO_JWT_AUDIENCE');

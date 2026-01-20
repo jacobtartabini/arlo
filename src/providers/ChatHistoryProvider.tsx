@@ -92,21 +92,7 @@ function checkAuthFromSession(): boolean {
   return verified && !!expiry && Date.now() < parseInt(expiry);
 }
 
-// LocalStorage helpers for fallback
-const loadLocalConversations = (): Conversation[] => {
-  if (typeof window === "undefined") return [];
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw) as Conversation[];
-    if (!Array.isArray(parsed)) return [];
-    return parsed.sort((a, b) =>
-      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-    );
-  } catch {
-    return [];
-  }
-};
+// Note: loadLocalConversations removed - unauthenticated users have no access
 
 const loadActiveConversationId = (): string | null => {
   if (typeof window === "undefined") return null;
@@ -171,16 +157,8 @@ export function ChatHistoryProvider({
           setActiveConversationIdState(dbConversations[0].id);
         }
       } else {
-        // Fallback to localStorage for unauthenticated users
-        const localConversations = loadLocalConversations();
-        setConversations(localConversations);
-        
-        const savedActiveId = loadActiveConversationId();
-        if (savedActiveId && localConversations.some(c => c.id === savedActiveId)) {
-          setActiveConversationIdState(savedActiveId);
-        } else if (localConversations.length > 0) {
-          setActiveConversationIdState(localConversations[0].id);
-        }
+        // Unauthenticated users get no chat history
+        setConversations([]);
       }
 
       setIsLoading(false);
@@ -190,16 +168,7 @@ export function ChatHistoryProvider({
     loadData();
   }, [isAuthenticated, isInitialized, dbPersistence]);
 
-  // LocalStorage persistence for fallback
-  const persistToLocalStorage = useCallback((data: Conversation[]) => {
-    if (typeof window === "undefined") return true;
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-      return true;
-    } catch {
-      return false;
-    }
-  }, []);
+  // Note: localStorage persistence removed - auth required for all chat operations
 
   const setActiveConversationInternal = useCallback(
     (conversationId: string | null) => {
@@ -248,9 +217,6 @@ export function ChatHistoryProvider({
 
       setConversations((previous) => {
         const next = sortConversations([...previous, conversation]);
-        if (!isAuthenticated) {
-          persistToLocalStorage(next);
-        }
         return next;
       });
 
@@ -277,7 +243,7 @@ export function ChatHistoryProvider({
 
       return conversation;
     },
-    [isAuthenticated, persistToLocalStorage, setActiveConversationInternal, dbPersistence],
+    [isAuthenticated, setActiveConversationInternal, dbPersistence],
   );
 
   const ensureActiveConversation = useCallback(() => {
@@ -358,9 +324,6 @@ export function ChatHistoryProvider({
             ];
 
         const sortedConversations = sortConversations(next);
-        if (!isAuthenticated) {
-          persistToLocalStorage(sortedConversations);
-        }
         return sortedConversations;
       });
 
@@ -405,7 +368,6 @@ export function ChatHistoryProvider({
     [
       ensureActiveConversation,
       isAuthenticated,
-      persistToLocalStorage,
       setActiveConversationInternal,
       dbPersistence,
       conversations,
@@ -444,9 +406,6 @@ export function ChatHistoryProvider({
           };
         });
 
-        if (!isAuthenticated) {
-          persistToLocalStorage(updated);
-        }
         return sortConversations(updated);
       });
 
@@ -455,7 +414,7 @@ export function ChatHistoryProvider({
         dbPersistence.updateMessageStatus(messageId, status, overrides?.text);
       }
     },
-    [isAuthenticated, persistToLocalStorage, dbPersistence],
+    [isAuthenticated, dbPersistence],
   );
 
   const updateMessageText = useCallback(
@@ -475,9 +434,6 @@ export function ChatHistoryProvider({
           };
         });
 
-        if (!isAuthenticated) {
-          persistToLocalStorage(updated);
-        }
         return sortConversations(updated);
       });
 
@@ -486,7 +442,7 @@ export function ChatHistoryProvider({
         dbPersistence.updateMessageStatus(messageId, 'sent', text);
       }
     },
-    [isAuthenticated, persistToLocalStorage, dbPersistence],
+    [isAuthenticated, dbPersistence],
   );
 
   const updateConversationTitle = useCallback(
@@ -497,9 +453,6 @@ export function ChatHistoryProvider({
             ? { ...conversation, title }
             : conversation,
         );
-        if (!isAuthenticated) {
-          persistToLocalStorage(updated);
-        }
         return sortConversations(updated);
       });
 
@@ -508,7 +461,7 @@ export function ChatHistoryProvider({
         dbPersistence.updateConversationTitle(conversationId, title);
       }
     },
-    [isAuthenticated, persistToLocalStorage, dbPersistence],
+    [isAuthenticated, dbPersistence],
   );
 
   const deleteConversation = useCallback(
@@ -517,9 +470,6 @@ export function ChatHistoryProvider({
         const next = previous.filter(
           (conversation) => conversation.id !== conversationId,
         );
-        if (!isAuthenticated) {
-          persistToLocalStorage(next);
-        }
 
         if (activeConversationId === conversationId) {
           const fallbackId = next[0]?.id ?? null;
@@ -536,7 +486,6 @@ export function ChatHistoryProvider({
     },
     [
       isAuthenticated,
-      persistToLocalStorage,
       activeConversationId,
       setActiveConversationInternal,
       dbPersistence,
