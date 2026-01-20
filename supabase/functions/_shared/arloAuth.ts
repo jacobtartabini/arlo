@@ -67,7 +67,7 @@ export function getCorsHeaders(requestOrigin?: string | null): Record<string, st
     // Return headers that block the request
     return {
       'Access-Control-Allow-Origin': ALLOWED_ORIGINS[0], // Never echo back invalid origin
-      'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+      'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-user-key',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Max-Age': '86400',
       'Vary': 'Origin',
@@ -76,7 +76,7 @@ export function getCorsHeaders(requestOrigin?: string | null): Record<string, st
   
   return {
     'Access-Control-Allow-Origin': requestOrigin,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-user-key',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
