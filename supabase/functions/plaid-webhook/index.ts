@@ -5,6 +5,8 @@
  * - Transaction updates
  * - Account errors
  * - Item updates
+ * 
+ * SECURITY: Verifies webhook signatures to prevent forged requests
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0";
@@ -26,6 +28,154 @@ interface PlaidWebhook {
   };
   new_transactions?: number;
   removed_transactions?: string[];
+}
+
+interface JWKSet {
+  keys: Array<{
+    alg: string;
+    created_at: number;
+    crv: string;
+    expired_at: number | null;
+    kid: string;
+    kty: string;
+    use: string;
+    x: string;
+    y: string;
+  }>;
+}
+
+// Cache for JWK keys
+let jwkCache: { keys: JWKSet; fetchedAt: number } | null = null;
+const JWK_CACHE_TTL = 3600000; // 1 hour in ms
+
+async function getPlaidJWKS(): Promise<JWKSet> {
+  // Return cached keys if valid
+  if (jwkCache && Date.now() - jwkCache.fetchedAt < JWK_CACHE_TTL) {
+    return jwkCache.keys;
+  }
+
+  const response = await fetch(`${PLAID_BASE_URL}/webhook_verification_key/get`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      client_id: Deno.env.get('PLAID_CLIENT_ID'),
+      secret: Deno.env.get('PLAID_SECRET'),
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch Plaid JWKS: ${response.status}`);
+  }
+
+  const data = await response.json();
+  jwkCache = { keys: data, fetchedAt: Date.now() };
+  return data;
+}
+
+async function importKey(jwk: JWKSet['keys'][0]): Promise<CryptoKey> {
+  return await crypto.subtle.importKey(
+    'jwk',
+    {
+      kty: jwk.kty,
+      crv: jwk.crv,
+      x: jwk.x,
+      y: jwk.y,
+    },
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    true,
+    ['verify']
+  );
+}
+
+function base64UrlDecode(str: string): Uint8Array {
+  // Replace URL-safe characters and add padding
+  const base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  const paddedBase64 = base64 + '='.repeat((4 - base64.length % 4) % 4);
+  const binaryString = atob(paddedBase64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
+
+async function verifyPlaidWebhook(
+  body: string,
+  signedJwt: string
+): Promise<{ valid: boolean; error?: string }> {
+  try {
+    // Parse JWT
+    const parts = signedJwt.split('.');
+    if (parts.length !== 3) {
+      return { valid: false, error: 'Invalid JWT format' };
+    }
+
+    const [headerB64, payloadB64, signatureB64] = parts;
+    const headerJson = new TextDecoder().decode(base64UrlDecode(headerB64));
+    const header = JSON.parse(headerJson);
+
+    // Get the key ID from the header
+    const kid = header.kid;
+    if (!kid) {
+      return { valid: false, error: 'Missing key ID in JWT header' };
+    }
+
+    // Fetch JWKS and find matching key
+    const jwks = await getPlaidJWKS();
+    const jwk = jwks.keys?.find((k) => k.kid === kid);
+    if (!jwk) {
+      // Clear cache and retry once
+      jwkCache = null;
+      const refreshedJwks = await getPlaidJWKS();
+      const refreshedJwk = refreshedJwks.keys?.find((k) => k.kid === kid);
+      if (!refreshedJwk) {
+        return { valid: false, error: 'Key not found in JWKS' };
+      }
+    }
+
+    const key = await importKey(jwk!);
+
+    // Verify signature
+    const signedData = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
+    const signature = base64UrlDecode(signatureB64);
+
+    const isValid = await crypto.subtle.verify(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      key,
+      signature,
+      signedData
+    );
+
+    if (!isValid) {
+      return { valid: false, error: 'Invalid signature' };
+    }
+
+    // Parse and verify payload
+    const payloadJson = new TextDecoder().decode(base64UrlDecode(payloadB64));
+    const payload = JSON.parse(payloadJson);
+
+    // Check expiration
+    const now = Math.floor(Date.now() / 1000);
+    if (payload.iat && now - payload.iat > 300) { // 5 minute window
+      return { valid: false, error: 'JWT expired' };
+    }
+
+    // Verify body hash
+    const encoder = new TextEncoder();
+    const data = encoder.encode(body);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const bodyHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+    if (payload.request_body_sha256 !== bodyHash) {
+      return { valid: false, error: 'Body hash mismatch' };
+    }
+
+    return { valid: true };
+  } catch (error) {
+    console.error('[plaid-webhook] Verification error:', error);
+    return { valid: false, error: 'Verification failed' };
+  }
 }
 
 async function plaidRequest(endpoint: string, body: Record<string, unknown>) {
@@ -50,16 +200,38 @@ async function plaidRequest(endpoint: string, body: Record<string, unknown>) {
 }
 
 Deno.serve(async (req) => {
-  // Plaid webhooks don't require authentication but should be verified
-  // In production, you'd verify the webhook signature
-  
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 });
   }
 
   try {
-    const webhook: PlaidWebhook = await req.json();
-    console.log('[plaid-webhook] Received:', webhook.webhook_type, webhook.webhook_code);
+    // Get the raw body for signature verification
+    const rawBody = await req.text();
+    
+    // Get the Plaid-Verification header
+    const plaidSignature = req.headers.get('plaid-verification');
+    
+    if (!plaidSignature) {
+      console.error('[plaid-webhook] Missing Plaid-Verification header');
+      return new Response(JSON.stringify({ error: 'Missing signature' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Verify the webhook signature
+    const verifyResult = await verifyPlaidWebhook(rawBody, plaidSignature);
+    if (!verifyResult.valid) {
+      console.error('[plaid-webhook] Invalid signature:', verifyResult.error);
+      return new Response(JSON.stringify({ error: 'Invalid signature' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Parse the verified body
+    const webhook: PlaidWebhook = JSON.parse(rawBody);
+    console.log('[plaid-webhook] Verified webhook:', webhook.webhook_type, webhook.webhook_code);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;

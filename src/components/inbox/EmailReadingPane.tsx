@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import DOMPurify from 'dompurify';
 import { 
   Reply, 
   ReplyAll, 
@@ -43,6 +44,28 @@ import { cn } from '@/lib/utils';
 import type { InboxThread, InboxMessage, InboxProvider } from '@/types/inbox';
 import { PROVIDER_META } from '@/types/inbox';
 import { format } from 'date-fns';
+
+// Configure DOMPurify for email HTML sanitization
+const sanitizeEmailHtml = (html: string): string => {
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: [
+      'p', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'strike',
+      'a', 'ul', 'ol', 'li', 'blockquote', 'div', 'span',
+      'img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+      'table', 'thead', 'tbody', 'tr', 'td', 'th',
+      'pre', 'code', 'hr', 'sub', 'sup'
+    ],
+    ALLOWED_ATTR: [
+      'href', 'src', 'alt', 'title', 'class', 'style',
+      'width', 'height', 'align', 'valign', 'border',
+      'cellpadding', 'cellspacing', 'bgcolor', 'target', 'rel'
+    ],
+    ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|cid):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+    FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'textarea', 'select', 'option', 'meta', 'link', 'base', 'style'],
+    FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onmouseout', 'onmouseenter', 'onmouseleave', 'onfocus', 'onblur', 'onsubmit', 'onkeydown', 'onkeyup', 'onkeypress'],
+    ADD_ATTR: ['target'],
+  });
+};
 
 interface EmailReadingPaneProps {
   thread: InboxThread;
@@ -142,7 +165,7 @@ function EmailMessageCard({ message, isExpanded, onToggle, isLatest }: EmailMess
           <div className="prose prose-sm dark:prose-invert max-w-none">
             {message.body_html ? (
               <div 
-                dangerouslySetInnerHTML={{ __html: message.body_html }} 
+                dangerouslySetInnerHTML={{ __html: sanitizeEmailHtml(message.body_html) }} 
                 className="[&>*:first-child]:mt-0 [&>blockquote]:border-l-2 [&>blockquote]:border-muted-foreground/30 [&>blockquote]:pl-4 [&>blockquote]:text-muted-foreground"
               />
             ) : (
