@@ -101,7 +101,7 @@ export async function dataApi<T = unknown>(request: DataApiRequest): Promise<Dat
         error: payload,
       });
       return {
-        error: errorPayload,
+        error: { message: errorPayload.message || 'Request failed', code: errorPayload.code },
       };
     }
 

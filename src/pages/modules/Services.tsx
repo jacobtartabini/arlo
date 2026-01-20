@@ -294,20 +294,20 @@ const Services = () => {
   const loadDevices = useCallback(async () => {
     setIsLoadingDevices(true);
     try {
-      const data = await fetchTailscaleData('devices');
+      const data = await fetchTailscaleData('devices') as { devices?: Record<string, unknown>[] } | null;
       if (data?.devices) {
-        const formattedDevices: Device[] = data.devices.map((d: any) => ({
-          id: d.id,
-          name: d.name,
-          os: d.os,
-          status: d.status,
-          tailnetIp: d.tailnetIp,
-          lastSeen: formatLastSeen(d.lastSeen),
-          tags: d.tags || [],
-          user: d.user,
-          clientVersion: d.clientVersion,
-          updateAvailable: d.updateAvailable,
-          expires: d.expires,
+        const formattedDevices: Device[] = data.devices.map((device) => ({
+          id: device.id as string,
+          name: device.name as string,
+          os: device.os as string,
+          status: (device.status === 'online' ? 'online' : 'offline') as 'online' | 'offline',
+          tailnetIp: device.tailnetIp as string,
+          lastSeen: formatLastSeen(device.lastSeen as string),
+          tags: (device.tags as string[]) || [],
+          user: device.user as string,
+          clientVersion: device.clientVersion as string,
+          updateAvailable: device.updateAvailable as boolean,
+          expires: device.expires as string,
         }));
         setDevices(formattedDevices);
         setApiError(null);
@@ -322,20 +322,28 @@ const Services = () => {
   const loadAuditEvents = useCallback(async () => {
     setIsLoadingEvents(true);
     try {
-      const data = await fetchTailscaleData('audit-logs');
+      const data = await fetchTailscaleData('audit-logs') as { events?: Record<string, unknown>[] } | null;
       if (data?.events) {
-        const formattedEvents: AuditEvent[] = data.events.map((e: any) => ({
-          id: e.id,
-          type: e.type,
-          timestamp: formatLastSeen(e.timestamp),
-          device: e.device,
-          os: e.os || 'Unknown',
-          ip: e.ip,
-          location: e.location || 'Via Tailnet',
-          source: e.source,
-          actor: e.actor,
-          eventType: e.eventType,
-        }));
+        const formattedEvents: AuditEvent[] = data.events.map((e) => {
+          const rawType = e.type as string;
+          const validType = ['login', 'logout', 'failed', 'refresh'].includes(rawType) 
+            ? rawType as 'login' | 'logout' | 'failed' | 'refresh'
+            : 'login';
+          const rawSource = e.source as string;
+          const validSource = rawSource === 'public' ? 'public' : 'tailnet';
+          return {
+            id: e.id as string,
+            type: validType,
+            timestamp: formatLastSeen(e.timestamp as string),
+            device: e.device as string,
+            os: (e.os as string) || 'Unknown',
+            ip: e.ip as string,
+            location: (e.location as string) || 'Via Tailnet',
+            source: validSource as 'tailnet' | 'public',
+            actor: e.actor as string,
+            eventType: e.eventType as string,
+          };
+        });
         setRecentEvents(formattedEvents);
         setAuditError(null);
       }
@@ -351,9 +359,19 @@ const Services = () => {
   const loadAuthKeys = useCallback(async () => {
     setIsLoadingKeys(true);
     try {
-      const data = await fetchTailscaleData('keys');
+      const data = await fetchTailscaleData('keys') as { keys?: Record<string, unknown>[] } | null;
       if (data?.keys) {
-        setAuthKeys(data.keys);
+        const formattedKeys: AuthKey[] = data.keys.map((k) => ({
+          id: k.id as string,
+          description: k.description as string,
+          created: k.created as string,
+          expires: k.expires as string,
+          lastUsed: k.lastUsed as string | undefined,
+          reusable: k.reusable as boolean,
+          ephemeral: k.ephemeral as boolean,
+          tags: (k.tags as string[]) || [],
+        }));
+        setAuthKeys(formattedKeys);
       }
     } catch (err) {
       console.error('Failed to load auth keys:', err);

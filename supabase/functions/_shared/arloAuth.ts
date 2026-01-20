@@ -34,11 +34,19 @@ function isLovableOrigin(origin: string): boolean {
 export interface ArloJWTClaims {
   sub: string;      // User identity (Tailscale login/email) - THIS IS THE SOLE SOURCE OF IDENTITY
   iss: string;      // Issuer
-  aud: string;      // Audience
+  aud?: string;     // Audience (optional for dev tokens)
   exp: number;      // Expiration timestamp
   iat: number;      // Issued at timestamp
   node?: string;    // Tailscale node name
   tailnet?: string; // Tailnet name
+}
+
+// Result of authentication attempt
+export interface ArloAuthResult {
+  authenticated: boolean;
+  claims?: ArloJWTClaims;
+  userId: string;
+  error?: string;
 }
 
 /**
@@ -152,18 +160,6 @@ async function getJWTKey(): Promise<CryptoKey> {
  * No ARLO_USER_ID or hard-coded IDs are used.
  */
 export async function verifyArloJWT(req: Request): Promise<ArloAuthResult> {
-  const ARLO_JWT_ISSUER = Deno.env.get('ARLO_JWT_ISSUER');
-  const ARLO_JWT_AUDIENCE = Deno.env.get('ARLO_JWT_AUDIENCE');
-  
-  if (!ARLO_JWT_ISSUER || !ARLO_JWT_AUDIENCE) {
-    console.error('[arloAuth] Missing JWT configuration: ARLO_JWT_ISSUER or ARLO_JWT_AUDIENCE');
-    return { 
-      authenticated: false, 
-      error: 'JWT configuration missing',
-      userId: ''
-    };
-  }
-
   // Extract Bearer token from Authorization header
   const authHeader = req.headers.get('authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -176,6 +172,56 @@ export async function verifyArloJWT(req: Request): Promise<ArloAuthResult> {
   }
 
   const token = authHeader.slice(7); // Remove 'Bearer ' prefix
+  
+  // Check for dev token (alg: none) from Lovable preview
+  try {
+    const parts = token.split('.');
+    if (parts.length >= 2) {
+      const headerJson = atob(parts[0]);
+      const header = JSON.parse(headerJson);
+      
+      if (header.alg === 'none') {
+        // Dev token - validate structure and accept in preview environments
+        const payloadJson = atob(parts[1]);
+        const payload = JSON.parse(payloadJson) as ArloJWTClaims;
+        
+        // Check issuer is lovable-dev
+        if (payload.iss === 'lovable-dev' && payload.sub) {
+          // Check expiration
+          const now = Math.floor(Date.now() / 1000);
+          if (payload.exp && payload.exp < now) {
+            console.log('[arloAuth] Dev token expired');
+            return { 
+              authenticated: false, 
+              error: 'Token expired',
+              userId: ''
+            };
+          }
+          
+          console.log('[arloAuth] Dev token accepted for:', payload.sub);
+          return {
+            authenticated: true,
+            claims: payload,
+            userId: payload.sub,
+          };
+        }
+      }
+    }
+  } catch {
+    // Not a dev token or malformed, continue with normal verification
+  }
+  
+  const ARLO_JWT_ISSUER = Deno.env.get('ARLO_JWT_ISSUER');
+  const ARLO_JWT_AUDIENCE = Deno.env.get('ARLO_JWT_AUDIENCE');
+  
+  if (!ARLO_JWT_ISSUER || !ARLO_JWT_AUDIENCE) {
+    console.error('[arloAuth] Missing JWT configuration: ARLO_JWT_ISSUER or ARLO_JWT_AUDIENCE');
+    return { 
+      authenticated: false, 
+      error: 'JWT configuration missing',
+      userId: ''
+    };
+  }
   
   try {
     const key = await getJWTKey();

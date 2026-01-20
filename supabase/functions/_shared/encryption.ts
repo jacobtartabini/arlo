@@ -36,7 +36,7 @@ async function getEncryptionKey(): Promise<CryptoKey> {
 
   return crypto.subtle.importKey(
     'raw',
-    keyBytes,
+    keyBytes.buffer as ArrayBuffer,
     { name: ALGORITHM },
     false,
     ['encrypt', 'decrypt']
