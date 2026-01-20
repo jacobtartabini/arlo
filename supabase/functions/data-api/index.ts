@@ -49,7 +49,10 @@ const ALLOWED_TABLES = [
   'finance_subscriptions', 'finance_gift_cards', 'finance_gift_card_usage',
   'finance_portfolio', 'finance_watchlist', 'finance_settings',
   // Voice system tables
-  'voice_settings'
+  'voice_settings',
+  // Maps system tables
+  'map_recent_searches', 'map_user_settings', 'map_destination_patterns',
+  'map_incidents', 'map_incident_votes'
 ]
 
 // Fields that should be encrypted when stored
