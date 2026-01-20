@@ -60,6 +60,10 @@ const ENCRYPTED_FIELDS: Record<string, string[]> = {
   'user_settings': ['api_token']
 }
 
+const SENSITIVE_FIELDS: Record<string, string[]> = {
+  'finance_linked_accounts': ['plaid_access_token']
+}
+
 // Tables that don't have user_key directly but use parent table references
 // These tables need special handling - don't auto-filter by user_key
 const PARENT_REF_TABLES: Record<string, { parentTable: string; foreignKey: string }> = {
@@ -119,6 +123,26 @@ async function decryptSensitiveFields(
     return Promise.all(data.map(decryptRecord))
   }
   return decryptRecord(data)
+}
+
+function stripSensitiveFields(
+  table: string,
+  data: Record<string, unknown> | Record<string, unknown>[] | null
+): Record<string, unknown> | Record<string, unknown>[] | null {
+  if (!data) return data
+  const fieldsToStrip = SENSITIVE_FIELDS[table]
+  if (!fieldsToStrip?.length) return data
+  const stripRecord = (record: Record<string, unknown>) => {
+    const result = { ...record }
+    for (const field of fieldsToStrip) {
+      delete result[field]
+    }
+    return result
+  }
+  if (Array.isArray(data)) {
+    return data.map(stripRecord)
+  }
+  return stripRecord(data)
 }
 
 interface ErrorDetails {
@@ -302,7 +326,10 @@ Deno.serve(async (req) => {
         const queryResult = await query
         // Decrypt sensitive fields before returning
         result = {
-          data: await decryptSensitiveFields(table, queryResult.data as Record<string, unknown>[] | null),
+          data: stripSensitiveFields(
+            table,
+            await decryptSensitiveFields(table, queryResult.data as Record<string, unknown>[] | null)
+          ),
           error: queryResult.error
         }
         break
@@ -328,7 +355,10 @@ Deno.serve(async (req) => {
         
         // Decrypt before returning
         result = {
-          data: await decryptSensitiveFields(table, insertResult.data as Record<string, unknown> | null),
+          data: stripSensitiveFields(
+            table,
+            await decryptSensitiveFields(table, insertResult.data as Record<string, unknown> | null)
+          ),
           error: insertResult.error
         }
         break
@@ -357,7 +387,10 @@ Deno.serve(async (req) => {
         
         // Decrypt before returning
         result = {
-          data: await decryptSensitiveFields(table, updateResult.data as Record<string, unknown> | null),
+          data: stripSensitiveFields(
+            table,
+            await decryptSensitiveFields(table, updateResult.data as Record<string, unknown> | null)
+          ),
           error: updateResult.error
         }
         break
@@ -396,7 +429,10 @@ Deno.serve(async (req) => {
         
         // Decrypt before returning
         result = {
-          data: await decryptSensitiveFields(table, upsertResult.data as Record<string, unknown> | null),
+          data: stripSensitiveFields(
+            table,
+            await decryptSensitiveFields(table, upsertResult.data as Record<string, unknown> | null)
+          ),
           error: upsertResult.error
         }
         break

@@ -29,10 +29,16 @@ const PLAID_BASE_URL = Deno.env.get('PLAID_ENV') === 'sandbox'
     : 'https://production.plaid.com';
 
 interface PlaidRequest {
-  action: 'create_link_token' | 'exchange_token' | 'sync_transactions' | 'get_balances' | 'get_recurring' | 'remove_item';
+  action?: 'create_link_token' | 'exchange_token' | 'exchange_public_token' | 'sync_transactions' | 'get_balances' | 'get_recurring' | 'remove_item';
   public_token?: string;
   account_id?: string;
   item_id?: string;
+  metadata?: {
+    institution?: {
+      name?: string;
+      institution_id?: string;
+    };
+  };
 }
 
 async function plaidRequest(endpoint: string, body: Record<string, unknown>) {
@@ -83,7 +89,18 @@ Deno.serve(async (req) => {
 
   try {
     const body: PlaidRequest = await req.json();
-    const { action } = body;
+    const url = new URL(req.url);
+    const functionPathIndex = url.pathname.indexOf('/plaid-api');
+    const subPath = functionPathIndex >= 0
+      ? url.pathname.slice(functionPathIndex + '/plaid-api'.length)
+      : '';
+    const pathAction =
+      subPath === '/plaid/create_link_token'
+        ? 'create_link_token'
+        : subPath === '/plaid/exchange_public_token'
+          ? 'exchange_public_token'
+          : undefined;
+    const action = pathAction ?? body.action;
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -112,7 +129,8 @@ Deno.serve(async (req) => {
         return jsonResponse(req, { link_token: data.link_token });
       }
 
-      case 'exchange_token': {
+      case 'exchange_token':
+      case 'exchange_public_token': {
         // Exchange public token for access token
         if (!body.public_token) {
           return errorResponse(req, 'public_token required', 400);
@@ -125,24 +143,27 @@ Deno.serve(async (req) => {
         const accessToken = exchangeData.access_token;
         const itemId = exchangeData.item_id;
 
-        // Get institution info
-        const itemData = await plaidRequest('/item/get', {
-          access_token: accessToken,
-        });
-
-        const institutionId = itemData.item.institution_id;
+        const metadataInstitution = body.metadata?.institution;
+        const fallbackItemData = !metadataInstitution?.institution_id
+          ? await plaidRequest('/item/get', { access_token: accessToken })
+          : null;
+        const institutionId = metadataInstitution?.institution_id ?? fallbackItemData?.item?.institution_id;
         
         // Get institution details
         let institutionName = 'Unknown Bank';
         let institutionLogo = null;
         try {
-          const instData = await plaidRequest('/institutions/get_by_id', {
-            institution_id: institutionId,
-            country_codes: ['US'],
-            options: { include_optional_metadata: true },
-          });
-          institutionName = instData.institution.name;
-          institutionLogo = instData.institution.logo;
+          if (institutionId) {
+            const instData = await plaidRequest('/institutions/get_by_id', {
+              institution_id: institutionId,
+              country_codes: ['US'],
+              options: { include_optional_metadata: true },
+            });
+            institutionName = instData.institution.name;
+            institutionLogo = instData.institution.logo;
+          } else if (metadataInstitution?.name) {
+            institutionName = metadataInstitution.name;
+          }
         } catch (e) {
           console.log('[plaid-api] Could not fetch institution details:', e);
         }
@@ -189,12 +210,7 @@ Deno.serve(async (req) => {
         // Trigger initial transaction sync
         await syncTransactions(supabase, userKey, itemId, encryptedToken);
 
-        return jsonResponse(req, { 
-          success: true, 
-          item_id: itemId,
-          institution_name: institutionName,
-          accounts_linked: accounts.length,
-        });
+        return jsonResponse(req, { item_id: itemId });
       }
 
       case 'sync_transactions': {

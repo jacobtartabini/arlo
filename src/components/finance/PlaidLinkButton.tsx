@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { usePlaidLink } from "react-plaid-link";
+import { usePlaidLink, type PlaidLinkOnSuccessMetadata } from "react-plaid-link";
 import { Button } from "@/components/ui/button";
 import { Loader2, Link2 } from "lucide-react";
 import { useFinancePersistence } from "@/hooks/useFinancePersistence";
@@ -12,12 +12,12 @@ type PlaidLinkButtonProps = {
 export function PlaidLinkButton({ onSuccess }: PlaidLinkButtonProps) {
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const { plaidRequest } = useFinancePersistence();
+  const { createLinkToken, exchangePublicToken } = useFinancePersistence();
 
   useEffect(() => {
-    const createLinkToken = async () => {
+    const fetchLinkToken = async () => {
       try {
-        const response = await plaidRequest("create_link_token", {});
+        const response = await createLinkToken();
         if (response.link_token) {
           setLinkToken(response.link_token);
         }
@@ -25,18 +25,14 @@ export function PlaidLinkButton({ onSuccess }: PlaidLinkButtonProps) {
         console.error("Failed to create link token:", error);
       }
     };
-    createLinkToken();
-  }, [plaidRequest]);
+    fetchLinkToken();
+  }, [createLinkToken]);
 
   const handleSuccess = useCallback(
-    async (publicToken: string, metadata: { institution?: { name?: string; institution_id?: string } }) => {
+    async (publicToken: string, metadata: PlaidLinkOnSuccessMetadata) => {
       setLoading(true);
       try {
-        await plaidRequest("exchange_public_token", {
-          public_token: publicToken,
-          institution_name: metadata.institution?.name || "Unknown",
-          institution_id: metadata.institution?.institution_id,
-        });
+        await exchangePublicToken(publicToken, metadata);
         toast.success("Account connected successfully!");
         onSuccess?.();
       } catch (error) {
@@ -46,7 +42,7 @@ export function PlaidLinkButton({ onSuccess }: PlaidLinkButtonProps) {
         setLoading(false);
       }
     },
-    [plaidRequest, onSuccess]
+    [exchangePublicToken, onSuccess]
   );
 
   const { open, ready } = usePlaidLink({
