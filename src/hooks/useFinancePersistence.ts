@@ -240,6 +240,42 @@ export function useFinancePersistence() {
     }
   }, [isAuthenticated]);
 
+  const plaidEndpointRequest = useCallback(async (
+    path: string,
+    data?: Record<string, unknown>
+  ) => {
+    const token = await getArloToken();
+    if (!isAuthenticated || !token) {
+      console.log('[useFinancePersistence] Plaid request skipped - not authenticated');
+      return null;
+    }
+
+    try {
+      setLoading(true);
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/plaid-api${path}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(data ?? {}),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Plaid API error');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('[useFinancePersistence] Plaid endpoint error:', error);
+      toast.error(error instanceof Error ? error.message : 'Plaid connection failed');
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, [isAuthenticated]);
+
   const stocksRequest = useCallback(async (
     action: string,
     data?: Record<string, unknown>
@@ -282,12 +318,18 @@ export function useFinancePersistence() {
   }, [apiRequest]);
 
   const createLinkToken = useCallback(async () => {
-    return await plaidRequest('create_link_token');
-  }, [plaidRequest]);
+    return await plaidEndpointRequest('/plaid/create_link_token');
+  }, [plaidEndpointRequest]);
 
-  const exchangePublicToken = useCallback(async (publicToken: string) => {
-    return await plaidRequest('exchange_token', { public_token: publicToken });
-  }, [plaidRequest]);
+  const exchangePublicToken = useCallback(async (
+    publicToken: string,
+    metadata?: Record<string, unknown>
+  ) => {
+    return await plaidEndpointRequest('/plaid/exchange_public_token', {
+      public_token: publicToken,
+      metadata,
+    });
+  }, [plaidEndpointRequest]);
 
   const syncTransactions = useCallback(async (itemId?: string) => {
     return await plaidRequest('sync_transactions', itemId ? { item_id: itemId } : {});
