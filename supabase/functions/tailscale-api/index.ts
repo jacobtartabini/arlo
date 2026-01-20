@@ -162,7 +162,9 @@ Deno.serve(async (req) => {
       // Fetch audit logs - need to use the admin API
       // Note: Audit logs require a Tailscale plan that supports them
       const params = new URLSearchParams({ stream: 'audit' })
-      if (body.start) params.set('start', body.start)
+      // Default to last 7 days if no start date provided
+      const defaultStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+      params.set('start', body.start || defaultStart)
       if (body.end) params.set('end', body.end)
       if (body.cursor) params.set('cursor', body.cursor)
       const response = await fetch(`${baseUrl}/logs?${params.toString()}`, { headers })
