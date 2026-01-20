@@ -184,7 +184,6 @@ export function useFinancePersistence() {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'x-user-key': userKey,
         },
         body: JSON.stringify({ action, table, ...data }),
       });
