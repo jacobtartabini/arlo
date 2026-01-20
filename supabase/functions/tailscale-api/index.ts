@@ -1,9 +1,9 @@
-import { 
-  verifyArloJWT, 
-  handleCorsOptions, 
-  jsonResponse, 
-  unauthorizedResponse, 
-  errorResponse 
+import {
+  verifyArloJWT,
+  handleCorsOptions,
+  validateOrigin,
+  jsonResponse,
+  getCorsHeaders,
 } from '../_shared/arloAuth.ts'
 
 interface TailscaleDevice {
@@ -44,6 +44,9 @@ interface TailscaleAuditEvent {
 }
 
 Deno.serve(async (req) => {
+  const requestId = crypto.randomUUID()
+  const url = new URL(req.url)
+
   // Log incoming request details for debugging
   console.log('[tailscale-api] Request received:', req.method, req.url)
   console.log('[tailscale-api] Origin:', req.headers.get('origin'))
@@ -56,12 +59,24 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const originError = validateOrigin(req)
+    if (originError) return originError
+
+    if (req.method !== 'POST') {
+      return jsonError(req, 405, 'method_not_allowed', 'Method not allowed', {
+        requestId,
+        allowed: ['POST'],
+      })
+    }
+
     // Verify JWT authentication
     const authResult = await verifyArloJWT(req)
     
     if (!authResult.authenticated) {
       console.log('[tailscale-api] Authentication failed:', authResult.error)
-      return unauthorizedResponse(req, authResult.error || 'Authentication required')
+      return jsonError(req, 401, 'unauthorized', authResult.error || 'Authentication required', {
+        requestId,
+      })
     }
 
     // userId is derived from JWT.sub - no ARLO_USER_ID used
@@ -71,14 +86,33 @@ Deno.serve(async (req) => {
     const TAILSCALE_TAILNET = Deno.env.get('TAILSCALE_TAILNET')
 
     if (!TAILSCALE_API_KEY) {
-      return errorResponse(req, 'Tailscale API key not configured', 500)
+      return jsonError(req, 500, 'config_missing', 'Tailscale API key not configured', {
+        requestId,
+      })
     }
 
     if (!TAILSCALE_TAILNET) {
-      return errorResponse(req, 'Tailscale tailnet not configured', 500)
+      return jsonError(req, 500, 'config_missing', 'Tailscale tailnet not configured', {
+        requestId,
+      })
     }
 
-    const { action } = await req.json()
+    let body: { action?: string; debug?: boolean; limit?: number; start?: string; end?: string; cursor?: string }
+    try {
+      body = await req.json()
+    } catch (error) {
+      return jsonError(req, 422, 'invalid_json', 'Request body must be valid JSON', {
+        requestId,
+        error: error instanceof Error ? error.message : error,
+      })
+    }
+
+    const { action } = body
+    const debug = body.debug === true
+    if (!action) {
+      return jsonError(req, 422, 'missing_fields', 'Action is required', { requestId })
+    }
+
     const baseUrl = `https://api.tailscale.com/api/v2/tailnet/${TAILSCALE_TAILNET}`
     const headers = {
       'Authorization': `Bearer ${TAILSCALE_API_KEY}`,
@@ -90,9 +124,14 @@ Deno.serve(async (req) => {
       const response = await fetch(`${baseUrl}/devices`, { headers })
       
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error('[tailscale-api] Tailscale API error:', response.status, errorText)
-        return errorResponse(req, `Tailscale API error: ${response.status}`, response.status)
+        const errorPayload = await readResponseBody(response)
+        console.error('[tailscale-api] Tailscale API error:', response.status, errorPayload)
+        return jsonError(req, 502, 'upstream_error', 'Tailscale API error', {
+          requestId,
+          action,
+          upstreamStatus: response.status,
+          upstreamBody: errorPayload,
+        })
       }
 
       const data = await response.json()
@@ -113,25 +152,38 @@ Deno.serve(async (req) => {
         expires: device.expires,
       }))
 
-      return jsonResponse(req, { devices: transformedDevices })
+      return jsonResponse(req, {
+        devices: transformedDevices,
+        ...(debug ? { debug: { requestId, action, status: response.status } } : {}),
+      })
     }
 
     if (action === 'audit-logs') {
       // Fetch audit logs - need to use the admin API
       // Note: Audit logs require a Tailscale plan that supports them
-      const response = await fetch(`${baseUrl}/logs?stream=audit`, { headers })
+      const params = new URLSearchParams({ stream: 'audit' })
+      if (body.start) params.set('start', body.start)
+      if (body.end) params.set('end', body.end)
+      if (body.cursor) params.set('cursor', body.cursor)
+      const response = await fetch(`${baseUrl}/logs?${params.toString()}`, { headers })
       
       if (!response.ok) {
-        // Audit logs may not be available on all plans
-        if (response.status === 403 || response.status === 404) {
-          return jsonResponse(req, { 
-            events: [],
-            message: 'Audit logs not available on current Tailscale plan'
-          })
-        }
-        const errorText = await response.text()
-        console.error('[tailscale-api] Tailscale audit API error:', response.status, errorText)
-        return errorResponse(req, `Tailscale API error: ${response.status}`, response.status)
+        const errorPayload = await readResponseBody(response)
+        console.error('[tailscale-api] Tailscale audit API error:', response.status, errorPayload)
+        return jsonError(
+          req,
+          502,
+          'upstream_error',
+          response.status === 403 || response.status === 404
+            ? 'Audit logs unavailable on current Tailscale plan.'
+            : 'Tailscale API error',
+          {
+            requestId,
+            action,
+            upstreamStatus: response.status,
+            upstreamBody: errorPayload,
+          }
+        )
       }
 
       // Parse JSONL response (one JSON object per line)
@@ -163,7 +215,10 @@ Deno.serve(async (req) => {
         actor: event.actor?.displayName || event.actor?.loginName || 'System',
       }))
 
-      return jsonResponse(req, { events: transformedEvents })
+      return jsonResponse(req, {
+        events: transformedEvents,
+        ...(debug ? { debug: { requestId, action, status: response.status } } : {}),
+      })
     }
 
     if (action === 'keys') {
@@ -171,9 +226,14 @@ Deno.serve(async (req) => {
       const response = await fetch(`${baseUrl}/keys`, { headers })
       
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error('[tailscale-api] Tailscale keys API error:', response.status, errorText)
-        return errorResponse(req, `Tailscale API error: ${response.status}`, response.status)
+        const errorPayload = await readResponseBody(response)
+        console.error('[tailscale-api] Tailscale keys API error:', response.status, errorPayload)
+        return jsonError(req, 502, 'upstream_error', 'Tailscale API error', {
+          requestId,
+          action,
+          upstreamStatus: response.status,
+          upstreamBody: errorPayload,
+        })
       }
 
       const data = await response.json()
@@ -191,7 +251,10 @@ Deno.serve(async (req) => {
         tags: key.capabilities?.devices?.create?.tags || [],
       }))
 
-      return jsonResponse(req, { keys: transformedKeys })
+      return jsonResponse(req, {
+        keys: transformedKeys,
+        ...(debug ? { debug: { requestId, action, status: response.status } } : {}),
+      })
     }
 
     if (action === 'acls') {
@@ -206,11 +269,17 @@ Deno.serve(async (req) => {
       return jsonResponse(req, { acl: data })
     }
 
-    return errorResponse(req, 'Invalid action', 400)
+    return jsonError(req, 422, 'invalid_action', 'Invalid action', {
+      requestId,
+      action,
+    })
 
   } catch (error) {
     console.error('[tailscale-api] Edge function error:', error)
-    return errorResponse(req, error instanceof Error ? error.message : 'Unknown error', 500)
+    return jsonError(req, 500, 'internal_error', 'Unexpected server error', {
+      requestId,
+      error: error instanceof Error ? error.message : error,
+    })
   }
 })
 
@@ -219,4 +288,42 @@ function mapEventType(eventType: string): 'login' | 'logout' | 'failed' | 'refre
   if (eventType.includes('logout') || eventType.includes('disconnect')) return 'logout'
   if (eventType.includes('fail') || eventType.includes('deny') || eventType.includes('reject')) return 'failed'
   return 'refresh'
+}
+
+function jsonError(
+  req: Request,
+  status: number,
+  code: string,
+  message: string,
+  details?: Record<string, unknown>
+): Response {
+  const origin = req.headers.get('origin')
+  return new Response(
+    JSON.stringify({
+      error: {
+        code,
+        message,
+        ...(details ? { details } : {}),
+      },
+    }),
+    {
+      status,
+      headers: {
+        ...getCorsHeaders(origin),
+        'Content-Type': 'application/json',
+      },
+    }
+  )
+}
+
+async function readResponseBody(response: Response): Promise<unknown> {
+  const contentType = response.headers.get('content-type') || ''
+  if (contentType.includes('application/json')) {
+    try {
+      return await response.json()
+    } catch {
+      return await response.text()
+    }
+  }
+  return await response.text()
 }

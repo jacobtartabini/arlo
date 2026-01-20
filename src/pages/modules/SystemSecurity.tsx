@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ModuleTemplate, type ModuleSection, type ModuleStat } from "@/components/ModuleTemplate";
 import { ShieldCheck } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { getAuthHeaders } from "@/lib/arloAuth";
 import { useAuth } from "@/providers/AuthProvider";
+import { invokeEdgeFunction } from "@/lib/edge-functions";
 
 const protections = [
   { title: "Network shield", description: "Firewall and VPN active", badge: "On" },
@@ -53,21 +52,12 @@ export default function SystemSecurity() {
   const loadDevices = useCallback(async () => {
     setIsLoadingDevices(true);
     try {
-      const authHeaders = await getAuthHeaders();
-      if (!authHeaders) {
-        throw new Error("Authentication required. Please connect to the Tailnet.");
+      const result = await invokeEdgeFunction<{ devices?: any[] }>("tailscale-api", { action: "devices" });
+      if (!result.ok) {
+        throw new Error(result.message || "Failed to fetch Tailnet devices.");
       }
 
-      const { data, error } = await supabase.functions.invoke("tailscale-api", {
-        body: { action: "devices" },
-        headers: authHeaders as Record<string, string>,
-      });
-
-      if (error) {
-        throw new Error(error.message || "Failed to fetch Tailnet devices.");
-      }
-
-      const formattedDevices: Device[] = (data?.devices ?? []).map((device: any) => ({
+      const formattedDevices: Device[] = (result.data?.devices ?? []).map((device: any) => ({
         id: device.id,
         name: device.name,
         os: device.os,

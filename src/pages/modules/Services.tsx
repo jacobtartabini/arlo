@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Shield,
   ShieldCheck,
@@ -39,11 +39,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
-import { getAuthHeaders } from '@/lib/arloAuth';
 import { useAuth } from '@/providers/AuthProvider';
+import { invokeEdgeFunction } from '@/lib/edge-functions';
+import { SECURITY_DEBUG_EVENT, type SecurityDebugEntryInput } from '@/lib/security-debug';
 
 interface Device {
   id: string;
@@ -110,6 +110,11 @@ interface IntelligenceFinding {
   };
 }
 
+interface DebugEntry extends SecurityDebugEntryInput {
+  id: string;
+  timestamp: string;
+}
+
 interface OsintConfig {
   hibpKey: string;
   shodanKey: string;
@@ -157,6 +162,7 @@ const StatCard = ({
 };
 
 const Services = () => {
+  const location = useLocation();
   const navigate = useNavigate();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [expandedFinding, setExpandedFinding] = useState<string | null>(null);
@@ -195,6 +201,11 @@ const Services = () => {
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
   const [isLoadingKeys, setIsLoadingKeys] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [auditError, setAuditError] = useState<string | null>(null);
+  const [debugEntries, setDebugEntries] = useState<DebugEntry[]>([]);
+  const debugEnabled = useMemo(() => {
+    return new URLSearchParams(location.search).get('debug') === '1';
+  }, [location.search]);
 
   useEffect(() => {
     document.title = "Arlo";
@@ -227,33 +238,58 @@ const Services = () => {
     return `${diffDays}d ago`;
   };
 
+  const recordDebugEntry = useCallback((entry: SecurityDebugEntryInput) => {
+    setDebugEntries(prev => [{
+      ...entry,
+      id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+    }, ...prev].slice(0, 20));
+  }, []);
+
+  const logEdgeFunctionResult = useCallback((label: string, result: { ok: boolean; status: number; error?: unknown }) => {
+    console.info(`[Services] ${label} -> ${result.status}`);
+    if (debugEnabled) {
+      console.debug(`[Services] ${label} debug`, result);
+    }
+  }, [debugEnabled]);
+
+  useEffect(() => {
+    if (!debugEnabled) return;
+
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<SecurityDebugEntryInput>).detail;
+      if (detail) {
+        recordDebugEntry(detail);
+      }
+    };
+
+    window.addEventListener(SECURITY_DEBUG_EVENT, handler);
+    return () => window.removeEventListener(SECURITY_DEBUG_EVENT, handler);
+  }, [debugEnabled, recordDebugEntry]);
+
   const fetchTailscaleData = useCallback(async (action: string) => {
     try {
-      // Get auth headers (will auto-refresh token if needed)
-      const authHeaders = await getAuthHeaders();
-      if (!authHeaders) {
-        throw new Error('Not authenticated. Please connect to the Tailnet.');
-      }
+      const result = await invokeEdgeFunction('tailscale-api', { action, debug: debugEnabled });
+      logEdgeFunctionResult(`tailscale-api:${action}`, result);
 
-      console.log('[Services] Calling tailscale-api with action:', action);
-      
-      const { data, error } = await supabase.functions.invoke('tailscale-api', {
-        body: { action },
-        headers: authHeaders as Record<string, string>,
+      recordDebugEntry({
+        label: `tailscale-api:${action}`,
+        ok: result.ok,
+        status: result.status,
+        message: result.ok ? 'Request successful.' : (result.message || 'Request failed.'),
+        error: result.ok ? undefined : result.error,
       });
 
-      if (error) {
-        console.error(`[Services] Tailscale API error (${action}):`, error);
-        throw new Error(error.message || 'Failed to fetch Tailscale data');
+      if (!result.ok) {
+        throw new Error(result.message || 'Failed to fetch Tailscale data');
       }
-      
-      console.log(`[Services] Successfully fetched ${action}:`, data);
-      return data;
+
+      return result.data;
     } catch (err) {
       console.error(`[Services] Error fetching ${action}:`, err);
       throw err;
     }
-  }, []);
+  }, [debugEnabled, logEdgeFunctionResult, recordDebugEntry]);
 
   const loadDevices = useCallback(async () => {
     setIsLoadingDevices(true);
@@ -301,9 +337,12 @@ const Services = () => {
           eventType: e.eventType,
         }));
         setRecentEvents(formattedEvents);
+        setAuditError(null);
       }
     } catch (err) {
-      console.error('Failed to load audit events:', err);
+      const message = err instanceof Error ? err.message : 'Audit logs unavailable.';
+      setAuditError(message);
+      setRecentEvents([]);
     } finally {
       setIsLoadingEvents(false);
     }
@@ -570,14 +609,27 @@ const Services = () => {
       const normalized = target.replace(/^https?:\/\//, '').split('/')[0];
       const isIp = /^(\d{1,3}\.){3}\d{1,3}$/.test(normalized);
       const query = isIp ? `ip:${normalized}` : `domain:${normalized}`;
-      const url = `https://urlscan.io/api/v1/search/?q=${encodeURIComponent(query)}`;
-      const response = await fetch(resolveProxyUrl(url));
-      if (!response.ok) {
-        const message = await response.text();
-        throw new Error(message || 'Failed to query infrastructure sources.');
+      const urlscanResult = await invokeEdgeFunction<{ results?: any[] }>('urlscan-proxy', {
+        domain: normalized,
+        query,
+        debug: debugEnabled,
+      });
+
+      logEdgeFunctionResult('urlscan-proxy', urlscanResult);
+      recordDebugEntry({
+        label: 'urlscan-proxy',
+        ok: urlscanResult.ok,
+        status: urlscanResult.status,
+        message: urlscanResult.ok ? 'Request successful.' : (urlscanResult.message || 'Request failed.'),
+        error: urlscanResult.ok ? undefined : urlscanResult.error,
+      });
+
+      if (!urlscanResult.ok) {
+        toast.error('URLScan check unavailable.');
+        return;
       }
-      const data = await response.json();
-      const results = data.results || [];
+
+      const results = urlscanResult.data?.results || [];
 
       addFindings([{
         id: createFindingId(),
@@ -935,6 +987,62 @@ const Services = () => {
             )}
           </Card>
 
+          {/* Audit Logs Section */}
+          <Card className="relative overflow-hidden border-border/60 bg-card/80 p-5 shadow-sm backdrop-blur lg:col-span-12">
+            <div className="absolute inset-0 pointer-events-none opacity-60">
+              <div className="absolute right-6 top-4 h-12 w-12 rounded-full bg-muted/40 blur-2xl" />
+            </div>
+
+            <div className="relative mb-4 flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <h2 className="text-base font-semibold text-foreground">Access Activity</h2>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Recent sign-ins and security events from your Tailnet
+                </p>
+              </div>
+              {isLoadingEvents && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+            </div>
+
+            {auditError ? (
+              <div className="rounded-xl border border-rose-500/30 bg-rose-500/5 p-4 text-sm text-rose-600 dark:text-rose-400">
+                {auditError}
+              </div>
+            ) : recentEvents.length > 0 ? (
+              <div className="space-y-2">
+                {recentEvents.slice(0, 5).map((event) => (
+                  <div
+                    key={event.id}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/30 p-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{event.eventType || event.type}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {event.device} · {event.timestamp}
+                      </p>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-xs",
+                        event.type === 'failed'
+                          ? 'border-rose-500/40 text-rose-500'
+                          : event.type === 'login'
+                          ? 'border-emerald-500/40 text-emerald-500'
+                          : 'border-border/60 text-muted-foreground'
+                      )}
+                    >
+                      {event.type}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">
+                No audit events available yet.
+              </div>
+            )}
+          </Card>
+
           {/* Threat Research & Intelligence */}
           <Card className="relative overflow-hidden border-border/60 bg-card/80 p-5 shadow-sm backdrop-blur lg:col-span-12">
             <div className="absolute inset-0 pointer-events-none opacity-60">
@@ -1223,6 +1331,45 @@ const Services = () => {
               </div>
             </div>
           </Card>
+
+          {debugEnabled && (
+            <Card className="relative overflow-hidden border-dashed border-border/60 bg-background/60 p-5 shadow-sm lg:col-span-12">
+              <div className="space-y-1">
+                <h2 className="text-base font-semibold text-foreground">Security Debug Panel</h2>
+                <p className="text-xs text-muted-foreground">
+                  Enabled via <code>?debug=1</code>. Shows request outcomes without exposing secrets.
+                </p>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {debugEntries.length > 0 ? (
+                  debugEntries.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="rounded-xl border border-border/60 bg-muted/20 p-3 text-xs"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="font-semibold text-foreground">{entry.label}</div>
+                        <Badge variant="outline" className="text-[10px]">
+                          {entry.status} {entry.ok ? 'OK' : 'Error'}
+                        </Badge>
+                      </div>
+                      <div className="mt-1 text-muted-foreground">{entry.message}</div>
+                      {entry.error && (
+                        <pre className="mt-2 max-h-40 overflow-auto rounded-lg bg-background/80 p-2 text-[10px] text-muted-foreground">
+                          {JSON.stringify(entry.error, null, 2)}
+                        </pre>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-xl border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground">
+                    No debug entries yet. Trigger a refresh to populate requests.
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
         </div>
       </div>
     </div>

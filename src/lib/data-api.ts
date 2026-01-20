@@ -4,6 +4,7 @@
  */
 
 import { getArloToken, isAuthenticated } from '@/lib/arloAuth';
+import { emitSecurityDebugEntry } from '@/lib/security-debug';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 
@@ -23,6 +24,19 @@ interface DataApiRequest {
 interface DataApiResponse<T = unknown> {
   data?: T;
   error?: { message: string; code?: string };
+}
+
+async function parseResponsePayload(response: Response): Promise<unknown> {
+  const contentType = response.headers.get('content-type') || '';
+  const text = await response.text();
+  if (contentType.includes('application/json')) {
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text;
+    }
+  }
+  return text;
 }
 
 /**
@@ -51,6 +65,12 @@ export async function dataApi<T = unknown>(request: DataApiRequest): Promise<Dat
   const token = await getArloToken();
   
   if (!token) {
+    emitSecurityDebugEntry({
+      label: `data-api:${request.action}`,
+      ok: false,
+      status: 401,
+      message: 'Authentication required',
+    });
     return { error: { message: 'Authentication required' } };
   }
 
@@ -68,19 +88,50 @@ export async function dataApi<T = unknown>(request: DataApiRequest): Promise<Dat
       DATA_API_TIMEOUT_MS
     );
 
-    const result = await response.json();
+    const payload = await parseResponsePayload(response);
+    const result = typeof payload === 'object' && payload !== null ? (payload as { data?: T; error?: { message?: string; code?: string } }) : null;
 
     if (!response.ok) {
-      return { error: result.error || { message: 'Request failed' } };
+      const errorPayload = result?.error || { message: typeof payload === 'string' ? payload : 'Request failed' };
+      emitSecurityDebugEntry({
+        label: `data-api:${request.action}`,
+        ok: false,
+        status: response.status,
+        message: errorPayload.message || 'Request failed',
+        error: payload,
+      });
+      return {
+        error: errorPayload,
+      };
     }
 
-    return { data: result.data };
+    emitSecurityDebugEntry({
+      label: `data-api:${request.action}`,
+      ok: true,
+      status: response.status,
+      message: 'Request successful.',
+    });
+
+    return { data: result?.data ?? (payload as T) };
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       console.error('[dataApi] Request timed out');
+      emitSecurityDebugEntry({
+        label: `data-api:${request.action}`,
+        ok: false,
+        status: 408,
+        message: 'Request timed out',
+      });
       return { error: { message: 'Request timed out' } };
     }
     console.error('[dataApi] Error:', error);
+    emitSecurityDebugEntry({
+      label: `data-api:${request.action}`,
+      ok: false,
+      status: 0,
+      message: error instanceof Error ? error.message : 'Network error',
+      error,
+    });
     return { error: { message: error instanceof Error ? error.message : 'Network error' } };
   }
 }

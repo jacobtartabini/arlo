@@ -1,14 +1,14 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.89.0'
-import { 
-  verifyArloJWT, 
-  handleCorsOptions, 
+import {
+  verifyArloJWT,
+  handleCorsOptions,
   validateOrigin,
-  jsonResponse, 
-  unauthorizedResponse, 
-  errorResponse 
+  jsonResponse,
+  getCorsHeaders,
 } from '../_shared/arloAuth.ts'
 import { encrypt, decrypt, isEncrypted } from '../_shared/encryption.ts'
-import { checkAuthRateLimit, AUTH_RATE_LIMITS, logAuthFailure } from '../_shared/authRateLimit.ts'
+import { checkRateLimit, getClientIP } from '../_shared/rateLimit.ts'
+import { AUTH_RATE_LIMITS, logAuthFailure } from '../_shared/authRateLimit.ts'
 
 // Create Supabase client with service role key (bypasses RLS)
 const supabase = createClient(
@@ -118,10 +118,53 @@ async function decryptSensitiveFields(
   return decryptRecord(data)
 }
 
+interface ErrorDetails {
+  [key: string]: unknown
+}
+
+const jsonError = (
+  req: Request,
+  status: number,
+  code: string,
+  message: string,
+  details?: ErrorDetails
+): Response => {
+  return jsonResponse(
+    req,
+    {
+      error: {
+        code,
+        message,
+        ...(details ? { details } : {}),
+      },
+    },
+    status,
+  )
+}
+
+const logRequest = (requestId: string, message: string, details?: Record<string, unknown>) => {
+  const payload = {
+    requestId,
+    ...details,
+  }
+  console.log(`[data-api] ${message}`, payload)
+}
+
 Deno.serve(async (req) => {
+  const requestId = crypto.randomUUID()
+  const url = new URL(req.url)
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return handleCorsOptions(req)
+  }
+
+  if (req.method !== 'POST') {
+    logRequest(requestId, 'Method not allowed', { method: req.method, path: url.pathname })
+    return jsonError(req, 405, 'method_not_allowed', 'Method not allowed', {
+      allowed: ['POST'],
+      requestId,
+    })
   }
 
   // Validate origin for non-preflight requests
@@ -130,31 +173,77 @@ Deno.serve(async (req) => {
 
   try {
     // Rate limit data API requests
-    const rateLimitResponse = checkAuthRateLimit(req, AUTH_RATE_LIMITS.dataApi)
-    if (rateLimitResponse) return rateLimitResponse
+    const clientIP = getClientIP(req)
+    const rateLimitResult = checkRateLimit(clientIP, AUTH_RATE_LIMITS.dataApi)
+    if (!rateLimitResult.allowed) {
+      logRequest(requestId, 'Rate limited', { ip: clientIP, path: url.pathname })
+      return new Response(
+        JSON.stringify({
+          error: {
+            code: 'rate_limited',
+            message: 'Too many requests. Please try again later.',
+            details: {
+              requestId,
+              retryAfterSeconds: rateLimitResult.retryAfterSeconds,
+            },
+          },
+        }),
+        {
+          status: 429,
+          headers: {
+            ...getCorsHeaders(req.headers.get('origin')),
+            'Content-Type': 'application/json',
+            'Retry-After': String(rateLimitResult.retryAfterSeconds || 60),
+            'X-RateLimit-Remaining': '0',
+            'X-RateLimit-Reset': String(Math.floor(rateLimitResult.resetAt / 1000)),
+          },
+        }
+      )
+    }
 
     // Verify JWT authentication
     const authResult = await verifyArloJWT(req)
     
     if (!authResult.authenticated) {
       logAuthFailure(req, `data-api: ${authResult.error}`)
-      console.log('[data-api] Authentication failed:', authResult.error)
-      return unauthorizedResponse(req, authResult.error || 'Authentication required')
+      logRequest(requestId, 'Authentication failed', { error: authResult.error, path: url.pathname })
+      return jsonError(req, 401, 'unauthorized', authResult.error || 'Authentication required', {
+        requestId,
+      })
     }
 
     // userKey is derived from JWT.sub - this is the email or Tailscale identity (TEXT, not UUID)
     const userKey = authResult.userId
-    console.log('[data-api] Authenticated user (from JWT.sub):', userKey)
+    logRequest(requestId, 'Authenticated request', { userKey, path: url.pathname })
 
-    const body: RequestBody = await req.json()
+    let body: RequestBody
+    try {
+      body = await req.json()
+    } catch (error) {
+      logRequest(requestId, 'Invalid JSON body', { error: error instanceof Error ? error.message : error })
+      return jsonError(req, 422, 'invalid_json', 'Request body must be valid JSON', { requestId })
+    }
+
     const { action, table, data, id, filters, order, limit } = body
 
-    console.log(`[data-api] Action: ${action}, Table: ${table}`)
+    logRequest(requestId, 'Request received', { action, table, path: url.pathname })
+
+    if (!action || !table) {
+      const missing = [!action ? 'action' : null, !table ? 'table' : null].filter(Boolean)
+      logRequest(requestId, 'Missing required fields', { missing })
+      return jsonError(req, 422, 'missing_fields', 'Action and table are required.', {
+        missing,
+        requestId,
+      })
+    }
 
     // Validate table name against allowlist
     if (!ALLOWED_TABLES.includes(table)) {
-      console.log(`[data-api] Table '${table}' not in allowlist`)
-      return errorResponse(req, `Table '${table}' is not allowed`, 400)
+      logRequest(requestId, 'Table not allowed', { table })
+      return jsonError(req, 403, 'table_not_allowed', `Table '${table}' is not allowed`, {
+        table,
+        requestId,
+      })
     }
 
     let result: { data: unknown; error: unknown }
@@ -219,7 +308,10 @@ Deno.serve(async (req) => {
       case 'create':
       case 'insert': {
         if (!data) {
-          return errorResponse(req, 'Data is required for insert', 400)
+          logRequest(requestId, 'Missing data for insert')
+          return jsonError(req, 422, 'missing_fields', 'Data is required for insert', {
+            requestId,
+          })
         }
         
         // Inject user_key automatically (TEXT) and encrypt sensitive fields
@@ -241,7 +333,12 @@ Deno.serve(async (req) => {
 
       case 'update': {
         if (!id || !data) {
-          return errorResponse(req, 'ID and data are required for update', 400)
+          const missing = [!id ? 'id' : null, !data ? 'data' : null].filter(Boolean)
+          logRequest(requestId, 'Missing fields for update', { missing })
+          return jsonError(req, 422, 'missing_fields', 'ID and data are required for update', {
+            missing,
+            requestId,
+          })
         }
         
         // Encrypt sensitive fields before update
@@ -265,7 +362,8 @@ Deno.serve(async (req) => {
 
       case 'delete': {
         if (!id) {
-          return errorResponse(req, 'ID is required for delete', 400)
+          logRequest(requestId, 'Missing id for delete')
+          return jsonError(req, 422, 'missing_fields', 'ID is required for delete', { requestId })
         }
         
         result = await supabase
@@ -278,7 +376,10 @@ Deno.serve(async (req) => {
 
       case 'upsert': {
         if (!data) {
-          return errorResponse(req, 'Data is required for upsert', 400)
+          logRequest(requestId, 'Missing data for upsert')
+          return jsonError(req, 422, 'missing_fields', 'Data is required for upsert', {
+            requestId,
+          })
         }
         
         // Inject user_key automatically (TEXT) and encrypt sensitive fields
@@ -300,7 +401,20 @@ Deno.serve(async (req) => {
 
       case 'select_with_in': {
         // For queries like fetching messages for multiple conversations
+        if (!filters) {
+          logRequest(requestId, 'Missing filters for select_with_in')
+          return jsonError(req, 422, 'missing_fields', 'Filters are required for select_with_in', {
+            requestId,
+          })
+        }
+
         const { column, values } = filters as { column: string; values: string[] }
+        if (!column || !values?.length) {
+          logRequest(requestId, 'Invalid filters for select_with_in', { filters })
+          return jsonError(req, 422, 'invalid_filters', 'Column and values are required for select_with_in', {
+            requestId,
+          })
+        }
         
         let query = supabase
           .from(table)
@@ -338,7 +452,12 @@ Deno.serve(async (req) => {
       case 'update_where': {
         // Update multiple records based on filters
         if (!data || !filters) {
-          return errorResponse(req, 'Data and filters are required for update_where', 400)
+          const missing = [!data ? 'data' : null, !filters ? 'filters' : null].filter(Boolean)
+          logRequest(requestId, 'Missing fields for update_where', { missing })
+          return jsonError(req, 422, 'missing_fields', 'Data and filters are required for update_where', {
+            missing,
+            requestId,
+          })
         }
         
         let query = supabase
@@ -357,18 +476,27 @@ Deno.serve(async (req) => {
       }
 
       default:
-        return errorResponse(req, `Unknown action: ${action}`, 400)
+        logRequest(requestId, 'Unknown action', { action })
+        return jsonError(req, 422, 'invalid_action', `Unknown action: ${action}`, {
+          requestId,
+        })
     }
 
     if (result.error) {
       console.error(`[data-api] Error:`, result.error)
-      return errorResponse(req, JSON.stringify(result.error), 500)
+      return jsonError(req, 500, 'database_error', 'Database request failed', {
+        requestId,
+        error: result.error,
+      })
     }
 
     return jsonResponse(req, { data: result.data })
 
   } catch (error) {
     console.error('[data-api] Unexpected error:', error)
-    return errorResponse(req, error instanceof Error ? error.message : 'Internal server error', 500)
+    return jsonError(req, 500, 'internal_error', 'Unexpected server error', {
+      requestId,
+      error: error instanceof Error ? error.message : error,
+    })
   }
 })
