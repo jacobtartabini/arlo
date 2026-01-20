@@ -3,8 +3,7 @@
  * Handles Office document conversions via CloudConvert API
  */
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { verifyArloAuth, corsHeaders } from "../_shared/arloAuth.ts";
+import { verifyArloJWT, getCorsHeaders } from "../_shared/arloAuth.ts";
 
 const CLOUDCONVERT_API_KEY = Deno.env.get("CLOUDCONVERT_API_KEY");
 const CLOUDCONVERT_API_URL = "https://api.cloudconvert.com/v2";
@@ -13,33 +12,35 @@ interface ConvertRequest {
   outputFormat: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req.headers.get('origin'));
+  
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders(req) });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
     // Verify authentication
-    const authResult = await verifyArloAuth(req);
-    if (!authResult.isValid || !authResult.userKey) {
+    const authResult = await verifyArloJWT(req);
+    if (!authResult.authenticated || !authResult.userId) {
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     if (!CLOUDCONVERT_API_KEY) {
       return new Response(
         JSON.stringify({ error: "CloudConvert API not configured" }),
-        { status: 500, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     if (req.method !== "POST") {
       return new Response(
         JSON.stringify({ error: "Method not allowed" }),
-        { status: 405, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
+        { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -51,7 +52,7 @@ serve(async (req) => {
     if (!file || !outputFormat) {
       return new Response(
         JSON.stringify({ error: "Missing file or outputFormat" }),
-        { status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -60,7 +61,7 @@ serve(async (req) => {
     if (file.size > MAX_SIZE) {
       return new Response(
         JSON.stringify({ error: "File too large (max 100MB)" }),
-        { status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -79,7 +80,7 @@ serve(async (req) => {
     if (!inputFormat) {
       return new Response(
         JSON.stringify({ error: "Unsupported file format for server-side conversion" }),
-        { status: 400, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -108,7 +109,7 @@ serve(async (req) => {
             archive_multiple_files: false,
           },
         },
-        tag: `arlo-${authResult.userKey}`,
+        tag: `arlo-${authResult.userId}`,
       }),
     });
 
@@ -117,7 +118,7 @@ serve(async (req) => {
       console.error("CloudConvert job creation failed:", error);
       return new Response(
         JSON.stringify({ error: "Failed to create conversion job" }),
-        { status: 500, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -127,7 +128,7 @@ serve(async (req) => {
     if (!importTask?.result?.form) {
       return new Response(
         JSON.stringify({ error: "Failed to get upload URL" }),
-        { status: 500, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -148,7 +149,7 @@ serve(async (req) => {
       console.error("CloudConvert upload failed:", error);
       return new Response(
         JSON.stringify({ error: "Failed to upload file" }),
-        { status: 500, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -181,7 +182,7 @@ serve(async (req) => {
               downloadUrl: exportTask.result.files[0].url,
               fileName: exportTask.result.files[0].filename,
             }),
-            { headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
       }
@@ -191,7 +192,7 @@ serve(async (req) => {
         console.error("CloudConvert conversion error:", errorTask?.message);
         return new Response(
           JSON.stringify({ error: errorTask?.message || "Conversion failed" }),
-          { status: 500, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
@@ -200,14 +201,15 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ error: "Conversion timed out" }),
-      { status: 504, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
+      { status: 504, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (error) {
     console.error("File conversion error:", error);
+    const corsHeaders = getCorsHeaders(req.headers.get('origin'));
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : "Internal server error" }),
-      { status: 500, headers: { ...corsHeaders(req), "Content-Type": "application/json" } }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
