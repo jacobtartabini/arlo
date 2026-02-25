@@ -14,6 +14,8 @@ import {
   BarChart3,
   Gift,
   Play,
+  Clock,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -125,6 +127,11 @@ export default function Habits() {
     return <MobileHabitsView />;
   }
 
+  // Build a unified list: routine items (as groups) + standalone habits
+  const allItems: Array<{ type: 'routine'; routine: RoutineWithHabits } | { type: 'habit'; habit: HabitWithStreak }> = [];
+  todaysRoutines.forEach(r => allItems.push({ type: 'routine', routine: r }));
+  standaloneHabits.forEach(h => allItems.push({ type: 'habit', habit: h }));
+
   return (
     <>
       {/* Focus Mode Overlay */}
@@ -147,7 +154,7 @@ export default function Habits() {
                 initial={{ opacity: 0, y: 20, scale: 0.9 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -20, scale: 0.9 }}
-                className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-amber-500 text-white px-4 py-2 rounded-full font-bold flex items-center gap-2 shadow-lg"
+                className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-primary text-primary-foreground px-4 py-2 rounded-full font-bold flex items-center gap-2 shadow-lg"
               >
                 <Zap className="h-4 w-4" />
                 +{xpPopup.amount} XP
@@ -155,199 +162,161 @@ export default function Habits() {
             )}
           </AnimatePresence>
 
-          {/* Header */}
-          <header className="mb-8">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="h-9 w-9 -ml-2"
-                  onClick={() => navigate("/dashboard")}
-                >
-                  <ChevronLeft className="h-5 w-5" />
-                </Button>
-                <div>
-                  <p className="text-sm text-muted-foreground">{format(new Date(), "EEEE, MMMM d")}</p>
-                  <h1 className="text-2xl font-bold">Habits</h1>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => setCreateHabitOpen(true)}>
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add
-                </Button>
+          {/* Header row — compact */}
+          <header className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8 -ml-2"
+                onClick={() => navigate("/dashboard")}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <div>
+                <h1 className="text-xl font-semibold text-foreground">Habits</h1>
+                <p className="text-xs text-muted-foreground">
+                  {format(new Date(), "EEEE, MMMM d")} · {completedCount}/{totalCount} done
+                  {(progress?.currentStreak || 0) > 0 && (
+                    <> · <Flame className="inline h-3 w-3 text-orange-500 -mt-0.5" /> {progress?.currentStreak}d streak</>
+                  )}
+                </p>
               </div>
             </div>
-
-            {/* Progress Card */}
-            <div className="p-5 rounded-2xl bg-card border">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <p className="text-sm text-muted-foreground mb-1">Today's Progress</p>
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-bold">{completedCount}</span>
-                    <span className="text-lg text-muted-foreground">/ {totalCount}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="text-center">
-                    <div className="flex items-center justify-center gap-1.5 text-orange-500 mb-0.5">
-                      <Flame className="h-4 w-4" />
-                      <span className="font-bold text-lg">{progress?.currentStreak || 0}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">streak</p>
-                  </div>
-                  <div className="text-center">
-                    <div className="flex items-center justify-center gap-1.5 text-amber-500 mb-0.5">
-                      <Zap className="h-4 w-4" />
-                      <span className="font-bold text-lg">{progress?.availableXp || 0}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">XP</p>
-                  </div>
-                </div>
-              </div>
-              <Progress value={progressPercent} className="h-2" />
-            </div>
+            <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => setCreateHabitOpen(true)}>
+              <Plus className="h-3.5 w-3.5" />
+              Add
+            </Button>
           </header>
 
-          {/* Content */}
-          <div className="space-y-8">
-            {/* Routines Section */}
-            {todaysRoutines.length > 0 && (
-              <section>
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-sm font-medium text-muted-foreground">Routines</h2>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-7 text-xs"
-                    onClick={() => setCreateRoutineOpen(true)}
-                  >
-                    <Plus className="h-3 w-3 mr-1" />
-                    New
+          {/* Slim progress bar */}
+          {totalCount > 0 && (
+            <div className="mb-6">
+              <Progress value={progressPercent} className="h-1.5" />
+            </div>
+          )}
+
+          {/* Unified "Today's Habits" section */}
+          <div className="space-y-5">
+            {allItems.length === 0 ? (
+              <div className="py-12 text-center">
+                <p className="text-sm text-muted-foreground mb-4">No habits scheduled for today</p>
+                <div className="flex gap-2 justify-center">
+                  <Button size="sm" onClick={() => setCreateRoutineOpen(true)}>
+                    <Plus className="h-3.5 w-3.5 mr-1" />
+                    Create Routine
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setCreateHabitOpen(true)}>
+                    Add Habit
                   </Button>
                 </div>
-                <div className="space-y-2">
-                  {todaysRoutines.map((routine) => {
-                    const routineProgress = routine.totalCount > 0 
-                      ? Math.round((routine.completedCount / routine.totalCount) * 100)
-                      : 0;
+              </div>
+            ) : (
+              <div className="rounded-xl border border-border/50 divide-y divide-border/40 overflow-hidden">
+                {allItems.map((item, index) => {
+                  if (item.type === 'routine') {
+                    const routine = item.routine;
                     const isComplete = routine.completedCount === routine.totalCount && routine.totalCount > 0;
+                    const routineProgress = routine.totalCount > 0 
+                      ? Math.round((routine.completedCount / routine.totalCount) * 100) : 0;
 
                     return (
-                      <motion.div
-                        key={routine.id}
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className={cn(
-                          "p-4 rounded-xl border bg-card",
-                          isComplete && "border-emerald-500/30 bg-emerald-500/5"
-                        )}
-                      >
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-3">
-                            <div className={cn(
-                              "h-10 w-10 rounded-lg flex items-center justify-center",
-                              isComplete 
-                                ? "bg-emerald-500 text-white" 
-                                : "bg-primary/10 text-primary"
+                      <div key={`routine-${routine.id}`} className="bg-card/60">
+                        {/* Routine header row */}
+                        <div className="flex items-center gap-3 px-3.5 py-3">
+                          <div className={cn(
+                            "h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0",
+                            isComplete 
+                              ? "bg-emerald-500 text-white" 
+                              : "bg-primary/10 text-primary"
+                          )}>
+                            {isComplete ? <Check className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={cn(
+                              "text-sm font-medium text-foreground",
+                              isComplete && "text-muted-foreground"
                             )}>
-                              {isComplete ? <Check className="h-5 w-5" /> : <Play className="h-5 w-5" />}
-                            </div>
-                            <div>
-                              <h3 className="font-medium">{routine.name}</h3>
-                              <p className="text-xs text-muted-foreground">
-                                {routine.completedCount}/{routine.totalCount} completed
-                              </p>
+                              {routine.name}
+                            </p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[11px] text-muted-foreground">
+                                {routine.completedCount}/{routine.totalCount}
+                              </span>
+                              <Progress value={routineProgress} className={cn("h-1 w-16", isComplete && "[&>div]:bg-emerald-500")} />
                             </div>
                           </div>
                           {!isComplete && (
-                            <Button size="sm" onClick={() => handleStartRoutine(routine)}>
-                              Start
+                            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleStartRoutine(routine)}>
+                              Start <ChevronRight className="h-3 w-3" />
                             </Button>
                           )}
                         </div>
-                        <Progress 
-                          value={routineProgress} 
-                          className={cn("h-1.5", isComplete && "[&>div]:bg-emerald-500")}
-                        />
-                      </motion.div>
+                        {/* Routine habits as indented sub-rows */}
+                        {routine.habits.map(habit => (
+                          <HabitRow
+                            key={habit.id}
+                            habit={habit}
+                            isCompleting={completingHabits.has(habit.id)}
+                            onComplete={() => handleCompleteHabit(habit.id)}
+                            onSkip={() => handleCompleteHabit(habit.id, true)}
+                            indented
+                          />
+                        ))}
+                      </div>
                     );
-                  })}
-                </div>
-              </section>
+                  }
+
+                  // Standalone habit
+                  return (
+                    <HabitRow
+                      key={item.habit.id}
+                      habit={item.habit}
+                      isCompleting={completingHabits.has(item.habit.id)}
+                      onComplete={() => handleCompleteHabit(item.habit.id)}
+                      onSkip={() => handleCompleteHabit(item.habit.id, true)}
+                    />
+                  );
+                })}
+              </div>
             )}
 
-            {/* Habits Section */}
-            <section>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-medium text-muted-foreground">
-                  {todaysRoutines.length > 0 ? "Individual Habits" : "Habits"}
-                </h2>
-              </div>
-
-              {standaloneHabits.length === 0 && todaysRoutines.length === 0 ? (
-                <div className="p-8 rounded-xl border border-dashed bg-muted/20 text-center">
-                  <Flame className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-                  <h3 className="font-medium mb-1">No habits yet</h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Start building your daily routine
-                  </p>
-                  <div className="flex gap-2 justify-center">
-                    <Button onClick={() => setCreateRoutineOpen(true)}>
-                      <Plus className="h-4 w-4 mr-1" />
-                      Create Routine
-                    </Button>
-                    <Button variant="outline" onClick={() => setCreateHabitOpen(true)}>
-                      Add Habit
-                    </Button>
-                  </div>
-                </div>
-              ) : standaloneHabits.length === 0 ? (
-                <div className="p-6 rounded-xl border border-dashed bg-muted/20 text-center">
-                  <p className="text-sm text-muted-foreground">No standalone habits</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {standaloneHabits.map((habit) => (
-                    <HabitItem
-                      key={habit.id}
-                      habit={habit}
-                      isCompleting={completingHabits.has(habit.id)}
-                      onComplete={() => handleCompleteHabit(habit.id)}
-                      onSkip={() => handleCompleteHabit(habit.id, true)}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-
-            {/* Quick Actions */}
-            <section className="grid grid-cols-2 gap-3">
+            {/* Secondary actions — collapsed into a subtle row */}
+            <div className="flex items-center gap-2 pt-2">
               <Button
-                variant="outline"
-                className="h-auto py-4 flex flex-col items-center gap-2"
-                onClick={() => {
-                  setSheetTab("insights");
-                  setSheetOpen(true);
-                }}
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-muted-foreground gap-1.5"
+                onClick={() => { setSheetTab("insights"); setSheetOpen(true); }}
               >
-                <BarChart3 className="h-5 w-5 text-primary" />
-                <span className="text-sm">Insights</span>
+                <BarChart3 className="h-3 w-3" />
+                Insights
               </Button>
               <Button
-                variant="outline"
-                className="h-auto py-4 flex flex-col items-center gap-2"
-                onClick={() => {
-                  setSheetTab("rewards");
-                  setSheetOpen(true);
-                }}
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-muted-foreground gap-1.5"
+                onClick={() => { setSheetTab("rewards"); setSheetOpen(true); }}
               >
-                <Gift className="h-5 w-5 text-primary" />
-                <span className="text-sm">Rewards</span>
+                <Gift className="h-3 w-3" />
+                Rewards
+                {(progress?.availableXp || 0) > 0 && (
+                  <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded-full ml-0.5">
+                    {progress?.availableXp} XP
+                  </span>
+                )}
               </Button>
-            </section>
+              <div className="flex-1" />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-muted-foreground gap-1.5"
+                onClick={() => setCreateRoutineOpen(true)}
+              >
+                <Plus className="h-3 w-3" />
+                Routine
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -402,75 +371,80 @@ export default function Habits() {
   );
 }
 
-// Simple inline habit item component
-function HabitItem({ 
+// Clean list-row habit component
+function HabitRow({ 
   habit, 
   isCompleting,
   onComplete, 
-  onSkip 
+  onSkip,
+  indented = false,
 }: { 
   habit: HabitWithStreak; 
   isCompleting: boolean;
   onComplete: () => void; 
   onSkip: () => void;
+  indented?: boolean;
 }) {
   const isCompleted = habit.completedToday;
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
+    <div
       className={cn(
-        "flex items-center gap-3 p-3 rounded-xl border bg-card transition-all",
-        isCompleted && "border-emerald-500/30 bg-emerald-500/5"
+        "flex items-center gap-3 px-3.5 py-2.5 transition-colors bg-card/60",
+        "hover:bg-muted/30",
+        indented && "pl-14",
+        isCompleted && "opacity-60"
       )}
     >
-      {/* Check button */}
+      {/* Checkbox-style button */}
       <button
         onClick={onComplete}
         disabled={isCompleted || isCompleting}
         className={cn(
-          "h-10 w-10 rounded-lg flex items-center justify-center border-2 transition-all shrink-0",
+          "h-6 w-6 rounded-md flex items-center justify-center border-2 transition-all flex-shrink-0",
           isCompleted 
             ? "bg-emerald-500 border-emerald-500 text-white" 
-            : "border-border hover:border-primary hover:bg-primary/5",
+            : "border-border hover:border-primary",
           isCompleting && "opacity-50"
         )}
       >
-        <Check className={cn("h-5 w-5", !isCompleted && "text-muted-foreground")} />
+        {isCompleted && <Check className="h-3.5 w-3.5" />}
       </button>
 
       {/* Content */}
       <div className="flex-1 min-w-0">
         <p className={cn(
-          "font-medium truncate",
-          isCompleted && "text-muted-foreground line-through"
+          "text-sm text-foreground truncate",
+          isCompleted && "line-through text-muted-foreground"
         )}>
           {habit.title}
         </p>
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2.5 mt-0.5">
           {habit.streak > 0 && (
-            <span className="flex items-center gap-1 text-orange-500">
-              <Flame className="h-3 w-3" />
+            <span className="flex items-center gap-0.5 text-[11px] text-orange-500">
+              <Flame className="h-2.5 w-2.5" />
               {habit.streak}d
             </span>
           )}
-          <span>+{habit.difficulty === 'hard' ? 25 : habit.difficulty === 'medium' ? 15 : 10} XP</span>
+          {habit.durationMinutes && (
+            <span className="flex items-center gap-0.5 text-[11px] text-muted-foreground">
+              <Clock className="h-2.5 w-2.5" />
+              {habit.durationMinutes}m
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Skip button */}
+      {/* Skip */}
       {!isCompleted && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 text-muted-foreground shrink-0"
+        <button
           onClick={onSkip}
           disabled={isCompleting}
+          className="text-muted-foreground/50 hover:text-muted-foreground transition-colors flex-shrink-0 p-1"
         >
-          <SkipForward className="h-4 w-4" />
-        </Button>
+          <SkipForward className="h-3.5 w-3.5" />
+        </button>
       )}
-    </motion.div>
+    </div>
   );
 }
