@@ -1,7 +1,5 @@
 import { useCallback } from "react";
-import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { 
   Clock, 
@@ -10,7 +8,6 @@ import {
   BatteryLow, 
   Calendar,
   ChevronRight,
-  Star,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Task, Project, EnergyLevel } from "@/types/productivity";
@@ -36,19 +33,13 @@ const ENERGY_COLORS: Record<EnergyLevel, string> = {
   low: 'text-muted-foreground',
 };
 
-// Safe accessor for energy icon (handles unexpected DB values)
 function getEnergyIcon(level: string | undefined): typeof Zap {
-  if (level && level in ENERGY_ICONS) {
-    return ENERGY_ICONS[level as EnergyLevel];
-  }
-  return Battery; // Default fallback
+  if (level && level in ENERGY_ICONS) return ENERGY_ICONS[level as EnergyLevel];
+  return Battery;
 }
 
-// Safe accessor for energy color
 function getEnergyColor(level: string | undefined): string {
-  if (level && level in ENERGY_COLORS) {
-    return ENERGY_COLORS[level as EnergyLevel];
-  }
+  if (level && level in ENERGY_COLORS) return ENERGY_COLORS[level as EnergyLevel];
   return 'text-muted-foreground';
 }
 
@@ -62,13 +53,10 @@ export function PriorityTaskList({
 }: PriorityTaskListProps) {
   const projectMap = new Map(projects.map(p => [p.id, p]));
   
-  // Sort tasks: incomplete first, then by priority (high to low), then by due date
   const sortedTasks = [...tasks]
     .filter(t => !t.done)
     .sort((a, b) => {
-      // Priority first (higher is more important)
       if (a.priority !== b.priority) return b.priority - a.priority;
-      // Then by due date (earlier is more urgent)
       if (a.dueDate && b.dueDate) return a.dueDate.getTime() - b.dueDate.getTime();
       if (a.dueDate) return -1;
       if (b.dueDate) return 1;
@@ -82,31 +70,19 @@ export function PriorityTaskList({
 
   if (sortedTasks.length === 0) {
     return (
-      <Card className="border-border/60 bg-card/80 p-6">
-        <div className="flex flex-col items-center justify-center py-8 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-3">
-            <Star className="h-6 w-6" />
-          </div>
-          <p className="font-medium text-foreground">No Priority Tasks</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            All tasks are complete or none are scheduled for today
-          </p>
-        </div>
-      </Card>
+      <div className="py-8 text-center">
+        <p className="text-sm text-muted-foreground">All tasks complete — nice work.</p>
+      </div>
     );
   }
 
   return (
-    <Card className="border-border/60 bg-card/80 overflow-hidden">
+    <div className="space-y-1">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border/50 px-4 py-3">
-        <div className="flex items-center gap-2">
-          <Star className="h-4 w-4 text-primary" />
-          <span className="font-medium text-foreground">Priority Tasks</span>
-          <Badge variant="secondary" className="text-xs">{sortedTasks.length}</Badge>
-        </div>
-        {onViewAll && tasks.length > maxTasks && (
-          <Button variant="ghost" size="sm" onClick={onViewAll} className="h-7 text-xs gap-1">
+      <div className="flex items-center justify-between pb-2">
+        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Tasks</span>
+        {onViewAll && tasks.filter(t => !t.done).length > maxTasks && (
+          <Button variant="ghost" size="sm" onClick={onViewAll} className="h-6 text-xs gap-1 px-2">
             View All
             <ChevronRight className="h-3 w-3" />
           </Button>
@@ -114,8 +90,8 @@ export function PriorityTaskList({
       </div>
 
       {/* Task List */}
-      <div className="divide-y divide-border/50">
-      {sortedTasks.map((task) => {
+      <div className="rounded-xl border border-border/50 divide-y divide-border/40 overflow-hidden">
+        {sortedTasks.map((task) => {
           const project = task.projectId ? projectMap.get(task.projectId) : null;
           const EnergyIcon = getEnergyIcon(task.energyLevel);
           const energyColor = getEnergyColor(task.energyLevel);
@@ -124,86 +100,68 @@ export function PriorityTaskList({
             <div
               key={task.id}
               className={cn(
-                "flex items-start gap-3 px-4 py-3 transition-colors",
-                "hover:bg-muted/30 cursor-pointer",
-                task.done && "opacity-50"
+                "flex items-center gap-3 px-3.5 py-3 transition-colors",
+                "hover:bg-muted/30 cursor-pointer bg-card/60",
+                task.done && "opacity-40"
               )}
               onClick={() => onTaskClick?.(task)}
             >
-              {/* Checkbox */}
               <Checkbox
                 checked={task.done}
-                onCheckedChange={(checked) => {
-                  handleToggle(task.id, !!checked);
-                }}
+                onCheckedChange={(checked) => handleToggle(task.id, !!checked)}
                 onClick={(e) => e.stopPropagation()}
-                className="mt-0.5"
+                className="flex-shrink-0"
               />
 
-              {/* Task Content */}
-              <div className="flex-1 min-w-0 space-y-1">
+              <div className="flex-1 min-w-0">
                 <p className={cn(
-                  "text-sm font-medium text-foreground truncate",
+                  "text-sm text-foreground truncate",
                   task.done && "line-through text-muted-foreground"
                 )}>
                   {task.title}
                 </p>
                 
-                <div className="flex flex-wrap items-center gap-2">
-                  {/* Project badge */}
+                <div className="flex items-center gap-2.5 mt-0.5">
                   {project && (
-                    <Badge 
-                      variant="outline" 
-                      className="text-xs gap-1 py-0"
-                      style={{ borderColor: project.color, color: project.color }}
-                    >
+                    <span className="text-[11px] text-muted-foreground">
                       {project.icon} {project.name}
-                    </Badge>
+                    </span>
                   )}
-                  
-                  {/* Time estimate */}
                   {task.timeEstimateMinutes && (
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Clock className="h-3 w-3" />
+                    <span className="flex items-center gap-0.5 text-[11px] text-muted-foreground">
+                      <Clock className="h-2.5 w-2.5" />
                       {task.timeEstimateMinutes}m
                     </span>
                   )}
-                  
-                  {/* Energy level */}
-                  <span className={cn("flex items-center gap-1 text-xs", energyColor)}>
-                    <EnergyIcon className="h-3 w-3" />
-                  </span>
-                  
-                  {/* Due date */}
+                  <EnergyIcon className={cn("h-3 w-3", energyColor)} />
                   {task.dueDate && (
                     <span className={cn(
-                      "flex items-center gap-1 text-xs",
+                      "flex items-center gap-0.5 text-[11px]",
                       task.dueDate.getTime() - Date.now() < 86400000 
                         ? "text-destructive" 
                         : "text-muted-foreground"
                     )}>
-                      <Calendar className="h-3 w-3" />
+                      <Calendar className="h-2.5 w-2.5" />
                       {task.dueDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                     </span>
                   )}
                 </div>
               </div>
 
-              {/* Priority indicator */}
               {task.priority >= 2 && (
-                <div className="flex items-center">
-                  <Badge 
-                    variant={task.priority >= 3 ? "destructive" : "secondary"} 
-                    className="text-xs"
-                  >
-                    P{task.priority}
-                  </Badge>
-                </div>
+                <span className={cn(
+                  "text-[11px] font-medium px-1.5 py-0.5 rounded",
+                  task.priority >= 3 
+                    ? "text-destructive bg-destructive/10" 
+                    : "text-muted-foreground bg-muted/50"
+                )}>
+                  P{task.priority}
+                </span>
               )}
             </div>
           );
         })}
       </div>
-    </Card>
+    </div>
   );
 }
