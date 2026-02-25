@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { 
@@ -237,15 +236,7 @@ export default function Productivity() {
   const totalCount = tasks.length;
   const completionPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
   const tasksLeft = totalCount - completedCount;
-  const maxStreak = habits.length > 0 ? Math.max(...habits.map(h => h.streak)) : 0;
   const activeProjects = projects.filter(p => p.status === "active").length;
-
-  const stats = [
-    { label: "Active Projects", value: String(activeProjects), helper: `${projects.length} total` },
-    { label: "Tasks Completed", value: `${completionPercent}%`, helper: `${tasksLeft} remaining` },
-    { label: "Active Habits", value: String(habits.length), helper: maxStreak > 0 ? `+${maxStreak} day streak` : "Start a streak" },
-    { label: "Unread", value: String(notifications.length), helper: notifications.length > 0 ? "Action needed" : "All caught up" },
-  ];
 
   // Mobile view
   if (isMobile) {
@@ -257,7 +248,7 @@ export default function Productivity() {
     return (
       <div className="min-h-screen bg-background">
         <div className="container mx-auto px-4 py-8 max-w-7xl">
-          <Card className="p-8 text-center border-destructive/50">
+          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-8 text-center">
             <AlertCircle className="h-12 w-12 mx-auto text-destructive mb-4" />
             <h2 className="text-xl font-semibold text-foreground mb-2">Failed to load</h2>
             <p className="text-muted-foreground mb-4">{loadError}</p>
@@ -265,7 +256,7 @@ export default function Productivity() {
               <RefreshCw className="h-4 w-4" />
               Retry
             </Button>
-          </Card>
+          </div>
         </div>
       </div>
     );
@@ -305,54 +296,21 @@ export default function Productivity() {
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8 max-w-7xl space-y-8">
         {/* Header */}
-        <header className="relative overflow-hidden rounded-3xl border border-border/60 bg-card/80 p-6 shadow-sm backdrop-blur">
-          <div className="absolute inset-0 opacity-50" aria-hidden>
-            <div className="absolute -left-12 top-6 h-24 w-24 rounded-full bg-primary/10 blur-3xl" />
-            <div className="absolute right-4 top-0 h-28 w-28 rounded-full bg-muted/50 blur-3xl" />
-          </div>
-
-          <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                <button
-                  type="button"
-                  onClick={() => navigate("/dashboard")}
-                  className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/50 px-3 py-1 text-xs font-medium transition hover:border-border hover:bg-background/80"
-                >
-                  <ArrowLeft className="h-3.5 w-3.5" /> Back to dashboard
-                </button>
-              </div>
-
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary shadow-inner">
-                  <CalendarCheck className="h-6 w-6" />
-                </div>
-                <div className="space-y-1">
-                  <h1 className="text-3xl font-semibold text-foreground tracking-tight">Productivity</h1>
-                  <p className="max-w-2xl text-base text-muted-foreground leading-relaxed">
-                    Your command center for projects, tasks, and habits.
-                  </p>
-                </div>
-              </div>
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => navigate("/dashboard")}
+              className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <div>
+              <h1 className="text-2xl font-semibold text-foreground tracking-tight">Productivity</h1>
+              <p className="text-sm text-muted-foreground">
+                {tasksLeft} tasks remaining · {activeProjects} active project{activeProjects !== 1 ? 's' : ''} · {completionPercent}% done today
+              </p>
             </div>
-          </div>
-
-          {/* Stats */}
-          <div className="relative mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {stats.map((stat) => (
-              <Card
-                key={stat.label}
-                className="group relative overflow-hidden border-border/50 bg-background/70 p-4 shadow-none backdrop-blur"
-              >
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{stat.label}</p>
-                <div className="mt-2 flex items-baseline justify-between">
-                  <span className="text-2xl font-semibold text-foreground">{stat.value}</span>
-                  {stat.helper && (
-                    <span className="text-xs font-medium text-muted-foreground">{stat.helper}</span>
-                  )}
-                </div>
-              </Card>
-            ))}
           </div>
         </header>
 

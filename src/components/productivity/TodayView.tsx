@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,10 +12,19 @@ import {
   RefreshCw,
   Settings2,
   AlertCircle,
+  Play,
+  Pause,
+  CheckCircle2,
+  Timer,
+  Sparkles,
+  Zap,
+  Battery,
+  BatteryLow,
+  Clock,
+  ArrowRight,
 } from "lucide-react";
-import { format } from "date-fns";
-import { CurrentTimeBlock } from "./CurrentTimeBlock";
-import { FocusSuggestion } from "./FocusSuggestion";
+import { format, differenceInMinutes, differenceInSeconds } from "date-fns";
+import { Progress } from "@/components/ui/progress";
 import { PriorityTaskList } from "./PriorityTaskList";
 import { QuickTaskInput } from "./QuickTaskInput";
 import { EnergySettings, getEnergyForHour } from "./EnergySettings";
@@ -45,6 +53,12 @@ function getCurrentEnergyLevel(): EnergyLevel {
   return getEnergyForHour(hour);
 }
 
+const ENERGY_CONFIG: Record<EnergyLevel, { icon: typeof Zap; label: string; color: string }> = {
+  high: { icon: Zap, label: 'High Energy', color: 'text-yellow-500' },
+  medium: { icon: Battery, label: 'Medium Energy', color: 'text-blue-500' },
+  low: { icon: BatteryLow, label: 'Low Energy', color: 'text-muted-foreground' },
+};
+
 export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
   const navigate = useNavigate();
   const { fetchTasks, toggleTask } = useTasksPersistence();
@@ -58,8 +72,9 @@ export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editTask, setEditTask] = useState<Task | null>(null);
-  const [quickScheduleTask, setQuickScheduleTask] = useState<Task | null>(null);
   const [energySettingsOpen, setEnergySettingsOpen] = useState(false);
+  const [now, setNow] = useState(new Date());
+  const [isPaused, setIsPaused] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -74,13 +89,12 @@ export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
         fetchProjects(),
       ]);
 
-      // Filter to today's tasks (scheduled for today OR has due date today OR high priority)
       const todayStr = today.toDateString();
       const todayTasks = fetchedTasks.filter(task => {
         if (task.done) return false;
         if (task.scheduledDate?.toDateString() === todayStr) return true;
         if (task.dueDate?.toDateString() === todayStr) return true;
-        if (task.priority >= 2) return true; // High priority always shows
+        if (task.priority >= 2) return true;
         return false;
       });
 
@@ -99,8 +113,17 @@ export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
     loadData();
   }, [loadData]);
 
-  // Find current/active time block
-  const now = new Date();
+  // Timer tick for active time block
+  useEffect(() => {
+    const currentBlock = timeBlocks.find(
+      block => !block.isCompleted && block.startTime <= now && block.endTime >= now
+    );
+    if (!currentBlock || isPaused) return;
+    const interval = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, [timeBlocks, isPaused, now]);
+
+  // Current time block
   const currentBlock = timeBlocks.find(
     block => !block.isCompleted && block.startTime <= now && block.endTime >= now
   );
@@ -108,7 +131,30 @@ export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
     ? tasks.find(t => t.id === currentBlock.taskId) 
     : null;
 
-  // Handle task toggle with optimistic update
+  // Focus suggestion
+  const currentEnergy = getCurrentEnergyLevel();
+  const suggestedTask = useMemo(() => {
+    const incompleteTasks = tasks.filter(t => !t.done);
+    if (incompleteTasks.length === 0) return null;
+
+    const scoredTasks = incompleteTasks.map(task => {
+      let score = 0;
+      score += task.priority * 20;
+      if (task.energyLevel === currentEnergy) score += 30;
+      if (task.timeEstimateMinutes && task.timeEstimateMinutes <= 60) score += 25;
+      if (task.dueDate) {
+        const daysUntilDue = Math.ceil((task.dueDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+        if (daysUntilDue <= 1) score += 50;
+        else if (daysUntilDue <= 3) score += 25;
+      }
+      if (task.scheduledDate?.toDateString() === new Date().toDateString()) score += 40;
+      return { task, score };
+    });
+    
+    scoredTasks.sort((a, b) => b.score - a.score);
+    return scoredTasks[0]?.task || null;
+  }, [tasks, currentEnergy]);
+
   const handleToggle = useCallback(async (taskId: string, done: boolean) => {
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, done } : t));
     const success = await toggleTask(taskId, done);
@@ -117,7 +163,6 @@ export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
     }
   }, [toggleTask]);
 
-  // Handle time block completion
   const handleCompleteBlock = useCallback(async (blockId: string) => {
     await completeTimeBlock(blockId);
     setTimeBlocks(prev => prev.map(b => 
@@ -125,141 +170,188 @@ export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
     ));
   }, [completeTimeBlock]);
 
-  // Handle task click to edit
   const handleTaskClick = useCallback((task: Task) => {
     setEditTask(task);
   }, []);
 
-  // Handle starting a focus session - navigate to fullscreen focus
   const handleStartFocus = useCallback((task: Task) => {
     navigate(`/focus?taskId=${task.id}&duration=${task.timeEstimateMinutes || 25}`);
   }, [navigate]);
 
   const greeting = getGreeting();
   const GreetingIcon = greeting.icon;
-  const currentEnergy = getCurrentEnergyLevel();
-
-  // Stats for today
   const completedToday = tasks.filter(t => t.done).length;
   const totalToday = tasks.length;
-  const completedBlocks = timeBlocks.filter(b => b.isCompleted).length;
+  const tasksRemaining = totalToday - completedToday;
+  const EnergyIcon = ENERGY_CONFIG[currentEnergy].icon;
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <Skeleton className="h-32 w-full rounded-2xl" />
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Skeleton className="h-48 w-full rounded-2xl" />
-          <Skeleton className="h-48 w-full rounded-2xl" />
-        </div>
-        <Skeleton className="h-64 w-full rounded-2xl" />
+      <div className="space-y-4">
+        <Skeleton className="h-20 w-full rounded-xl" />
+        <Skeleton className="h-32 w-full rounded-xl" />
+        <Skeleton className="h-48 w-full rounded-xl" />
       </div>
     );
   }
 
   if (loadError) {
     return (
-      <Card className="p-8 text-center border-destructive/50">
-        <AlertCircle className="h-10 w-10 mx-auto text-destructive mb-3" />
-        <p className="text-foreground font-medium mb-2">Failed to load today's data</p>
-        <p className="text-sm text-muted-foreground mb-4">{loadError}</p>
-        <Button onClick={loadData} variant="outline" size="sm" className="gap-2">
-          <RefreshCw className="h-4 w-4" />
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center">
+        <AlertCircle className="h-8 w-8 mx-auto text-destructive mb-2" />
+        <p className="text-sm text-foreground font-medium mb-1">Failed to load</p>
+        <p className="text-xs text-muted-foreground mb-3">{loadError}</p>
+        <Button onClick={loadData} variant="outline" size="sm" className="gap-1.5">
+          <RefreshCw className="h-3.5 w-3.5" />
           Retry
         </Button>
-      </Card>
+      </div>
     );
   }
 
+  // Compute time block display values
+  let blockProgress = 0;
+  let remainingMinutes = 0;
+  let remainingSecs = 0;
+  let isOvertime = false;
+  if (currentBlock) {
+    const totalMinutes = differenceInMinutes(currentBlock.endTime, currentBlock.startTime);
+    const elapsedMinutes = differenceInMinutes(now, currentBlock.startTime);
+    const remainingSeconds = Math.max(0, differenceInSeconds(currentBlock.endTime, now));
+    remainingMinutes = Math.floor(remainingSeconds / 60);
+    remainingSecs = remainingSeconds % 60;
+    blockProgress = Math.min(100, Math.max(0, (elapsedMinutes / totalMinutes) * 100));
+    isOvertime = now > currentBlock.endTime;
+  }
+
+  // Pick the focus target: active block task > suggested task
+  const focusTarget = currentBlockTask || suggestedTask;
+
   return (
-    <div className="space-y-6">
-      {/* Quick Task Input - Top Priority for Low Friction */}
+    <div className="space-y-5">
+      {/* Today header - compact */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <GreetingIcon className="h-5 w-5 text-primary" />
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">{greeting.text}</h2>
+            <p className="text-xs text-muted-foreground">
+              {format(new Date(), 'EEEE, MMMM d')} · {tasksRemaining} task{tasksRemaining !== 1 ? 's' : ''} remaining
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Button variant="ghost" size="icon" onClick={() => setEnergySettingsOpen(true)} className="h-8 w-8">
+            <Settings2 className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={loadData} className="h-8 w-8">
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          <Button size="sm" onClick={() => setCreateDialogOpen(true)} className="gap-1.5 h-8">
+            <Plus className="h-3.5 w-3.5" />
+            Task
+          </Button>
+        </div>
+      </div>
+
+      {/* Quick Task Input */}
       <QuickTaskInput 
         onTaskCreated={loadData}
         defaultScheduledDate={new Date()}
       />
 
-      {/* Today Header */}
-      <Card className="relative overflow-hidden border-border/60 bg-gradient-to-br from-primary/5 via-card/80 to-card/80 p-6">
-        <div className="absolute inset-0 opacity-30" aria-hidden>
-          <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-primary/20 blur-3xl" />
-          <div className="absolute -left-8 bottom-0 h-32 w-32 rounded-full bg-muted/50 blur-3xl" />
-        </div>
-
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-              <GreetingIcon className="h-7 w-7" />
+      {/* Unified Focus Panel - merges time block + suggestion */}
+      <div className="rounded-xl border border-border/60 bg-card/80 p-5 space-y-4">
+        {currentBlock ? (
+          /* Active time block */
+          <>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Timer className="h-5 w-5 text-primary" />
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    {currentBlock.blockType === 'focus' ? 'Focus' : currentBlock.blockType === 'break' ? 'Break' : 'Soft Focus'} Block
+                  </p>
+                  {currentBlockTask && (
+                    <p className="text-xs text-muted-foreground">{currentBlockTask.title}</p>
+                  )}
+                </div>
+              </div>
+              <div className="text-right">
+                <p className={`text-xl font-bold tabular-nums ${isOvertime ? 'text-destructive' : 'text-foreground'}`}>
+                  {isOvertime ? '+' : ''}{remainingMinutes}:{String(remainingSecs).padStart(2, '0')}
+                </p>
+                <p className="text-[11px] text-muted-foreground">{isOvertime ? 'overtime' : 'remaining'}</p>
+              </div>
+            </div>
+            <Progress value={blockProgress} className="h-1.5" />
+            <div className="flex items-center justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setIsPaused(!isPaused)} className="h-7 gap-1 text-xs">
+                {isPaused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
+                {isPaused ? 'Resume' : 'Pause'}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => {
+                const params = new URLSearchParams();
+                params.set("blockId", currentBlock.id);
+                if (currentBlockTask) params.set("taskId", currentBlockTask.id);
+                navigate(`/focus?${params.toString()}`);
+              }} className="h-7 gap-1 text-xs">
+                Fullscreen
+              </Button>
+              <Button size="sm" onClick={() => handleCompleteBlock(currentBlock.id)} className="h-7 gap-1 text-xs">
+                <CheckCircle2 className="h-3 w-3" />
+                Complete
+              </Button>
+            </div>
+          </>
+        ) : focusTarget ? (
+          /* Suggested focus task */
+          <>
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium text-foreground">Suggested Next</span>
+              <Badge variant="outline" className="ml-auto gap-1 text-[11px] py-0.5">
+                <EnergyIcon className={`h-3 w-3 ${ENERGY_CONFIG[currentEnergy].color}`} />
+                {ENERGY_CONFIG[currentEnergy].label}
+              </Badge>
             </div>
             <div>
-              <h1 className="text-2xl font-semibold text-foreground">{greeting.text}</h1>
-              <p className="text-muted-foreground flex items-center gap-2">
-                <CalendarDays className="h-4 w-4" />
-                {format(new Date(), 'EEEE, MMMM d')}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {/* Quick stats */}
-            <div className="flex gap-4 text-sm">
-              <div className="text-center">
-                <p className="text-2xl font-bold text-foreground">{completedToday}/{totalToday}</p>
-                <p className="text-xs text-muted-foreground">Tasks</p>
-              </div>
-              <div className="text-center">
-                <p className="text-2xl font-bold text-foreground">{completedBlocks}/{timeBlocks.length}</p>
-                <p className="text-xs text-muted-foreground">Blocks</p>
+              <p className="text-base font-semibold text-foreground">{focusTarget.title}</p>
+              <div className="flex items-center gap-3 mt-1.5">
+                {focusTarget.timeEstimateMinutes && (
+                  <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Clock className="h-3 w-3" />
+                    {focusTarget.timeEstimateMinutes} min
+                  </span>
+                )}
+                {focusTarget.dueDate && (
+                  <span className={`flex items-center gap-1 text-xs ${
+                    focusTarget.dueDate.getTime() - Date.now() < 86400000 ? 'text-destructive' : 'text-muted-foreground'
+                  }`}>
+                    <CalendarDays className="h-3 w-3" />
+                    {focusTarget.dueDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                  </span>
+                )}
               </div>
             </div>
-
-            <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setEnergySettingsOpen(true)}
-                className="h-9 w-9"
-                title="Energy Settings"
-              >
-                <Settings2 className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={loadData}
-                className="h-9 w-9"
-              >
-                <RefreshCw className="h-4 w-4" />
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => setCreateDialogOpen(true)}
-                className="gap-1.5"
-              >
-                <Plus className="h-4 w-4" />
-                More Options
-              </Button>
+            <Button className="w-full gap-2 h-9" onClick={() => handleStartFocus(focusTarget)}>
+              <Play className="h-3.5 w-3.5" />
+              Start Focus Session
+            </Button>
+          </>
+        ) : (
+          /* No active block, no suggestion */
+          <div className="flex items-center gap-3 text-muted-foreground py-2">
+            <Clock className="h-5 w-5" />
+            <div>
+              <p className="text-sm font-medium text-foreground">No focus block active</p>
+              <p className="text-xs text-muted-foreground">Schedule a block or pick a task to start</p>
             </div>
           </div>
-        </div>
-      </Card>
-
-      {/* Current Time Block & Focus Suggestion */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <CurrentTimeBlock
-          timeBlock={currentBlock || null}
-          task={currentBlockTask}
-          onComplete={handleCompleteBlock}
-        />
-        <FocusSuggestion
-          tasks={tasks}
-          currentEnergyLevel={currentEnergy}
-          onSelectTask={onTaskClick}
-          onStartFocus={handleStartFocus}
-        />
+        )}
       </div>
 
-      {/* Priority Tasks - click to edit */}
+      {/* Priority Tasks - simplified */}
       <PriorityTaskList
         tasks={tasks}
         projects={projects}
@@ -269,40 +361,35 @@ export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
         onViewAll={onViewAllTasks}
       />
 
-      {/* Upcoming Time Blocks Preview */}
+      {/* Upcoming Blocks - minimal */}
       {timeBlocks.filter(b => !b.isCompleted && b.startTime > now).length > 0 && (
-        <Card className="border-border/60 bg-card/80 p-4">
-          <h3 className="text-sm font-medium text-muted-foreground mb-3">Upcoming Blocks</h3>
-          <div className="flex flex-wrap gap-2">
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Upcoming</p>
+          <div className="flex flex-wrap gap-1.5">
             {timeBlocks
               .filter(b => !b.isCompleted && b.startTime > now)
               .slice(0, 4)
               .map(block => {
                 const task = block.taskId ? tasks.find(t => t.id === block.taskId) : null;
                 return (
-                  <Badge key={block.id} variant="secondary" className="gap-1.5 py-1.5">
+                  <Badge key={block.id} variant="secondary" className="gap-1 text-xs py-1">
                     {format(block.startTime, 'h:mm a')}
-                    {task && <span className="text-muted-foreground">• {task.title}</span>}
+                    {task && <span className="text-muted-foreground">· {task.title}</span>}
                   </Badge>
                 );
               })}
           </div>
-        </Card>
+        </div>
       )}
 
-      {/* Create Task Dialog */}
+      {/* Dialogs */}
       <CreateTaskDialog
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
-        onCreated={() => {
-          loadData();
-          setCreateDialogOpen(false);
-        }}
+        onCreated={() => { loadData(); setCreateDialogOpen(false); }}
         projects={projects}
         defaultScheduledDate={new Date()}
       />
-
-      {/* Edit Task Dialog */}
       <EditTaskDialog
         task={editTask}
         open={!!editTask}
@@ -312,8 +399,6 @@ export function TodayView({ onTaskClick, onViewAllTasks }: TodayViewProps) {
         onDeleted={loadData}
         onStartFocus={handleStartFocus}
       />
-
-      {/* Energy Settings Dialog */}
       <EnergySettings
         open={energySettingsOpen}
         onOpenChange={setEnergySettingsOpen}
