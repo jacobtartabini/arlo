@@ -16,10 +16,10 @@ import {
   Play,
   Clock,
   ChevronRight,
+  CalendarCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useHabits, isScheduledForToday } from "@/hooks/useHabits";
@@ -48,8 +48,7 @@ export default function Habits() {
 
   const [createHabitOpen, setCreateHabitOpen] = useState(false);
   const [createRoutineOpen, setCreateRoutineOpen] = useState(false);
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [sheetTab, setSheetTab] = useState<"insights" | "rewards">("insights");
+  const [activeTab, setActiveTab] = useState<"today" | "insights" | "rewards">("today");
   const [xpPopup, setXpPopup] = useState({ amount: 0, visible: false });
   const [focusRoutine, setFocusRoutine] = useState<RoutineWithHabits | null>(null);
   const [completingHabits, setCompletingHabits] = useState<Set<string>>(new Set());
@@ -183,28 +182,9 @@ export default function Habits() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-1.5 text-muted-foreground"
-                onClick={() => { setSheetTab("insights"); setSheetOpen(true); }}
-              >
-                <BarChart3 className="h-4 w-4" />
-                Insights
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="gap-1.5 text-muted-foreground"
-                onClick={() => { setSheetTab("rewards"); setSheetOpen(true); }}
-              >
-                <Gift className="h-4 w-4" />
-                Rewards
-                {(progress?.availableXp || 0) > 0 && (
-                  <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded-full ml-0.5">
-                    {progress?.availableXp} XP
-                  </span>
-                )}
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCreateRoutineOpen(true)}>
+                <Plus className="h-3.5 w-3.5" />
+                New Routine
               </Button>
               <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCreateHabitOpen(true)}>
                 <Plus className="h-3.5 w-3.5" />
@@ -213,108 +193,130 @@ export default function Habits() {
             </div>
           </header>
 
-          {/* Progress bar */}
-          {totalCount > 0 && (
-            <Progress value={progressPercent} className="h-1.5" />
-          )}
+          {/* Tabs — matches Productivity style */}
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+            <TabsList className="bg-muted/50 flex-wrap h-auto gap-1">
+              <TabsTrigger value="today" className="gap-2">
+                <CalendarCheck className="h-4 w-4" />
+                Today
+              </TabsTrigger>
+              <TabsTrigger value="insights" className="gap-2">
+                <BarChart3 className="h-4 w-4" />
+                Insights
+              </TabsTrigger>
+              <TabsTrigger value="rewards" className="gap-2">
+                <Gift className="h-4 w-4" />
+                Rewards
+                {(progress?.availableXp || 0) > 0 && (
+                  <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded-full ml-0.5">
+                    {progress?.availableXp} XP
+                  </span>
+                )}
+              </TabsTrigger>
+            </TabsList>
 
-          {/* Unified habits list */}
-          {allItems.length === 0 ? (
-            <div className="py-16 text-center">
-              <p className="text-sm text-muted-foreground mb-4">No habits scheduled for today</p>
-              <div className="flex gap-2 justify-center">
-                <Button size="sm" onClick={() => setCreateRoutineOpen(true)}>
-                  <Plus className="h-3.5 w-3.5 mr-1" />
-                  Create Routine
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => setCreateHabitOpen(true)}>
-                  Add Habit
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="max-w-3xl">
-              <div className="rounded-xl border border-border/50 divide-y divide-border/40 overflow-hidden">
-                {allItems.map((item) => {
-                  if (item.type === 'routine') {
-                    const routine = item.routine;
-                    const isComplete = routine.completedCount === routine.totalCount && routine.totalCount > 0;
-                    const routineProgress = routine.totalCount > 0
-                      ? Math.round((routine.completedCount / routine.totalCount) * 100) : 0;
+            <TabsContent value="today" className="mt-6">
+              {/* Progress bar */}
+              {totalCount > 0 && (
+                <Progress value={progressPercent} className="h-1.5 mb-6" />
+              )}
 
-                    return (
-                      <div key={`routine-${routine.id}`}>
-                        {/* Routine header */}
-                        <div className="flex items-center gap-3 px-4 py-3 bg-muted/30">
-                          <div className={cn(
-                            "h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0",
-                            isComplete
-                              ? "bg-emerald-500 text-white"
-                              : "bg-primary/10 text-primary"
-                          )}>
-                            {isComplete ? <Check className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className={cn(
-                              "text-sm font-medium text-foreground",
-                              isComplete && "text-muted-foreground"
-                            )}>
-                              {routine.name}
-                            </p>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-[11px] text-muted-foreground">
-                                {routine.completedCount}/{routine.totalCount}
-                              </span>
-                              <Progress value={routineProgress} className={cn("h-1 w-16", isComplete && "[&>div]:bg-emerald-500")} />
+              {/* Unified habits list */}
+              {allItems.length === 0 ? (
+                <div className="py-16 text-center">
+                  <p className="text-sm text-muted-foreground mb-4">No habits scheduled for today</p>
+                  <div className="flex gap-2 justify-center">
+                    <Button size="sm" onClick={() => setCreateRoutineOpen(true)}>
+                      <Plus className="h-3.5 w-3.5 mr-1" />
+                      Create Routine
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setCreateHabitOpen(true)}>
+                      Add Habit
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="max-w-3xl">
+                  <div className="rounded-xl border border-border/50 divide-y divide-border/40 overflow-hidden">
+                    {allItems.map((item) => {
+                      if (item.type === 'routine') {
+                        const routine = item.routine;
+                        const isComplete = routine.completedCount === routine.totalCount && routine.totalCount > 0;
+                        const routineProgress = routine.totalCount > 0
+                          ? Math.round((routine.completedCount / routine.totalCount) * 100) : 0;
+
+                        return (
+                          <div key={`routine-${routine.id}`}>
+                            <div className="flex items-center gap-3 px-4 py-3 bg-muted/30">
+                              <div className={cn(
+                                "h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0",
+                                isComplete
+                                  ? "bg-emerald-500 text-white"
+                                  : "bg-primary/10 text-primary"
+                              )}>
+                                {isComplete ? <Check className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className={cn(
+                                  "text-sm font-medium text-foreground",
+                                  isComplete && "text-muted-foreground"
+                                )}>
+                                  {routine.name}
+                                </p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-[11px] text-muted-foreground">
+                                    {routine.completedCount}/{routine.totalCount}
+                                  </span>
+                                  <Progress value={routineProgress} className={cn("h-1 w-16", isComplete && "[&>div]:bg-emerald-500")} />
+                                </div>
+                              </div>
+                              {!isComplete && (
+                                <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleStartRoutine(routine)}>
+                                  Start <ChevronRight className="h-3 w-3" />
+                                </Button>
+                              )}
                             </div>
+                            {routine.habits.map(habit => (
+                              <HabitRow
+                                key={habit.id}
+                                habit={habit}
+                                isCompleting={completingHabits.has(habit.id)}
+                                onComplete={() => handleCompleteHabit(habit.id)}
+                                onSkip={() => handleCompleteHabit(habit.id, true)}
+                                indented
+                              />
+                            ))}
                           </div>
-                          {!isComplete && (
-                            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => handleStartRoutine(routine)}>
-                              Start <ChevronRight className="h-3 w-3" />
-                            </Button>
-                          )}
-                        </div>
-                        {/* Routine habits */}
-                        {routine.habits.map(habit => (
-                          <HabitRow
-                            key={habit.id}
-                            habit={habit}
-                            isCompleting={completingHabits.has(habit.id)}
-                            onComplete={() => handleCompleteHabit(habit.id)}
-                            onSkip={() => handleCompleteHabit(habit.id, true)}
-                            indented
-                          />
-                        ))}
-                      </div>
-                    );
-                  }
+                        );
+                      }
 
-                  return (
-                    <HabitRow
-                      key={item.habit.id}
-                      habit={item.habit}
-                      isCompleting={completingHabits.has(item.habit.id)}
-                      onComplete={() => handleCompleteHabit(item.habit.id)}
-                      onSkip={() => handleCompleteHabit(item.habit.id, true)}
-                    />
-                  );
-                })}
-              </div>
+                      return (
+                        <HabitRow
+                          key={item.habit.id}
+                          habit={item.habit}
+                          isCompleting={completingHabits.has(item.habit.id)}
+                          onComplete={() => handleCompleteHabit(item.habit.id)}
+                          onSkip={() => handleCompleteHabit(item.habit.id, true)}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </TabsContent>
 
-              {/* Add routine link */}
-              <div className="mt-3">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-xs text-muted-foreground gap-1.5"
-                  onClick={() => setCreateRoutineOpen(true)}
-                >
-                  <Plus className="h-3 w-3" />
-                  New Routine
-                </Button>
-              </div>
-            </div>
-          )}
+            <TabsContent value="insights" className="mt-6">
+              <HabitInsights habits={habits} progress={progress} logs={logs} />
+            </TabsContent>
+
+            <TabsContent value="rewards" className="mt-6">
+              <RewardsStore 
+                rewards={rewards}
+                availableXp={progress?.availableXp || 0}
+                onRefresh={loadData}
+              />
+            </TabsContent>
+          </Tabs>
         </div>
 
         {/* Dialogs */}
@@ -329,40 +331,6 @@ export default function Habits() {
           onOpenChange={setCreateRoutineOpen}
           onCreated={loadData}
         />
-
-        {/* Insights & Rewards Sheet */}
-        <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-          <SheetContent side="bottom" className="h-[85vh] rounded-t-3xl">
-            <SheetHeader className="pb-4">
-              <SheetTitle>
-                <Tabs value={sheetTab} onValueChange={(v) => setSheetTab(v as typeof sheetTab)}>
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="insights" className="gap-2">
-                      <BarChart3 className="h-4 w-4" />
-                      Insights
-                    </TabsTrigger>
-                    <TabsTrigger value="rewards" className="gap-2">
-                      <Gift className="h-4 w-4" />
-                      Rewards
-                    </TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="insights" className="mt-4">
-                    <HabitInsights habits={habits} progress={progress} logs={logs} />
-                  </TabsContent>
-
-                  <TabsContent value="rewards" className="mt-4">
-                    <RewardsStore 
-                      rewards={rewards}
-                      availableXp={progress?.availableXp || 0}
-                      onRefresh={loadData}
-                    />
-                  </TabsContent>
-                </Tabs>
-              </SheetTitle>
-            </SheetHeader>
-          </SheetContent>
-        </Sheet>
       </div>
     </>
   );
