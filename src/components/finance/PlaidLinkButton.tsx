@@ -32,7 +32,7 @@ export function PlaidLinkButton({ onSuccess }: PlaidLinkButtonProps) {
     async (publicToken: string, metadata: PlaidLinkOnSuccessMetadata) => {
       setLoading(true);
       try {
-        await exchangePublicToken(publicToken, metadata);
+        await exchangePublicToken(publicToken, metadata as unknown as Record<string, unknown>);
         toast.success("Account connected successfully!");
         onSuccess?.();
       } catch (error) {
