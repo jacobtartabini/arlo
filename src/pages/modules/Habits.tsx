@@ -146,7 +146,7 @@ export default function Habits() {
       </AnimatePresence>
 
       <div className="min-h-screen bg-background">
-        <div className="mx-auto max-w-xl px-4 py-6 pb-24">
+        <div className="container mx-auto px-4 py-8 max-w-7xl space-y-8">
           {/* XP Popup */}
           <AnimatePresence>
             {xpPopup.visible && (
@@ -162,20 +162,19 @@ export default function Habits() {
             )}
           </AnimatePresence>
 
-          {/* Header row — compact */}
-          <header className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-8 w-8 -ml-2"
+          {/* Header — matches Productivity style */}
+          <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
                 onClick={() => navigate("/dashboard")}
+                className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
                 <ChevronLeft className="h-4 w-4" />
-              </Button>
+              </button>
               <div>
-                <h1 className="text-xl font-semibold text-foreground">Habits</h1>
-                <p className="text-xs text-muted-foreground">
+                <h1 className="text-2xl font-semibold text-foreground tracking-tight">Habits</h1>
+                <p className="text-sm text-muted-foreground">
                   {format(new Date(), "EEEE, MMMM d")} · {completedCount}/{totalCount} done
                   {(progress?.currentStreak || 0) > 0 && (
                     <> · <Flame className="inline h-3 w-3 text-orange-500 -mt-0.5" /> {progress?.currentStreak}d streak</>
@@ -183,51 +182,74 @@ export default function Habits() {
                 </p>
               </div>
             </div>
-            <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={() => setCreateHabitOpen(true)}>
-              <Plus className="h-3.5 w-3.5" />
-              Add
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 text-muted-foreground"
+                onClick={() => { setSheetTab("insights"); setSheetOpen(true); }}
+              >
+                <BarChart3 className="h-4 w-4" />
+                Insights
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 text-muted-foreground"
+                onClick={() => { setSheetTab("rewards"); setSheetOpen(true); }}
+              >
+                <Gift className="h-4 w-4" />
+                Rewards
+                {(progress?.availableXp || 0) > 0 && (
+                  <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded-full ml-0.5">
+                    {progress?.availableXp} XP
+                  </span>
+                )}
+              </Button>
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCreateHabitOpen(true)}>
+                <Plus className="h-3.5 w-3.5" />
+                Add Habit
+              </Button>
+            </div>
           </header>
 
-          {/* Slim progress bar */}
+          {/* Progress bar */}
           {totalCount > 0 && (
-            <div className="mb-6">
-              <Progress value={progressPercent} className="h-1.5" />
-            </div>
+            <Progress value={progressPercent} className="h-1.5" />
           )}
 
-          {/* Unified "Today's Habits" section */}
-          <div className="space-y-5">
-            {allItems.length === 0 ? (
-              <div className="py-12 text-center">
-                <p className="text-sm text-muted-foreground mb-4">No habits scheduled for today</p>
-                <div className="flex gap-2 justify-center">
-                  <Button size="sm" onClick={() => setCreateRoutineOpen(true)}>
-                    <Plus className="h-3.5 w-3.5 mr-1" />
-                    Create Routine
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setCreateHabitOpen(true)}>
-                    Add Habit
-                  </Button>
-                </div>
+          {/* Unified habits list */}
+          {allItems.length === 0 ? (
+            <div className="py-16 text-center">
+              <p className="text-sm text-muted-foreground mb-4">No habits scheduled for today</p>
+              <div className="flex gap-2 justify-center">
+                <Button size="sm" onClick={() => setCreateRoutineOpen(true)}>
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Create Routine
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setCreateHabitOpen(true)}>
+                  Add Habit
+                </Button>
               </div>
-            ) : (
+            </div>
+          ) : (
+            <div className="max-w-3xl">
               <div className="rounded-xl border border-border/50 divide-y divide-border/40 overflow-hidden">
-                {allItems.map((item, index) => {
+                {allItems.map((item) => {
                   if (item.type === 'routine') {
                     const routine = item.routine;
                     const isComplete = routine.completedCount === routine.totalCount && routine.totalCount > 0;
-                    const routineProgress = routine.totalCount > 0 
+                    const routineProgress = routine.totalCount > 0
                       ? Math.round((routine.completedCount / routine.totalCount) * 100) : 0;
 
                     return (
-                      <div key={`routine-${routine.id}`} className="bg-card/60">
-                        {/* Routine header row */}
-                        <div className="flex items-center gap-3 px-3.5 py-3">
+                      <div key={`routine-${routine.id}`}>
+                        {/* Routine header */}
+                        <div className="flex items-center gap-3 px-4 py-3 bg-muted/30">
                           <div className={cn(
                             "h-8 w-8 rounded-lg flex items-center justify-center flex-shrink-0",
-                            isComplete 
-                              ? "bg-emerald-500 text-white" 
+                            isComplete
+                              ? "bg-emerald-500 text-white"
                               : "bg-primary/10 text-primary"
                           )}>
                             {isComplete ? <Check className="h-4 w-4" /> : <Play className="h-4 w-4" />}
@@ -252,7 +274,7 @@ export default function Habits() {
                             </Button>
                           )}
                         </div>
-                        {/* Routine habits as indented sub-rows */}
+                        {/* Routine habits */}
                         {routine.habits.map(habit => (
                           <HabitRow
                             key={habit.id}
@@ -267,7 +289,6 @@ export default function Habits() {
                     );
                   }
 
-                  // Standalone habit
                   return (
                     <HabitRow
                       key={item.habit.id}
@@ -279,45 +300,21 @@ export default function Habits() {
                   );
                 })}
               </div>
-            )}
 
-            {/* Secondary actions — collapsed into a subtle row */}
-            <div className="flex items-center gap-2 pt-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs text-muted-foreground gap-1.5"
-                onClick={() => { setSheetTab("insights"); setSheetOpen(true); }}
-              >
-                <BarChart3 className="h-3 w-3" />
-                Insights
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs text-muted-foreground gap-1.5"
-                onClick={() => { setSheetTab("rewards"); setSheetOpen(true); }}
-              >
-                <Gift className="h-3 w-3" />
-                Rewards
-                {(progress?.availableXp || 0) > 0 && (
-                  <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded-full ml-0.5">
-                    {progress?.availableXp} XP
-                  </span>
-                )}
-              </Button>
-              <div className="flex-1" />
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs text-muted-foreground gap-1.5"
-                onClick={() => setCreateRoutineOpen(true)}
-              >
-                <Plus className="h-3 w-3" />
-                Routine
-              </Button>
+              {/* Add routine link */}
+              <div className="mt-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-muted-foreground gap-1.5"
+                  onClick={() => setCreateRoutineOpen(true)}
+                >
+                  <Plus className="h-3 w-3" />
+                  New Routine
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Dialogs */}
