@@ -54,7 +54,7 @@ export default function Habits() {
   const [completingHabits, setCompletingHabits] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    document.title = "Habits | Arlo";
+    document.title = "Arlo";
     loadData();
   }, [loadData]);
 
