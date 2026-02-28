@@ -177,35 +177,37 @@ export function CreateRoutineDialog({ open, onOpenChange, onCreated }: CreateRou
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md p-0 gap-0 overflow-hidden max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="relative pt-4 pb-2 px-6">
-          <button
-            onClick={() => onOpenChange(false)}
-            className="absolute right-4 top-4 p-2 rounded-full hover:bg-muted transition-colors"
-          >
-            <X className="h-5 w-5 text-muted-foreground" />
-          </button>
-
-          {/* Name Input */}
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem className="space-y-0">
-                <FormControl>
-                  <input
-                    {...field}
-                    placeholder="ex) Morning Routine"
-                    className="w-full text-center text-xl font-semibold bg-transparent border-0 border-b-2 border-border focus:border-primary focus:outline-none py-3 placeholder:text-muted-foreground/50 transition-colors"
-                  />
-                </FormControl>
-              </FormItem>
-            )}
-          />
-        </div>
-
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-0 px-4 pb-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-0">
+            {/* Header */}
+            <div className="relative pt-4 pb-2 px-6">
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                className="absolute right-4 top-4 p-2 rounded-full hover:bg-muted transition-colors"
+              >
+                <X className="h-5 w-5 text-muted-foreground" />
+              </button>
+
+              {/* Name Input */}
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem className="space-y-0">
+                    <FormControl>
+                      <input
+                        {...field}
+                        placeholder="ex) Morning Routine"
+                        className="w-full text-center text-xl font-semibold bg-transparent border-0 border-b-2 border-border focus:border-primary focus:outline-none py-3 placeholder:text-muted-foreground/50 transition-colors"
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="px-4 pb-4 space-y-0">
             {/* Repeat Section */}
             <div className="bg-muted/50 rounded-2xl p-4 mt-4">
               <div className="flex items-center justify-between mb-4">
@@ -399,6 +401,7 @@ export function CreateRoutineDialog({ open, onOpenChange, onCreated }: CreateRou
             >
               {loading ? "Creating..." : "Done"}
             </Button>
+            </div>
           </form>
         </Form>
       </DialogContent>
