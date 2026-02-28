@@ -168,33 +168,46 @@ const dbToReward = (db: DbReward): Reward => ({
   createdAt: new Date(db.created_at),
 });
 
-// Calculate streak
+// Calculate streak using unique calendar days
 function calculateStreak(logs: HabitLog[]): number {
   if (logs.length === 0) return 0;
 
-  const sortedLogs = [...logs].sort(
-    (a, b) => b.completedAt.getTime() - a.completedAt.getTime()
-  );
+  // Get unique completion dates (non-skipped)
+  const uniqueDates = new Set<string>();
+  for (const log of logs) {
+    if (log.skipped) continue;
+    const d = new Date(log.completedAt);
+    uniqueDates.add(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`);
+  }
+
+  if (uniqueDates.size === 0) return 0;
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  const todayKey = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayKey = `${yesterday.getFullYear()}-${yesterday.getMonth()}-${yesterday.getDate()}`;
+
+  // Streak must start from today or yesterday
+  if (!uniqueDates.has(todayKey) && !uniqueDates.has(yesterdayKey)) {
+    return 0;
+  }
+
   let streak = 0;
-  let currentDate = new Date(today);
+  let checkDate = new Date(today);
 
-  for (const log of sortedLogs) {
-    if (log.skipped) continue;
+  // If no activity today, start counting from yesterday
+  if (!uniqueDates.has(todayKey)) {
+    checkDate = new Date(yesterday);
+  }
 
-    const logDate = new Date(log.completedAt);
-    logDate.setHours(0, 0, 0, 0);
-
-    const diffDays = Math.floor(
-      (currentDate.getTime() - logDate.getTime()) / (1000 * 60 * 60 * 24)
-    );
-
-    if (diffDays === 0 || diffDays === 1) {
+  while (true) {
+    const key = `${checkDate.getFullYear()}-${checkDate.getMonth()}-${checkDate.getDate()}`;
+    if (uniqueDates.has(key)) {
       streak++;
-      currentDate = logDate;
+      checkDate.setDate(checkDate.getDate() - 1);
     } else {
       break;
     }
@@ -716,6 +729,81 @@ export function useHabits() {
     }
   }, [loadData, state.habits]);
 
+  // Update habit
+  const updateHabit = useCallback(async (habitId: string, updates: Partial<Habit>): Promise<boolean> => {
+    try {
+      const dbUpdates: Record<string, unknown> = {};
+      if (updates.title !== undefined) dbUpdates.title = updates.title;
+      if (updates.description !== undefined) dbUpdates.description = updates.description ?? null;
+      if (updates.habitType !== undefined) dbUpdates.habit_type = updates.habitType;
+      if (updates.durationMinutes !== undefined) dbUpdates.duration_minutes = updates.durationMinutes ?? null;
+      if (updates.scheduleType !== undefined) dbUpdates.schedule_type = updates.scheduleType;
+      if (updates.scheduleDays !== undefined) dbUpdates.schedule_days = updates.scheduleDays;
+      if (updates.difficulty !== undefined) dbUpdates.difficulty = updates.difficulty;
+      if (updates.routineId !== undefined) dbUpdates.routine_id = updates.routineId ?? null;
+      if (updates.enabled !== undefined) dbUpdates.enabled = updates.enabled;
+
+      const { error } = await dataApiHelpers.update('habits', habitId, dbUpdates);
+      if (error) {
+        console.error('[useHabits] Failed to update habit:', error);
+        return false;
+      }
+      await loadData();
+      return true;
+    } catch (err) {
+      console.error('[useHabits] Update habit error:', err);
+      return false;
+    }
+  }, [loadData]);
+
+  // Delete habit
+  const deleteHabit = useCallback(async (habitId: string): Promise<boolean> => {
+    // Optimistic update
+    setState(s => ({
+      ...s,
+      habits: s.habits.filter(h => h.id !== habitId),
+      routines: s.routines.map(r => ({
+        ...r,
+        habits: r.habits.filter(h => h.id !== habitId),
+        totalCount: r.habits.filter(h => h.id !== habitId).length,
+        completedCount: r.habits.filter(h => h.id !== habitId && h.completedToday).length,
+      })),
+    }));
+
+    try {
+      // Delete logs first, then habit
+      await dataApiHelpers.delete('habits', habitId);
+      return true;
+    } catch (err) {
+      console.error('[useHabits] Failed to delete habit:', err);
+      await loadData();
+      return false;
+    }
+  }, [loadData]);
+
+  // Update routine
+  const updateRoutine = useCallback(async (routineId: string, updates: Partial<Routine>): Promise<boolean> => {
+    try {
+      const dbUpdates: Record<string, unknown> = {};
+      if (updates.name !== undefined) dbUpdates.name = updates.name;
+      if (updates.routineType !== undefined) dbUpdates.routine_type = updates.routineType;
+      if (updates.startTime !== undefined) dbUpdates.start_time = updates.startTime ?? null;
+      if (updates.scheduleDays !== undefined) dbUpdates.schedule_days = updates.scheduleDays;
+      if (updates.enabled !== undefined) dbUpdates.enabled = updates.enabled;
+
+      const { error } = await dataApiHelpers.update('routines', routineId, dbUpdates);
+      if (error) {
+        console.error('[useHabits] Failed to update routine:', error);
+        return false;
+      }
+      await loadData();
+      return true;
+    } catch (err) {
+      console.error('[useHabits] Update routine error:', err);
+      return false;
+    }
+  }, [loadData]);
+
   return {
     ...state,
     loadData,
@@ -726,6 +814,9 @@ export function useHabits() {
     redeemReward,
     reorderHabits,
     deleteRoutine,
+    updateHabit,
+    deleteHabit,
+    updateRoutine,
     isScheduledForToday,
   };
 }

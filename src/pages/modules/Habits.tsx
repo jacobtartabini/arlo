@@ -17,10 +17,28 @@ import {
   Clock,
   ChevronRight,
   CalendarCheck,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useHabits, isScheduledForToday } from "@/hooks/useHabits";
 import { CreateHabitDialog } from "@/components/habits/CreateHabitDialog";
@@ -44,6 +62,10 @@ export default function Habits() {
     loadData,
     completeHabit,
     redeemReward,
+    updateHabit,
+    deleteHabit,
+    updateRoutine,
+    deleteRoutine,
   } = useHabits();
 
   const [createHabitOpen, setCreateHabitOpen] = useState(false);
@@ -52,6 +74,10 @@ export default function Habits() {
   const [xpPopup, setXpPopup] = useState({ amount: 0, visible: false });
   const [focusRoutine, setFocusRoutine] = useState<RoutineWithHabits | null>(null);
   const [completingHabits, setCompletingHabits] = useState<Set<string>>(new Set());
+  const [editingHabit, setEditingHabit] = useState<HabitWithStreak | null>(null);
+  const [editHabitTitle, setEditHabitTitle] = useState("");
+  const [editingRoutine, setEditingRoutine] = useState<RoutineWithHabits | null>(null);
+  const [editRoutineName, setEditRoutineName] = useState("");
 
   useEffect(() => {
     document.title = "Arlo";
@@ -106,10 +132,46 @@ export default function Habits() {
     return r.habits.length > 0 && isScheduled;
   });
 
-  // Calculate progress
+  // Calculate progress — use max individual streak instead of stale DB value
   const completedCount = todaysHabits.filter(h => h.completedToday).length;
   const totalCount = todaysHabits.length;
   const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+  const maxStreak = habits.reduce((max, h) => Math.max(max, h.streak), 0);
+
+  // Edit/delete handlers
+  const handleEditHabit = useCallback((habit: HabitWithStreak) => {
+    setEditingHabit(habit);
+    setEditHabitTitle(habit.title);
+  }, []);
+
+  const handleSaveHabit = useCallback(async () => {
+    if (!editingHabit || !editHabitTitle.trim()) return;
+    await updateHabit(editingHabit.id, { title: editHabitTitle.trim() });
+    setEditingHabit(null);
+    toast({ title: "Habit updated" });
+  }, [editingHabit, editHabitTitle, updateHabit]);
+
+  const handleDeleteHabit = useCallback(async (habitId: string) => {
+    await deleteHabit(habitId);
+    toast({ title: "Habit deleted" });
+  }, [deleteHabit]);
+
+  const handleEditRoutine = useCallback((routine: RoutineWithHabits) => {
+    setEditingRoutine(routine);
+    setEditRoutineName(routine.name);
+  }, []);
+
+  const handleSaveRoutine = useCallback(async () => {
+    if (!editingRoutine || !editRoutineName.trim()) return;
+    await updateRoutine(editingRoutine.id, { name: editRoutineName.trim() });
+    setEditingRoutine(null);
+    toast({ title: "Routine updated" });
+  }, [editingRoutine, editRoutineName, updateRoutine]);
+
+  const handleDeleteRoutine = useCallback(async (routineId: string) => {
+    await deleteRoutine(routineId);
+    toast({ title: "Routine deleted" });
+  }, [deleteRoutine]);
 
   if (loading) {
     return (
@@ -175,8 +237,8 @@ export default function Habits() {
                 <h1 className="text-2xl font-semibold text-foreground tracking-tight">Habits</h1>
                 <p className="text-sm text-muted-foreground">
                   {format(new Date(), "EEEE, MMMM d")} · {completedCount}/{totalCount} done
-                  {(progress?.currentStreak || 0) > 0 && (
-                    <> · <Flame className="inline h-3 w-3 text-orange-500 -mt-0.5" /> {progress?.currentStreak}d streak</>
+                  {maxStreak > 0 && (
+                    <> · <Flame className="inline h-3 w-3 text-orange-500 -mt-0.5" /> {maxStreak}d streak</>
                   )}
                 </p>
               </div>
@@ -275,6 +337,26 @@ export default function Habits() {
                                   Start <ChevronRight className="h-3 w-3" />
                                 </Button>
                               )}
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button className="p-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => handleEditRoutine(routine)}>
+                                    <Pencil className="h-3.5 w-3.5 mr-2" />
+                                    Edit routine
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-destructive"
+                                    onClick={() => handleDeleteRoutine(routine.id)}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5 mr-2" />
+                                    Delete routine
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
                             {routine.habits.map(habit => (
                               <HabitRow
@@ -283,6 +365,8 @@ export default function Habits() {
                                 isCompleting={completingHabits.has(habit.id)}
                                 onComplete={() => handleCompleteHabit(habit.id)}
                                 onSkip={() => handleCompleteHabit(habit.id, true)}
+                                onEdit={() => handleEditHabit(habit)}
+                                onDelete={() => handleDeleteHabit(habit.id)}
                                 indented
                               />
                             ))}
@@ -297,6 +381,8 @@ export default function Habits() {
                           isCompleting={completingHabits.has(item.habit.id)}
                           onComplete={() => handleCompleteHabit(item.habit.id)}
                           onSkip={() => handleCompleteHabit(item.habit.id, true)}
+                          onEdit={() => handleEditHabit(item.habit)}
+                          onDelete={() => handleDeleteHabit(item.habit.id)}
                         />
                       );
                     })}
@@ -331,6 +417,52 @@ export default function Habits() {
           onOpenChange={setCreateRoutineOpen}
           onCreated={loadData}
         />
+
+        {/* Edit Habit Dialog */}
+        <Dialog open={!!editingHabit} onOpenChange={(open) => !open && setEditingHabit(null)}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Edit Habit</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label>Title</Label>
+                <Input
+                  value={editHabitTitle}
+                  onChange={(e) => setEditHabitTitle(e.target.value)}
+                  placeholder="Habit name"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditingHabit(null)}>Cancel</Button>
+              <Button onClick={handleSaveHabit}>Save</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Routine Dialog */}
+        <Dialog open={!!editingRoutine} onOpenChange={(open) => !open && setEditingRoutine(null)}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Edit Routine</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label>Name</Label>
+                <Input
+                  value={editRoutineName}
+                  onChange={(e) => setEditRoutineName(e.target.value)}
+                  placeholder="Routine name"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditingRoutine(null)}>Cancel</Button>
+              <Button onClick={handleSaveRoutine}>Save</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </>
   );
@@ -342,12 +474,16 @@ function HabitRow({
   isCompleting,
   onComplete, 
   onSkip,
+  onEdit,
+  onDelete,
   indented = false,
 }: { 
   habit: HabitWithStreak; 
   isCompleting: boolean;
   onComplete: () => void; 
   onSkip: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
   indented?: boolean;
 }) {
   const isCompleted = habit.completedToday;
@@ -355,7 +491,7 @@ function HabitRow({
   return (
     <div
       className={cn(
-        "flex items-center gap-3 px-3.5 py-2.5 transition-colors bg-card/60",
+        "flex items-center gap-3 px-3.5 py-2.5 transition-colors bg-card/60 group",
         "hover:bg-muted/30",
         indented && "pl-14",
         isCompleted && "opacity-60"
@@ -400,16 +536,35 @@ function HabitRow({
         </div>
       </div>
 
-      {/* Skip */}
-      {!isCompleted && (
-        <button
-          onClick={onSkip}
-          disabled={isCompleting}
-          className="text-muted-foreground/50 hover:text-muted-foreground transition-colors flex-shrink-0 p-1"
-        >
-          <SkipForward className="h-3.5 w-3.5" />
-        </button>
-      )}
+      {/* Actions */}
+      <div className="flex items-center gap-0.5">
+        {!isCompleted && (
+          <button
+            onClick={onSkip}
+            disabled={isCompleting}
+            className="text-muted-foreground/50 hover:text-muted-foreground transition-colors flex-shrink-0 p-1"
+          >
+            <SkipForward className="h-3.5 w-3.5" />
+          </button>
+        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="p-1 text-muted-foreground/30 opacity-0 group-hover:opacity-100 hover:text-muted-foreground transition-all flex-shrink-0">
+              <MoreHorizontal className="h-3.5 w-3.5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={onEdit}>
+              <Pencil className="h-3.5 w-3.5 mr-2" />
+              Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem className="text-destructive" onClick={onDelete}>
+              <Trash2 className="h-3.5 w-3.5 mr-2" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   );
 }
