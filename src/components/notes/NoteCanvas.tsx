@@ -420,6 +420,8 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
   const [isPanning, setIsPanning] = useState(false);
   const [clipboard, setClipboard] = useState<FabricObject[] | null>(null);
   const [palmRejectionEnabled, setPalmRejectionEnabled] = useState(true);
+  const settingsRef = useRef<DrawingSettings>(settings);
+  settingsRef.current = settings;
   const isRestoringRef = useRef(false);
   const lastPanPosition = useRef({ x: 0, y: 0 });
   const touchTracking = useRef<Map<number, TouchInfo>>(new Map());
@@ -480,7 +482,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       backgroundColor: "transparent",
       selection: settings.tool === "select",
       isDrawingMode: settings.tool === "pen" || settings.tool === "highlighter",
-      allowTouchScrolling: false,
+      allowTouchScrolling: true,
     });
 
     // Initialize brush
@@ -534,6 +536,33 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       });
       setRedoStack([]);
     };
+
+    // Block non-pen input from triggering Fabric.js drawing/erasing
+    // This is the critical fix: intercept at the Fabric.js event level
+    // so finger/palm touches never start a drawing stroke
+    canvas.on("mouse:down:before", (opt: any) => {
+      const e = opt.e as PointerEvent;
+      if (!e || typeof e.pointerType !== "string") return;
+      
+      const tool = settingsRef.current.tool;
+      const requiresStylus = tool === "pen" || tool === "highlighter" || tool === "eraser" || tool === "lasso";
+      
+      if (requiresStylus && e.pointerType !== "pen" && e.pointerType !== "mouse") {
+        // Cancel Fabric.js processing for this event
+        // This prevents finger/palm from drawing
+        if (canvas.isDrawingMode) {
+          canvas.isDrawingMode = false;
+          // Re-enable after a tick so pen input still works
+          requestAnimationFrame(() => {
+            if (settingsRef.current.tool === "pen" || settingsRef.current.tool === "highlighter") {
+              canvas.isDrawingMode = true;
+            }
+          });
+        }
+        opt.e.stopPropagation?.();
+        return;
+      }
+    });
 
     // Auto-save + track history on changes
     canvas.on("object:added", commitState);
@@ -1068,22 +1097,32 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
   // Block non-stylus input for drawing tools (Apple Pencil / stylus only)
   useEffect(() => {
     const container = containerRef.current;
+    const canvasEl = canvasRef.current;
     if (!container) return;
 
     const requiresStylus = stylusOnlyTools.current.has(settings.tool);
 
     const shouldBlock = (event: PointerEvent) => {
-      if (penActiveRef.current && event.pointerType !== "pen") return true;
       if (!requiresStylus) return false;
-      return event.pointerType !== "pen";
+      // Always allow pen (stylus)
+      if (event.pointerType === "pen") return false;
+      // Block touch and mouse when stylus-only tools are active
+      // Allow mouse on desktop (non-touch devices) for testing
+      if (event.pointerType === "touch") return true;
+      // If pen was recently active, block mouse too (palm can register as mouse)
+      if (penActiveRef.current && event.pointerType !== "pen") return true;
+      return false;
     };
 
     const shouldBlockTouch = (event: TouchEvent) => {
       if (!requiresStylus) return false;
-      if (event.touches.length >= 2 || event.changedTouches.length >= 2) return false;
-      return !Array.from(event.touches).some(
-        touch => (touch as any).touchType === "stylus" || (touch as any).force > 0,
+      // Allow multi-touch gestures (2-finger undo, 3-finger redo, pinch zoom)
+      if (event.touches.length >= 2) return false;
+      // Block single-finger touch unless it's a stylus
+      const isStylus = Array.from(event.touches).some(
+        touch => (touch as any).touchType === "stylus",
       );
+      return !isStylus;
     };
 
     const handlePointerDown = (event: PointerEvent) => {
@@ -1098,6 +1137,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       if (shouldBlock(event)) {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
       }
     };
 
@@ -1105,6 +1145,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       if (shouldBlock(event)) {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
       }
     };
 
@@ -1115,6 +1156,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       if (shouldBlock(event)) {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
       }
     };
 
@@ -1125,6 +1167,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       if (shouldBlock(event)) {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
       }
     };
 
@@ -1132,6 +1175,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       if (shouldBlockTouch(event)) {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
       }
     };
 
@@ -1139,32 +1183,36 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       if (shouldBlockTouch(event)) {
         event.preventDefault();
         event.stopPropagation();
+        event.stopImmediatePropagation();
       }
     };
 
     const handleTouchEnd = (event: TouchEvent) => {
-      if (shouldBlockTouch(event)) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
+      // Don't block touchend to allow gesture detection
     };
 
-    container.addEventListener("pointerdown", handlePointerDown, { capture: true });
-    container.addEventListener("pointermove", handlePointerMove, { capture: true });
-    container.addEventListener("pointerup", handlePointerUp, { capture: true });
-    container.addEventListener("pointercancel", handlePointerCancel, { capture: true });
-    container.addEventListener("touchstart", handleTouchStart, { capture: true, passive: false });
-    container.addEventListener("touchmove", handleTouchMove, { capture: true, passive: false });
-    container.addEventListener("touchend", handleTouchEnd, { capture: true, passive: false });
+    // Attach to BOTH container and canvas element to ensure Fabric.js events are blocked
+    const targets = canvasEl ? [container, canvasEl] : [container];
+    targets.forEach(target => {
+      target.addEventListener("pointerdown", handlePointerDown, { capture: true });
+      target.addEventListener("pointermove", handlePointerMove, { capture: true });
+      target.addEventListener("pointerup", handlePointerUp, { capture: true });
+      target.addEventListener("pointercancel", handlePointerCancel, { capture: true });
+      target.addEventListener("touchstart", handleTouchStart, { capture: true, passive: false });
+      target.addEventListener("touchmove", handleTouchMove, { capture: true, passive: false });
+      target.addEventListener("touchend", handleTouchEnd, { capture: true, passive: false });
+    });
 
     return () => {
-      container.removeEventListener("pointerdown", handlePointerDown, { capture: true });
-      container.removeEventListener("pointermove", handlePointerMove, { capture: true });
-      container.removeEventListener("pointerup", handlePointerUp, { capture: true });
-      container.removeEventListener("pointercancel", handlePointerCancel, { capture: true });
-      container.removeEventListener("touchstart", handleTouchStart, { capture: true });
-      container.removeEventListener("touchmove", handleTouchMove, { capture: true });
-      container.removeEventListener("touchend", handleTouchEnd, { capture: true });
+      targets.forEach(target => {
+        target.removeEventListener("pointerdown", handlePointerDown, { capture: true });
+        target.removeEventListener("pointermove", handlePointerMove, { capture: true });
+        target.removeEventListener("pointerup", handlePointerUp, { capture: true });
+        target.removeEventListener("pointercancel", handlePointerCancel, { capture: true });
+        target.removeEventListener("touchstart", handleTouchStart, { capture: true });
+        target.removeEventListener("touchmove", handleTouchMove, { capture: true });
+        target.removeEventListener("touchend", handleTouchEnd, { capture: true });
+      });
     };
   }, [settings.tool]);
 
