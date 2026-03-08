@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
         // Create a link token for Plaid Link
         const webhookUrl = Deno.env.get('PLAID_WEBHOOK_URL');
         const linkTokenPayload: Record<string, unknown> = {
-          user: { client_user_id: userKey },
+          user: { client_user_id: plaidUserId },
           client_name: 'Arlo Finance',
           products: ['transactions'],
           country_codes: ['US'],
