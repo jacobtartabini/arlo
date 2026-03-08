@@ -3,7 +3,7 @@
  * Manages all finance data through the data-api edge function
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { getArloToken } from '@/lib/arloAuth';
 import { toast } from 'sonner';
