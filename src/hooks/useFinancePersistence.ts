@@ -3,7 +3,7 @@
  * Manages all finance data through the data-api edge function
  */
 
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { getArloToken } from '@/lib/arloAuth';
 import { toast } from 'sonner';
@@ -614,7 +614,7 @@ export function useFinancePersistence() {
     return !!result?.data;
   }, [apiRequest]);
 
-  return {
+  return useMemo(() => ({
     loading,
     // Raw API access for Plaid Link
     plaidRequest,
@@ -665,5 +665,17 @@ export function useFinancePersistence() {
     // Settings
     getSettings,
     updateSettings,
-  };
+  }), [
+    loading, plaidRequest, stocksRequest,
+    getLinkedAccounts, createLinkToken, exchangePublicToken,
+    syncTransactions, refreshBalances, syncRecurring, removeLinkedAccount,
+    getTransactions, createTransaction, updateTransaction, deleteTransaction,
+    getBudgets, createBudget, upsertBudget, deleteBudget,
+    getSubscriptions, createSubscription, updateSubscription, cancelSubscription,
+    getGiftCards, createGiftCard, updateGiftCard, useGiftCard, getGiftCardUsage,
+    getWatchlist, addToWatchlist, updateWatchlistItem, removeFromWatchlist,
+    getPortfolio, addPortfolioHolding, updatePortfolioHolding, deletePortfolioHolding,
+    getStockQuote, getBatchQuotes, searchStocks, getStockTimeSeries,
+    getSettings, updateSettings,
+  ]);
 }
