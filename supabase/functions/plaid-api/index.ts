@@ -92,6 +92,8 @@ Deno.serve(async (req) => {
   const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(userKey));
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   const plaidUserId = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+  try {
     const body: PlaidRequest = await req.json();
     const url = new URL(req.url);
     // Supabase may or may not include the function name in the path
