@@ -86,8 +86,12 @@ Deno.serve(async (req) => {
   }
 
   const userKey = auth.userId;
-
-  try {
+  
+  // Hash the userKey to a non-sensitive ID for Plaid (it rejects emails)
+  const encoder = new TextEncoder();
+  const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(userKey));
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const plaidUserId = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     const body: PlaidRequest = await req.json();
     const url = new URL(req.url);
     // Supabase may or may not include the function name in the path
@@ -117,7 +121,7 @@ Deno.serve(async (req) => {
         // Create a link token for Plaid Link
         const webhookUrl = Deno.env.get('PLAID_WEBHOOK_URL');
         const linkTokenPayload: Record<string, unknown> = {
-          user: { client_user_id: userKey },
+          user: { client_user_id: plaidUserId },
           client_name: 'Arlo Finance',
           products: ['transactions'],
           country_codes: ['US'],
