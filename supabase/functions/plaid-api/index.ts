@@ -90,17 +90,22 @@ Deno.serve(async (req) => {
   try {
     const body: PlaidRequest = await req.json();
     const url = new URL(req.url);
-    const functionPathIndex = url.pathname.indexOf('/plaid-api');
+    // Supabase may or may not include the function name in the path
+    const pathname = url.pathname;
+    const functionPathIndex = pathname.indexOf('/plaid-api');
     const subPath = functionPathIndex >= 0
-      ? url.pathname.slice(functionPathIndex + '/plaid-api'.length)
-      : '';
-    const pathAction =
-      subPath === '/plaid/create_link_token'
-        ? 'create_link_token'
-        : subPath === '/plaid/exchange_public_token'
-          ? 'exchange_public_token'
-          : undefined;
+      ? pathname.slice(functionPathIndex + '/plaid-api'.length)
+      : pathname; // Use full pathname if function name not found (Supabase strips it)
+    
+    let pathAction: string | undefined;
+    if (subPath === '/plaid/create_link_token' || subPath === '/create_link_token') {
+      pathAction = 'create_link_token';
+    } else if (subPath === '/plaid/exchange_public_token' || subPath === '/exchange_public_token') {
+      pathAction = 'exchange_public_token';
+    }
+    
     const action = pathAction ?? body.action;
+    console.log('[plaid-api] Resolved action:', action, 'pathname:', pathname, 'subPath:', subPath);
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
