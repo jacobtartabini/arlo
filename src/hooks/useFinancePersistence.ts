@@ -614,7 +614,7 @@ export function useFinancePersistence() {
     return !!result?.data;
   }, [apiRequest]);
 
-  return {
+  return useMemo(() => ({
     loading,
     // Raw API access for Plaid Link
     plaidRequest,
@@ -665,5 +665,17 @@ export function useFinancePersistence() {
     // Settings
     getSettings,
     updateSettings,
-  };
+  }), [
+    loading, plaidRequest, stocksRequest,
+    getLinkedAccounts, createLinkToken, exchangePublicToken,
+    syncTransactions, refreshBalances, syncRecurring, removeLinkedAccount,
+    getTransactions, createTransaction, updateTransaction, deleteTransaction,
+    getBudgets, createBudget, upsertBudget, deleteBudget,
+    getSubscriptions, createSubscription, updateSubscription, cancelSubscription,
+    getGiftCards, createGiftCard, updateGiftCard, useGiftCard, getGiftCardUsage,
+    getWatchlist, addToWatchlist, updateWatchlistItem, removeFromWatchlist,
+    getPortfolio, addPortfolioHolding, updatePortfolioHolding, deletePortfolioHolding,
+    getStockQuote, getBatchQuotes, searchStocks, getStockTimeSeries,
+    getSettings, updateSettings,
+  ]);
 }
