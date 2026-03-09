@@ -29,7 +29,7 @@ import { format, formatDistanceToNow, parseISO } from "date-fns";
 import { useAuth } from "@/providers/AuthProvider";
 import { invokeEdgeFunction } from "@/lib/edge-functions";
 
-const STRAVA_CLIENT_ID = import.meta.env.VITE_STRAVA_CLIENT_ID;
+
 
 interface StravaActivity {
   id: number;
