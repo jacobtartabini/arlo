@@ -55,7 +55,7 @@ export function TaskListView({ initialProjectId, onTasksChange }: TaskListViewPr
   
   // Filters
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
+  const [statusFilter, setStatusFilter] = useState<FilterStatus>("pending");
   const [projectFilter, setProjectFilter] = useState<string>(initialProjectId || "all");
   const [sortBy, setSortBy] = useState<SortOption>("priority");
 
