@@ -197,13 +197,16 @@ export default function Health() {
     })();
   }, [checkStatus, loadData]);
 
-  const handleConnect = () => {
-    const clientId = STRAVA_CLIENT_ID || Deno?.env?.get?.("STRAVA_CLIENT_ID");
-    // We need the client ID on the frontend for the OAuth redirect
-    // It's stored as a secret, so we use a known value or prompt
+  const handleConnect = async () => {
+    // Get client ID from edge function
+    const result = await invokeEdgeFunction<{ client_id: string }>("strava-api", { action: "client-id" });
+    if (!result.ok || !result.data?.client_id) {
+      toast.error("Could not initiate Strava connection");
+      return;
+    }
     const redirectUri = `${window.location.origin}/health`;
     const scope = "activity:read_all,profile:read_all";
-    const url = `https://www.strava.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&approval_prompt=auto`;
+    const url = `https://www.strava.com/oauth/authorize?client_id=${result.data.client_id}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&approval_prompt=auto`;
     window.location.href = url;
   };
 
