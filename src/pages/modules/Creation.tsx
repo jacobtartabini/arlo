@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useCreationProject } from "@/hooks/useCreationProject";
 import { CreationViewport } from "@/components/creation/CreationViewport";
 import { CreationToolbar } from "@/components/creation/CreationToolbar";
@@ -6,10 +7,12 @@ import { ObjectListPanel } from "@/components/creation/ObjectListPanel";
 import { PropertiesPanel } from "@/components/creation/PropertiesPanel";
 import { ExportDialog } from "@/components/creation/ExportDialog";
 import { Input } from "@/components/ui/input";
-import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, ArrowLeft } from "lucide-react";
 import type { TransformMode, ViewMode, CreationAsset, SnapSettings, MeasureTool } from "@/types/creation";
 
 export default function Creation() {
+  const navigate = useNavigate();
   const [transformMode, setTransformMode] = useState<TransformMode>('translate');
   const [viewMode, setViewMode] = useState<ViewMode>('solid');
   const [showGrid, setShowGrid] = useState(true);
@@ -200,6 +203,15 @@ export default function Creation() {
     <div className="h-screen flex flex-col bg-background">
       {/* Top Bar */}
       <div className="flex items-center gap-4 px-4 py-2 border-b border-border bg-background/95 backdrop-blur-sm">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => navigate("/")}
+          className="h-8 w-8 shrink-0"
+          title="Back to dashboard"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
         <Input
           value={currentProject?.name || 'Untitled Project'}
           onChange={(e) => updateProjectName(e.target.value)}
