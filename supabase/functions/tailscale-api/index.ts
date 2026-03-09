@@ -167,7 +167,7 @@ Deno.serve(async (req) => {
       params.set('start', body.start || defaultStart)
       if (body.end) params.set('end', body.end)
       if (body.cursor) params.set('cursor', body.cursor)
-      const response = await fetch(`${baseUrl}/logs?${params.toString()}`, { headers })
+      const response = await fetchWithRetry(`${baseUrl}/logs?${params.toString()}`, { headers })
       
       if (!response.ok) {
         const errorPayload = await readResponseBody(response)
