@@ -348,8 +348,9 @@ const Services = () => {
         setAuditError(null);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Audit logs unavailable.';
-      setAuditError(message);
+      const raw = err instanceof Error ? err.message : 'Audit logs unavailable.';
+      const isPlanLimit = raw.toLowerCase().includes('unavailable on current tailscale plan');
+      setAuditError(isPlanLimit ? 'Audit logs are not available on your current Tailscale plan.' : raw);
       setRecentEvents([]);
     } finally {
       setIsLoadingEvents(false);
