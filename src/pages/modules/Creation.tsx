@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useCreationProject } from "@/hooks/useCreationProject";
 import { CreationViewport } from "@/components/creation/CreationViewport";
 import { CreationToolbar } from "@/components/creation/CreationToolbar";
@@ -6,7 +7,8 @@ import { ObjectListPanel } from "@/components/creation/ObjectListPanel";
 import { PropertiesPanel } from "@/components/creation/PropertiesPanel";
 import { ExportDialog } from "@/components/creation/ExportDialog";
 import { Input } from "@/components/ui/input";
-import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, ArrowLeft } from "lucide-react";
 import type { TransformMode, ViewMode, CreationAsset, SnapSettings, MeasureTool } from "@/types/creation";
 
 export default function Creation() {
