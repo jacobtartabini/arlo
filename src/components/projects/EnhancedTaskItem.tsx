@@ -352,11 +352,11 @@ export function EnhancedTaskItem({
       {expanded && (
         <div className="ml-12 mt-3 space-y-2 border-l-2 pl-4" style={{ borderColor: projectColor || 'hsl(var(--border))' }}>
           {subtasks.map((subtask) => (
-            <div key={subtask.id} className="flex items-center gap-3 group/subtask">
+            <div key={subtask.id} className="flex items-center gap-3 group/subtask" onClick={(e) => e.stopPropagation()}>
               <Checkbox
                 checked={subtask.done}
                 onCheckedChange={() => onSubtaskToggle?.(subtask.id, !subtask.done)}
-                className="h-4 w-4"
+                className="h-5 w-5"
               />
               {editingSubtaskId === subtask.id ? (
                 <div className="flex-1 flex items-center gap-2">

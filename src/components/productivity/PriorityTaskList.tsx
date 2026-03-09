@@ -106,12 +106,13 @@ export function PriorityTaskList({
               )}
               onClick={() => onTaskClick?.(task)}
             >
-              <Checkbox
-                checked={task.done}
-                onCheckedChange={(checked) => handleToggle(task.id, !!checked)}
-                onClick={(e) => e.stopPropagation()}
-                className="flex-shrink-0"
-              />
+              <div onClick={(e) => e.stopPropagation()}>
+                <Checkbox
+                  checked={task.done}
+                  onCheckedChange={(checked) => handleToggle(task.id, !!checked)}
+                  className="flex-shrink-0 h-5 w-5"
+                />
+              </div>
 
               <div className="flex-1 min-w-0">
                 <p className={cn(
