@@ -225,7 +225,7 @@ Deno.serve(async (req) => {
 
     if (action === 'keys') {
       // Fetch auth keys
-      const response = await fetch(`${baseUrl}/keys`, { headers })
+      const response = await fetchWithRetry(`${baseUrl}/keys`, { headers })
       
       if (!response.ok) {
         const errorPayload = await readResponseBody(response)
