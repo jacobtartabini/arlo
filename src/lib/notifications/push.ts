@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+// Web Push notification utilities
 
 // VAPID public key for Web Push
 // Generate your own at https://vapidkeys.com/ and set both:
@@ -115,25 +115,18 @@ export async function subscribeToPush(): Promise<boolean> {
       return false;
     }
 
-    // Get current user
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      console.error('User not authenticated');
-      return false;
-    }
-
-    // Save subscription to database via edge function
-    const { error } = await supabase.functions.invoke('send-push', {
-      body: {
-        action: 'subscribe',
-        user_id: user.id,
-        platform: detectPlatform(),
-        endpoint: subscription.endpoint,
-        p256dh: keys.p256dh,
-        auth: keys.auth,
-        user_agent: navigator.userAgent,
-      },
+    // Save subscription to database via edge function (using Arlo auth)
+    const { invokeEdgeFunction } = await import('@/lib/edge-functions');
+    const result = await invokeEdgeFunction('send-push', {
+      action: 'subscribe',
+      platform: detectPlatform(),
+      endpoint: subscription.endpoint,
+      p256dh: keys.p256dh,
+      auth: keys.auth,
+      user_agent: navigator.userAgent,
     });
+
+    const error = !result.ok ? result.message : null;
 
     if (error) {
       console.error('Error saving push subscription:', error);

@@ -1,7 +1,32 @@
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { invokeEdgeFunction } from "@/lib/edge-functions";
+import { getUserKey, isAuthenticated } from "@/lib/arloAuth";
 import type { NotificationType, NotifyPayload } from "./types";
-import { fetchPreferences } from "./db";
+
+// Cached preferences to avoid fetching on every toast
+let cachedPrefs: { toastEnabled: boolean; typeToggles: Record<string, boolean> } | null = null;
+let prefsCachedAt = 0;
+const PREFS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+async function getCachedPrefs() {
+  if (cachedPrefs && Date.now() - prefsCachedAt < PREFS_CACHE_TTL_MS) {
+    return cachedPrefs;
+  }
+  try {
+    const { fetchPreferences } = await import("./db");
+    const prefs = await fetchPreferences();
+    if (prefs) {
+      cachedPrefs = {
+        toastEnabled: prefs.toastEnabled,
+        typeToggles: prefs.typeToggles as Record<string, boolean>,
+      };
+      prefsCachedAt = Date.now();
+    }
+  } catch {
+    // Ignore - use defaults
+  }
+  return cachedPrefs;
+}
 
 // Main notify function - call this from anywhere in the app
 export async function notify(
@@ -10,31 +35,30 @@ export async function notify(
 ): Promise<{ success: boolean; notificationId?: string }> {
   const { type, title, body, data } = payload;
 
-  console.log('Sending notification:', { userId, type, title });
+  console.log("[notify] Sending notification:", { userId, type, title });
 
   try {
-    // Call the edge function to handle the notification
-    const { data: result, error } = await supabase.functions.invoke('send-push', {
-      body: {
-        user_id: userId,
+    const result = await invokeEdgeFunction<{ success: boolean; notification_id?: string }>(
+      "send-push",
+      {
         type,
         title,
         body,
         data,
-      },
-    });
+      }
+    );
 
-    if (error) {
-      console.error('Error sending notification:', error);
+    if (!result.ok) {
+      console.error("[notify] Error sending notification:", result.message);
       return { success: false };
     }
 
-    return { 
-      success: true, 
-      notificationId: result?.notification_id 
+    return {
+      success: true,
+      notificationId: result.data?.notification_id,
     };
   } catch (error) {
-    console.error('Notify error:', error);
+    console.error("[notify] Error:", error);
     return { success: false };
   }
 }
@@ -45,26 +69,18 @@ export async function showToast(
   title: string,
   description?: string
 ): Promise<void> {
-  // Check if toasts are enabled
-  const prefs = await fetchPreferences();
-  if (prefs && !prefs.toastEnabled) {
-    return;
-  }
+  const prefs = await getCachedPrefs();
+  if (prefs && !prefs.toastEnabled) return;
+  if (prefs && prefs.typeToggles[type] === false) return;
 
-  // Check type toggle
-  if (prefs && prefs.typeToggles[type] === false) {
-    return;
-  }
-
-  // Show toast based on type
   switch (type) {
-    case 'security':
+    case "security":
       toast.warning(title, { description });
       break;
-    case 'calendar':
+    case "calendar":
       toast.info(title, { description });
       break;
-    case 'chat':
+    case "chat":
       toast.success(title, { description });
       break;
     default:
@@ -79,7 +95,7 @@ export async function notifyChat(
   body?: string,
   data?: Record<string, unknown>
 ): Promise<{ success: boolean; notificationId?: string }> {
-  return notify(userId, { type: 'chat', title, body, data });
+  return notify(userId, { type: "chat", title, body, data });
 }
 
 export async function notifyCalendar(
@@ -88,7 +104,7 @@ export async function notifyCalendar(
   body?: string,
   data?: Record<string, unknown>
 ): Promise<{ success: boolean; notificationId?: string }> {
-  return notify(userId, { type: 'calendar', title, body, data });
+  return notify(userId, { type: "calendar", title, body, data });
 }
 
 export async function notifySecurity(
@@ -97,7 +113,7 @@ export async function notifySecurity(
   body?: string,
   data?: Record<string, unknown>
 ): Promise<{ success: boolean; notificationId?: string }> {
-  return notify(userId, { type: 'security', title, body, data });
+  return notify(userId, { type: "security", title, body, data });
 }
 
 export async function notifySystem(
@@ -106,11 +122,11 @@ export async function notifySystem(
   body?: string,
   data?: Record<string, unknown>
 ): Promise<{ success: boolean; notificationId?: string }> {
-  return notify(userId, { type: 'system', title, body, data });
+  return notify(userId, { type: "system", title, body, data });
 }
 
-// Get current user ID for convenience
+// Get current user key for convenience (uses Arlo auth, not Supabase auth)
 export async function getCurrentUserId(): Promise<string | null> {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user?.id ?? null;
+  if (!isAuthenticated()) return null;
+  return getUserKey();
 }
