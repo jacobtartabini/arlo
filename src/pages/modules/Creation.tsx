@@ -12,6 +12,7 @@ import { Loader2, ArrowLeft } from "lucide-react";
 import type { TransformMode, ViewMode, CreationAsset, SnapSettings, MeasureTool } from "@/types/creation";
 
 export default function Creation() {
+  const navigate = useNavigate();
   const [transformMode, setTransformMode] = useState<TransformMode>('translate');
   const [viewMode, setViewMode] = useState<ViewMode>('solid');
   const [showGrid, setShowGrid] = useState(true);
