@@ -341,13 +341,3 @@ async function readResponseBody(response: Response): Promise<unknown> {
   }
   return await response.text()
 }
-  const contentType = response.headers.get('content-type') || ''
-  if (contentType.includes('application/json')) {
-    try {
-      return await response.json()
-    } catch {
-      return await response.text()
-    }
-  }
-  return await response.text()
-}
