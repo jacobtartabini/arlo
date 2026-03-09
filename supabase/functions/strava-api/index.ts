@@ -113,7 +113,14 @@ Deno.serve(async (req) => {
 
     const { action } = body
 
-    // OAuth callback — exchange code for tokens (no auth required for this step)
+    // Return client ID for OAuth redirect (no secrets exposed beyond client_id)
+    if (action === 'client-id') {
+      const clientId = Deno.env.get('STRAVA_CLIENT_ID')
+      if (!clientId) return errorResponse(req, 'Strava not configured', 500)
+      return jsonResponse(req, { client_id: clientId })
+    }
+
+    // OAuth callback — exchange code for tokens
     if (action === 'exchange-token') {
       const authResult = await verifyArloJWT(req)
       if (!authResult.authenticated) {
