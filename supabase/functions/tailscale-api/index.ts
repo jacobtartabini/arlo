@@ -318,7 +318,29 @@ function jsonError(
   )
 }
 
+async function fetchWithRetry(url: string, options: RequestInit, retries = 2): Promise<Response> {
+  for (let i = 0; i <= retries; i++) {
+    const response = await fetch(url, options)
+    if (response.ok || i === retries || ![502, 503, 504].includes(response.status)) {
+      return response
+    }
+    console.log(`[tailscale-api] Retrying (${i + 1}/${retries}) after ${response.status}...`)
+    await new Promise(r => setTimeout(r, 500 * Math.pow(2, i)))
+  }
+  return fetch(url, options)
+}
+
 async function readResponseBody(response: Response): Promise<unknown> {
+  const contentType = response.headers.get('content-type') || ''
+  if (contentType.includes('application/json')) {
+    try {
+      return await response.json()
+    } catch {
+      return await response.text()
+    }
+  }
+  return await response.text()
+}
   const contentType = response.headers.get('content-type') || ''
   if (contentType.includes('application/json')) {
     try {
