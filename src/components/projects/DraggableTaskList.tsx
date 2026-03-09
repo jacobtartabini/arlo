@@ -66,7 +66,12 @@ function SortableTask({
   };
 
   return (
-    <div ref={setNodeRef} style={style} onClick={() => onTaskClick?.(task)}>
+    <div 
+      ref={setNodeRef} 
+      style={style} 
+      onClick={() => onTaskClick?.(task)}
+      className="cursor-pointer"
+    >
       <EnhancedTaskItem
         task={task}
         projectColor={projectColor}
@@ -74,7 +79,9 @@ function SortableTask({
         subtasks={subtasks}
         isDragging={isDragging}
         dragHandleProps={{ ...attributes, ...listeners }}
-        onToggle={onToggle}
+        onToggle={(taskId, done) => {
+          onToggle(taskId, done);
+        }}
         onUpdate={onUpdate}
         onDelete={onDelete}
         onAssignProject={onAssignProject}
