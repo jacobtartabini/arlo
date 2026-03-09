@@ -259,8 +259,6 @@ export function TaskListView({ initialProjectId, onTasksChange }: TaskListViewPr
       }
     });
 
-  const pendingCount = tasks.filter(t => !t.done).length;
-  const completedCount = tasks.filter(t => t.done).length;
 
   if (loadError) {
     return (
