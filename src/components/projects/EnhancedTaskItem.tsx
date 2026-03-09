@@ -186,8 +186,11 @@ export function EnhancedTaskItem({
 
         {/* Expand toggle */}
         <button 
-          onClick={() => setExpanded(!expanded)}
-          className="mt-0.5 p-0.5 hover:bg-muted rounded"
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpanded(!expanded);
+          }}
+          className="mt-0.5 p-1 hover:bg-muted rounded transition-colors"
         >
           {expanded ? (
             <ChevronDown className="h-4 w-4 text-muted-foreground" />
