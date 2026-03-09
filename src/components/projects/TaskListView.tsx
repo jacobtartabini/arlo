@@ -55,7 +55,7 @@ export function TaskListView({ initialProjectId, onTasksChange }: TaskListViewPr
   
   // Filters
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
+  const [statusFilter, setStatusFilter] = useState<FilterStatus>("pending");
   const [projectFilter, setProjectFilter] = useState<string>(initialProjectId || "all");
   const [sortBy, setSortBy] = useState<SortOption>("priority");
 
@@ -259,8 +259,6 @@ export function TaskListView({ initialProjectId, onTasksChange }: TaskListViewPr
       }
     });
 
-  const pendingCount = tasks.filter(t => !t.done).length;
-  const completedCount = tasks.filter(t => t.done).length;
 
   if (loadError) {
     return (
@@ -306,13 +304,9 @@ export function TaskListView({ initialProjectId, onTasksChange }: TaskListViewPr
         <div className="flex flex-wrap gap-2">
           <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as FilterStatus)}>
             <TabsList className="bg-muted/50">
+              <TabsTrigger value="pending" className="text-xs">To Do</TabsTrigger>
+              <TabsTrigger value="completed" className="text-xs">Completed</TabsTrigger>
               <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
-              <TabsTrigger value="pending" className="text-xs">
-                Pending ({pendingCount})
-              </TabsTrigger>
-              <TabsTrigger value="completed" className="text-xs">
-                Done ({completedCount})
-              </TabsTrigger>
             </TabsList>
           </Tabs>
 
