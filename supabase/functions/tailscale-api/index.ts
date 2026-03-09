@@ -261,7 +261,7 @@ Deno.serve(async (req) => {
 
     if (action === 'acls') {
       // Fetch ACL policy for security health check
-      const response = await fetch(`${baseUrl}/acl`, { headers })
+      const response = await fetchWithRetry(`${baseUrl}/acl`, { headers })
       
       if (!response.ok) {
         return jsonResponse(req, { acl: null, message: 'Could not fetch ACL' })
