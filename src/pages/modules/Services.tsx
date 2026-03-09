@@ -348,8 +348,9 @@ const Services = () => {
         setAuditError(null);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Audit logs unavailable.';
-      setAuditError(message);
+      const raw = err instanceof Error ? err.message : 'Audit logs unavailable.';
+      const isPlanLimit = raw.toLowerCase().includes('unavailable on current tailscale plan');
+      setAuditError(isPlanLimit ? 'Audit logs are not available on your current Tailscale plan.' : raw);
       setRecentEvents([]);
     } finally {
       setIsLoadingEvents(false);
@@ -1022,8 +1023,19 @@ const Services = () => {
             </div>
 
             {auditError ? (
-              <div className="rounded-xl border border-rose-500/30 bg-rose-500/5 p-4 text-sm text-rose-600 dark:text-rose-400">
-                {auditError}
+              <div className={cn(
+                "rounded-xl border p-4 text-sm flex items-center justify-between gap-3",
+                auditError.includes('not available on your current Tailscale plan')
+                  ? "border-amber-500/30 bg-amber-500/5 text-amber-600 dark:text-amber-400"
+                  : "border-rose-500/30 bg-rose-500/5 text-rose-600 dark:text-rose-400"
+              )}>
+                <span>{auditError}</span>
+                {!auditError.includes('not available on your current Tailscale plan') && (
+                  <Button variant="ghost" size="sm" onClick={loadAuditEvents} disabled={isLoadingEvents} className="shrink-0">
+                    {isLoadingEvents ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                    <span className="ml-1">Retry</span>
+                  </Button>
+                )}
               </div>
             ) : recentEvents.length > 0 ? (
               <div className="space-y-2">

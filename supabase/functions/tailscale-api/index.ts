@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
 
     if (action === 'devices') {
       // Fetch devices from Tailscale API
-      const response = await fetch(`${baseUrl}/devices`, { headers })
+      const response = await fetchWithRetry(`${baseUrl}/devices`, { headers })
       
       if (!response.ok) {
         const errorPayload = await readResponseBody(response)
@@ -167,7 +167,7 @@ Deno.serve(async (req) => {
       params.set('start', body.start || defaultStart)
       if (body.end) params.set('end', body.end)
       if (body.cursor) params.set('cursor', body.cursor)
-      const response = await fetch(`${baseUrl}/logs?${params.toString()}`, { headers })
+      const response = await fetchWithRetry(`${baseUrl}/logs?${params.toString()}`, { headers })
       
       if (!response.ok) {
         const errorPayload = await readResponseBody(response)
@@ -225,7 +225,7 @@ Deno.serve(async (req) => {
 
     if (action === 'keys') {
       // Fetch auth keys
-      const response = await fetch(`${baseUrl}/keys`, { headers })
+      const response = await fetchWithRetry(`${baseUrl}/keys`, { headers })
       
       if (!response.ok) {
         const errorPayload = await readResponseBody(response)
@@ -261,7 +261,7 @@ Deno.serve(async (req) => {
 
     if (action === 'acls') {
       // Fetch ACL policy for security health check
-      const response = await fetch(`${baseUrl}/acl`, { headers })
+      const response = await fetchWithRetry(`${baseUrl}/acl`, { headers })
       
       if (!response.ok) {
         return jsonResponse(req, { acl: null, message: 'Could not fetch ACL' })
@@ -316,6 +316,18 @@ function jsonError(
       },
     }
   )
+}
+
+async function fetchWithRetry(url: string, options: RequestInit, retries = 2): Promise<Response> {
+  for (let i = 0; i <= retries; i++) {
+    const response = await fetch(url, options)
+    if (response.ok || i === retries || ![502, 503, 504].includes(response.status)) {
+      return response
+    }
+    console.log(`[tailscale-api] Retrying (${i + 1}/${retries}) after ${response.status}...`)
+    await new Promise(r => setTimeout(r, 500 * Math.pow(2, i)))
+  }
+  return fetch(url, options)
 }
 
 async function readResponseBody(response: Response): Promise<unknown> {
