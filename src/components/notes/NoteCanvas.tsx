@@ -1463,8 +1463,8 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
         <canvas ref={canvasRef} className="absolute inset-0" />
         
         <EmbeddedModules 
-          canvasRef={fabricRef} 
-          onAddModule={(fn) => { addModuleRef.current = fn; }} 
+          onInsertText={() => {}} 
+          onModuleAdd={(fn) => { addModuleRef.current = fn; }} 
         />
       </div>
 
