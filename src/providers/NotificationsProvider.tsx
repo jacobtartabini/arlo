@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react';
 import { toast } from 'sonner';
+import { isAuthenticated } from '@/lib/arloAuth';
 import {
   fetchNotifications,
   fetchUnreadCount,
@@ -34,20 +34,35 @@ interface NotificationsContextType {
 
 const NotificationsContext = createContext<NotificationsContextType | undefined>(undefined);
 
+// Poll interval for checking new notifications (60 seconds)
+const POLL_INTERVAL_MS = 60 * 1000;
+
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
   const [pushPermission, setPushPermission] = useState<NotificationPermission>('default');
+  const pollRef = useRef<number | null>(null);
+  const prevUnreadRef = useRef<number>(0);
 
   const refresh = useCallback(async () => {
+    if (!isAuthenticated()) return;
     try {
       const [{ notifications: notifs }, count] = await Promise.all([
         fetchNotifications(50, 0),
         fetchUnreadCount(),
       ]);
       setNotifications(notifs);
+
+      // If new notifications arrived, show a toast for the newest one
+      if (count > prevUnreadRef.current && notifs.length > 0) {
+        const newest = notifs[0];
+        if (!newest.read) {
+          toast(newest.title, { description: newest.body });
+        }
+      }
+      prevUnreadRef.current = count;
       setUnreadCount(count);
     } catch (error) {
       console.error('Error refreshing notifications:', error);
@@ -78,8 +93,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const archive = useCallback(async (id: string) => {
     const success = await archiveNotificationDb(id);
     if (success) {
-      setNotifications(prev => prev.filter(n => n.id !== id));
       const notif = notifications.find(n => n.id === id);
+      setNotifications(prev => prev.filter(n => n.id !== id));
       if (notif && !notif.read) {
         setUnreadCount(prev => Math.max(0, prev - 1));
       }
@@ -103,9 +118,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     return success;
   }, []);
 
-  // Initial load - skip on public booking domains
+  // Initial load + polling - skip on public booking domains
   useEffect(() => {
-    // On public booking domains, don't fetch notifications
     if (isPublicBookingDomain()) {
       setIsLoading(false);
       return;
@@ -118,43 +132,19 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       setIsLoading(false);
     };
     init();
-  }, [refresh]);
 
-  // Realtime subscription - skip on public booking domains
-  useEffect(() => {
-    if (isPublicBookingDomain()) return;
-
-    const channel = supabase
-      .channel('notifications-realtime')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'notifications' },
-        (payload) => {
-          const newNotif = payload.new as Record<string, unknown>;
-          const appNotif: AppNotification = {
-            id: newNotif.id as string,
-            userId: newNotif.user_id as string,
-            type: (newNotif.type || newNotif.source || 'system') as AppNotification['type'],
-            title: newNotif.title as string,
-            body: newNotif.content as string | undefined,
-            data: newNotif.action_data as Record<string, unknown> | undefined,
-            read: false,
-            createdAt: new Date(newNotif.created_at as string),
-          };
-          
-          setNotifications(prev => [appNotif, ...prev]);
-          setUnreadCount(prev => prev + 1);
-          
-          // Show toast for new notifications
-          toast(appNotif.title, { description: appNotif.body });
-        }
-      )
-      .subscribe();
+    // Poll for new notifications instead of relying on realtime
+    // (Realtime uses direct Supabase client which is blocked by RLS for Arlo JWT auth)
+    pollRef.current = window.setInterval(() => {
+      refresh();
+    }, POLL_INTERVAL_MS);
 
     return () => {
-      supabase.removeChannel(channel);
+      if (pollRef.current) {
+        window.clearInterval(pollRef.current);
+      }
     };
-  }, []);
+  }, [refresh]);
 
   return (
     <NotificationsContext.Provider

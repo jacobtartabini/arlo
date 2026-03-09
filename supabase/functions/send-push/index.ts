@@ -92,7 +92,6 @@ Deno.serve(async (req) => {
         user_key: userId, // Use TEXT user_key instead of UUID user_id
         title,
         content: notifBody,
-        type: notificationType,
         source: notificationType,
         action_data: data,
         read: false,
