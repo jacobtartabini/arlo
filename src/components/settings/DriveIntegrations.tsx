@@ -56,18 +56,21 @@ export default function DriveIntegrations({ embedded = false }: DriveIntegration
       loadAccounts();
     }
 
-    // Check for Google Drive OAuth callback (same pattern as CalendarIntegrations)
+    // Check for Google Drive OAuth callback by decoding state parameter
     const params = new URLSearchParams(window.location.search);
-    if (params.get('drive_callback') === 'true') {
-      const code = params.get('code');
-      const state = params.get('state');
-      
-      if (code && state) {
-        handleDriveCallback(code, state);
+    const code = params.get('code');
+    const state = params.get('state');
+
+    if (code && state) {
+      try {
+        const decoded = JSON.parse(atob(state));
+        if (decoded.provider === 'google_drive') {
+          handleDriveCallback(code, state);
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+      } catch {
+        // Not a drive callback or invalid state, ignore
       }
-      
-      // Clean up URL
-      window.history.replaceState({}, '', window.location.pathname);
     }
   }, [authLoading, isAuthenticated]);
 
@@ -109,7 +112,7 @@ export default function DriveIntegrations({ embedded = false }: DriveIntegration
       
       if (data?.oauth_url) {
         // Redirect to OAuth (same pattern as Calendar - full page redirect)
-        window.location.href = data.oauth_url + '&state_param=drive_callback';
+        window.location.href = data.oauth_url;
       } else {
         setIsConnecting(false);
       }
