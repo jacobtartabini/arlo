@@ -304,13 +304,9 @@ export function TaskListView({ initialProjectId, onTasksChange }: TaskListViewPr
         <div className="flex flex-wrap gap-2">
           <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as FilterStatus)}>
             <TabsList className="bg-muted/50">
+              <TabsTrigger value="pending" className="text-xs">To Do</TabsTrigger>
+              <TabsTrigger value="completed" className="text-xs">Completed</TabsTrigger>
               <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
-              <TabsTrigger value="pending" className="text-xs">
-                Pending ({pendingCount})
-              </TabsTrigger>
-              <TabsTrigger value="completed" className="text-xs">
-                Done ({completedCount})
-              </TabsTrigger>
             </TabsList>
           </Tabs>
 
