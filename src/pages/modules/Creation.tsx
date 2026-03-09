@@ -203,6 +203,15 @@ export default function Creation() {
     <div className="h-screen flex flex-col bg-background">
       {/* Top Bar */}
       <div className="flex items-center gap-4 px-4 py-2 border-b border-border bg-background/95 backdrop-blur-sm">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => navigate("/")}
+          className="h-8 w-8 shrink-0"
+          title="Back to dashboard"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
         <Input
           value={currentProject?.name || 'Untitled Project'}
           onChange={(e) => updateProjectName(e.target.value)}
