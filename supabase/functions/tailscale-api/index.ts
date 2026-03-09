@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
 
     if (action === 'devices') {
       // Fetch devices from Tailscale API
-      const response = await fetch(`${baseUrl}/devices`, { headers })
+      const response = await fetchWithRetry(`${baseUrl}/devices`, { headers })
       
       if (!response.ok) {
         const errorPayload = await readResponseBody(response)
