@@ -197,16 +197,18 @@ export function EnhancedTaskItem({
         </button>
 
         {/* Checkbox */}
-        <Checkbox
-          checked={task.done}
-          onCheckedChange={handleToggle}
-          disabled={isToggling}
-          className="mt-0.5"
-          style={{ 
-            borderColor: projectColor,
-            ...(task.done ? { backgroundColor: projectColor, borderColor: projectColor } : {})
-          }}
-        />
+        <div onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={task.done}
+            onCheckedChange={handleToggle}
+            disabled={isToggling}
+            className="mt-0.5 h-5 w-5"
+            style={{ 
+              borderColor: projectColor,
+              ...(task.done ? { backgroundColor: projectColor, borderColor: projectColor } : {})
+            }}
+          />
+        </div>
 
         {/* Content */}
         <div className="flex-1 min-w-0">
