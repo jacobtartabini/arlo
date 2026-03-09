@@ -2300,6 +2300,45 @@ export type Database = {
         }
         Relationships: []
       }
+      strava_connections: {
+        Row: {
+          access_token: string | null
+          athlete_avatar: string | null
+          athlete_name: string | null
+          created_at: string
+          id: string
+          refresh_token: string | null
+          strava_athlete_id: string
+          token_expires_at: string | null
+          updated_at: string
+          user_key: string
+        }
+        Insert: {
+          access_token?: string | null
+          athlete_avatar?: string | null
+          athlete_name?: string | null
+          created_at?: string
+          id?: string
+          refresh_token?: string | null
+          strava_athlete_id: string
+          token_expires_at?: string | null
+          updated_at?: string
+          user_key: string
+        }
+        Update: {
+          access_token?: string | null
+          athlete_avatar?: string | null
+          athlete_name?: string | null
+          created_at?: string
+          id?: string
+          refresh_token?: string | null
+          strava_athlete_id?: string
+          token_expires_at?: string | null
+          updated_at?: string
+          user_key?: string
+        }
+        Relationships: []
+      }
       subtasks: {
         Row: {
           created_at: string
