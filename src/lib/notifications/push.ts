@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+// Web Push notification utilities
 
 // VAPID public key for Web Push
 // Generate your own at https://vapidkeys.com/ and set both:
