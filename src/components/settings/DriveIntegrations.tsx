@@ -112,7 +112,7 @@ export default function DriveIntegrations({ embedded = false }: DriveIntegration
       
       if (data?.oauth_url) {
         // Redirect to OAuth (same pattern as Calendar - full page redirect)
-        window.location.href = data.oauth_url + '&state_param=drive_callback';
+        window.location.href = data.oauth_url;
       } else {
         setIsConnecting(false);
       }
