@@ -28,16 +28,7 @@ interface NoteCanvasProps {
   onSave: (canvasState: string, zoom: number, panX: number, panY: number) => void;
 }
 
-// Touch tracking for palm rejection
-interface TouchInfo {
-  identifier: number;
-  startTime: number;
-  startX: number;
-  startY: number;
-  isPalm: boolean;
-}
-
-const PEN_UP_SUPPRESSION_MS = 120;
+// Constants for gesture detection
 const ERASER_PRECISION_RADIUS_MULTIPLIER = 2;
 const ERASER_STROKE_RADIUS_MULTIPLIER = 5;
 const ERASER_MIN_PRECISION_RADIUS = 4;
@@ -46,11 +37,13 @@ const ERASER_SAMPLE_STEP_PX = 6;
 const ERASER_CURVE_SAMPLE_SEGMENTS = 8;
 const ERASER_FALLBACK_OFFSET_SAMPLES = 3;
 const MIN_LASSO_POINTS = 3;
-const PALM_THRESHOLD_SIZE = 40;
-const PALM_THRESHOLD_TOUCHES = 3;
 const TAP_THRESHOLD_MS = 300;
 const TAP_MOVEMENT_THRESHOLD = 20;
+const MIN_ZOOM = 0.25;
+const MAX_ZOOM = 4;
+const PINCH_ZOOM_SENSITIVITY = 0.01;
 
+// Geometry helpers
 const rectsIntersect = (
   a: { left: number; top: number; width: number; height: number },
   b: { left: number; top: number; width: number; height: number },
@@ -408,6 +401,20 @@ const segmentHitsObject = (obj: FabricObject, start: { x: number; y: number }, e
   return false;
 };
 
+// Check if this is a pen/stylus event (Apple Pencil)
+const isPenPointerEvent = (e: PointerEvent): boolean => {
+  return e.pointerType === "pen";
+};
+
+// Check if touch event is from stylus
+const isStylusTouch = (touch: Touch): boolean => {
+  // Safari/WebKit touchType property
+  if ((touch as any).touchType === "stylus") return true;
+  // Fallback: stylus has very small radius and force > 0
+  if (touch.force > 0 && touch.radiusX <= 2 && touch.radiusY <= 2) return true;
+  return false;
+};
+
 export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -417,59 +424,46 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
   const [zoom, setZoom] = useState(note.zoom || 1);
   const [undoStack, setUndoStack] = useState<string[]>([]);
   const [redoStack, setRedoStack] = useState<string[]>([]);
-  const [isPanning, setIsPanning] = useState(false);
   const [clipboard, setClipboard] = useState<FabricObject[] | null>(null);
-  const [palmRejectionEnabled, setPalmRejectionEnabled] = useState(true);
+  
+  // Refs that persist across renders
   const settingsRef = useRef<DrawingSettings>(settings);
   settingsRef.current = settings;
   const isRestoringRef = useRef(false);
-  const lastPanPosition = useRef({ x: 0, y: 0 });
-  const touchTracking = useRef<Map<number, TouchInfo>>(new Map());
-  const primaryTouchId = useRef<number | null>(null);
   const addModuleRef = useRef<((type: ModuleType) => void) | null>(null);
-  const stylusOnlyTools = useRef(new Set(["pen", "highlighter", "eraser", "lasso"]));
-  const penActiveRef = useRef(false);
-  const nonPenSuppressionTimeout = useRef<number | null>(null);
+  
+  // Drawing state refs (pen only)
+  const isDrawingWithPenRef = useRef(false);
   const lassoPointsRef = useRef<{ x: number; y: number }[]>([]);
   const lassoPreviewRef = useRef<FabricObject | null>(null);
   const lassoActiveRef = useRef(false);
   const eraserActiveRef = useRef(false);
   const eraserLastPointRef = useRef<{ x: number; y: number } | null>(null);
+  
+  // Finger navigation state
+  const fingerNavigationRef = useRef({
+    isPanning: false,
+    isPinching: false,
+    lastPanPosition: { x: 0, y: 0 },
+    initialPinchDistance: 0,
+    initialZoom: 1,
+    pinchCenter: { x: 0, y: 0 },
+    activeTouches: new Map<number, { x: number; y: number }>(),
+  });
+  
+  // Gesture detection for undo/redo
+  const gestureRef = useRef({
+    touchStartTime: 0,
+    touchStartCount: 0,
+    touchStartPositions: [] as { x: number; y: number }[],
+  });
 
-  const isPenEvent = (event?: Event | PointerEvent | TouchEvent | TPointerEvent | null) => {
-    if (!event) return false;
-    const pointerEvent = event as PointerEvent;
-    if (typeof pointerEvent.pointerType === "string") {
-      return pointerEvent.pointerType === "pen";
-    }
-
-    const touchEvent = event as TouchEvent;
-    if ("touches" in touchEvent && touchEvent.touches) {
-      return Array.from(touchEvent.touches).some(
-        touch => (touch as any).touchType === "stylus" || (touch as any).force > 0,
-      );
-    }
-
-    return false;
-  };
-
-  const scheduleNonPenRelease = () => {
-    if (nonPenSuppressionTimeout.current) {
-      window.clearTimeout(nonPenSuppressionTimeout.current);
-    }
-    nonPenSuppressionTimeout.current = window.setTimeout(() => {
-      penActiveRef.current = false;
-    }, PEN_UP_SUPPRESSION_MS);
-  };
-
-  const clearNonPenSuppression = () => {
-    if (nonPenSuppressionTimeout.current) {
-      window.clearTimeout(nonPenSuppressionTimeout.current);
-      nonPenSuppressionTimeout.current = null;
-    }
-    penActiveRef.current = false;
-  };
-
+  // Tools that require stylus (no finger drawing)
+  const stylusOnlyTools = new Set(["pen", "highlighter", "eraser", "lasso"]);
+  
+  const isToolStylusOnly = useCallback(() => {
+    return stylusOnlyTools.has(settingsRef.current.tool);
+  }, []);
 
   // Initialize canvas
   useEffect(() => {
@@ -482,7 +476,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       backgroundColor: "transparent",
       selection: settings.tool === "select",
       isDrawingMode: settings.tool === "pen" || settings.tool === "highlighter",
-      allowTouchScrolling: true,
+      allowTouchScrolling: false, // We handle touch ourselves
     });
 
     // Initialize brush
@@ -537,33 +531,6 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       setRedoStack([]);
     };
 
-    // Block non-pen input from triggering Fabric.js drawing/erasing
-    // This is the critical fix: intercept at the Fabric.js event level
-    // so finger/palm touches never start a drawing stroke
-    canvas.on("mouse:down:before", (opt: any) => {
-      const e = opt.e as PointerEvent;
-      if (!e || typeof e.pointerType !== "string") return;
-      
-      const tool = settingsRef.current.tool;
-      const requiresStylus = tool === "pen" || tool === "highlighter" || tool === "eraser" || tool === "lasso";
-      
-      if (requiresStylus && e.pointerType !== "pen" && e.pointerType !== "mouse") {
-        // Cancel Fabric.js processing for this event
-        // This prevents finger/palm from drawing
-        if (canvas.isDrawingMode) {
-          canvas.isDrawingMode = false;
-          // Re-enable after a tick so pen input still works
-          requestAnimationFrame(() => {
-            if (settingsRef.current.tool === "pen" || settingsRef.current.tool === "highlighter") {
-              canvas.isDrawingMode = true;
-            }
-          });
-        }
-        opt.e.stopPropagation?.();
-        return;
-      }
-    });
-
     // Auto-save + track history on changes
     canvas.on("object:added", commitState);
     canvas.on("object:modified", commitState);
@@ -577,6 +544,340 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     };
   }, [note.id]);
 
+  // ============================================================
+  // CORE PALM REJECTION: Block ALL non-pen input from Fabric.js
+  // This is the critical fix - intercept before Fabric processes
+  // ============================================================
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+
+    const handleBeforeMouseDown = (opt: any) => {
+      const e = opt.e as PointerEvent;
+      if (!e || typeof e.pointerType !== "string") return;
+      
+      const tool = settingsRef.current.tool;
+      const requiresStylus = stylusOnlyTools.has(tool);
+      
+      // For stylus-only tools, ONLY allow pen input to reach Fabric.js
+      if (requiresStylus && e.pointerType !== "pen") {
+        // Completely block this event from Fabric
+        canvas.isDrawingMode = false;
+        opt.e = null; // Nullify the event
+        return;
+      }
+      
+      // For non-stylus tools (select, shape, text), allow all input
+      // but still track that pen is being used
+      if (e.pointerType === "pen") {
+        isDrawingWithPenRef.current = true;
+      }
+    };
+
+    canvas.on("mouse:down:before", handleBeforeMouseDown);
+
+    return () => {
+      canvas.off("mouse:down:before", handleBeforeMouseDown);
+    };
+  }, []);
+
+  // Re-enable drawing mode after blocking
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+
+    const isDrawing = settings.tool === "pen" || settings.tool === "highlighter";
+    canvas.isDrawingMode = isDrawing;
+    canvas.selection = settings.tool === "select";
+    canvas.skipTargetFind = settings.tool === "eraser";
+
+    if (settings.tool === "eraser") {
+      canvas.discardActiveObject();
+      canvas.requestRenderAll();
+    }
+
+    if (isDrawing) {
+      if (!canvas.freeDrawingBrush || !(canvas.freeDrawingBrush instanceof PencilBrush)) {
+        canvas.freeDrawingBrush = new PencilBrush(canvas);
+      }
+      canvas.freeDrawingBrush.color = settings.tool === "highlighter"
+        ? settings.color + "80"
+        : settings.color;
+      canvas.freeDrawingBrush.width = settings.tool === "highlighter"
+        ? settings.strokeWidth * 3
+        : settings.strokeWidth;
+      (canvas.freeDrawingBrush as any).opacity = settings.opacity;
+    }
+  }, [settings]);
+
+  // Handle zoom changes
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    
+    canvas.setZoom(zoom);
+    canvas.renderAll();
+  }, [zoom]);
+
+  // ============================================================
+  // FINGER NAVIGATION: Pan with 1 finger, Zoom with 2 fingers
+  // This is a unified touch handler for navigation only
+  // ============================================================
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const nav = fingerNavigationRef.current;
+    const gesture = gestureRef.current;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      const canvas = fabricRef.current;
+      if (!canvas) return;
+
+      // Track touch start for gesture detection (undo/redo taps)
+      gesture.touchStartTime = Date.now();
+      gesture.touchStartCount = e.touches.length;
+      gesture.touchStartPositions = Array.from(e.touches).map(t => ({ x: t.clientX, y: t.clientY }));
+
+      // Check if any touch is a stylus
+      const hasStylus = Array.from(e.touches).some(isStylusTouch);
+      
+      // If stylus is involved and tool requires stylus, let Fabric handle it
+      if (hasStylus && isToolStylusOnly()) {
+        return;
+      }
+
+      // For finger touches on stylus-only tools: use for navigation
+      if (isToolStylusOnly()) {
+        e.preventDefault(); // Prevent scrolling
+
+        // Update active touches
+        for (let i = 0; i < e.touches.length; i++) {
+          const touch = e.touches[i];
+          if (!isStylusTouch(touch)) {
+            nav.activeTouches.set(touch.identifier, { x: touch.clientX, y: touch.clientY });
+          }
+        }
+
+        if (nav.activeTouches.size === 1) {
+          // Single finger: start panning
+          const touch = Array.from(nav.activeTouches.values())[0];
+          nav.isPanning = true;
+          nav.isPinching = false;
+          nav.lastPanPosition = { x: touch.x, y: touch.y };
+        } else if (nav.activeTouches.size >= 2) {
+          // Two+ fingers: start pinch zoom
+          const touches = Array.from(nav.activeTouches.values());
+          const dx = touches[1].x - touches[0].x;
+          const dy = touches[1].y - touches[0].y;
+          nav.initialPinchDistance = Math.hypot(dx, dy);
+          nav.initialZoom = canvas.getZoom();
+          nav.pinchCenter = {
+            x: (touches[0].x + touches[1].x) / 2,
+            y: (touches[0].y + touches[1].y) / 2,
+          };
+          nav.isPanning = false;
+          nav.isPinching = true;
+        }
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      const canvas = fabricRef.current;
+      if (!canvas) return;
+
+      // Check if any touch is a stylus
+      const hasStylus = Array.from(e.touches).some(isStylusTouch);
+      if (hasStylus && isToolStylusOnly()) {
+        return; // Let Fabric handle stylus
+      }
+
+      if (!isToolStylusOnly()) return;
+
+      e.preventDefault();
+
+      // Update touch positions
+      for (let i = 0; i < e.touches.length; i++) {
+        const touch = e.touches[i];
+        if (!isStylusTouch(touch) && nav.activeTouches.has(touch.identifier)) {
+          nav.activeTouches.set(touch.identifier, { x: touch.clientX, y: touch.clientY });
+        }
+      }
+
+      if (nav.isPanning && nav.activeTouches.size === 1) {
+        // Pan the canvas
+        const touch = Array.from(nav.activeTouches.values())[0];
+        const dx = touch.x - nav.lastPanPosition.x;
+        const dy = touch.y - nav.lastPanPosition.y;
+        
+        const vpt = canvas.viewportTransform;
+        if (vpt) {
+          vpt[4] += dx;
+          vpt[5] += dy;
+          canvas.requestRenderAll();
+        }
+        
+        nav.lastPanPosition = { x: touch.x, y: touch.y };
+      } else if (nav.isPinching && nav.activeTouches.size >= 2) {
+        // Pinch zoom
+        const touches = Array.from(nav.activeTouches.values());
+        const dx = touches[1].x - touches[0].x;
+        const dy = touches[1].y - touches[0].y;
+        const currentDistance = Math.hypot(dx, dy);
+        
+        if (nav.initialPinchDistance > 0) {
+          const scale = currentDistance / nav.initialPinchDistance;
+          const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, nav.initialZoom * scale));
+          
+          // Zoom toward pinch center
+          const center = {
+            x: (touches[0].x + touches[1].x) / 2,
+            y: (touches[0].y + touches[1].y) / 2,
+          };
+          
+          canvas.zoomToPoint(new Point(center.x, center.y), newZoom);
+          setZoom(newZoom);
+        }
+      }
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      const canvas = fabricRef.current;
+      if (!canvas) return;
+
+      // Remove ended touches
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const touch = e.changedTouches[i];
+        nav.activeTouches.delete(touch.identifier);
+      }
+
+      // Check for gesture taps (undo/redo)
+      const touchDuration = Date.now() - gesture.touchStartTime;
+      if (touchDuration < TAP_THRESHOLD_MS && e.changedTouches.length === gesture.touchStartCount) {
+        let isTap = true;
+        for (let i = 0; i < e.changedTouches.length && i < gesture.touchStartPositions.length; i++) {
+          const touch = e.changedTouches[i];
+          const startPos = gesture.touchStartPositions[i];
+          if (startPos) {
+            const dx = Math.abs(touch.clientX - startPos.x);
+            const dy = Math.abs(touch.clientY - startPos.y);
+            if (dx > TAP_MOVEMENT_THRESHOLD || dy > TAP_MOVEMENT_THRESHOLD) {
+              isTap = false;
+              break;
+            }
+          }
+        }
+
+        if (isTap) {
+          if (gesture.touchStartCount === 2) {
+            e.preventDefault();
+            handleUndo();
+            toast.info("Undo", { duration: 1000 });
+          } else if (gesture.touchStartCount === 3) {
+            e.preventDefault();
+            handleRedo();
+            toast.info("Redo", { duration: 1000 });
+          }
+        }
+      }
+
+      // Reset navigation state if no fingers remain
+      if (nav.activeTouches.size === 0) {
+        nav.isPanning = false;
+        nav.isPinching = false;
+        nav.initialPinchDistance = 0;
+      } else if (nav.activeTouches.size === 1) {
+        // Switch from pinch to pan
+        const touch = Array.from(nav.activeTouches.values())[0];
+        nav.isPanning = true;
+        nav.isPinching = false;
+        nav.lastPanPosition = { x: touch.x, y: touch.y };
+      }
+
+      // Save viewport position
+      if (canvas.viewportTransform) {
+        onSave(
+          JSON.stringify(canvas.toJSON()),
+          canvas.getZoom(),
+          canvas.viewportTransform[4],
+          canvas.viewportTransform[5]
+        );
+      }
+    };
+
+    container.addEventListener("touchstart", handleTouchStart, { passive: false });
+    container.addEventListener("touchmove", handleTouchMove, { passive: false });
+    container.addEventListener("touchend", handleTouchEnd, { passive: false });
+    container.addEventListener("touchcancel", handleTouchEnd, { passive: false });
+
+    return () => {
+      container.removeEventListener("touchstart", handleTouchStart);
+      container.removeEventListener("touchmove", handleTouchMove);
+      container.removeEventListener("touchend", handleTouchEnd);
+      container.removeEventListener("touchcancel", handleTouchEnd);
+    };
+  }, [onSave, isToolStylusOnly]);
+
+  // ============================================================
+  // POINTER EVENTS: Block non-pen for stylus-only tools
+  // ============================================================
+  useEffect(() => {
+    const container = containerRef.current;
+    const canvasEl = canvasRef.current;
+    if (!container) return;
+
+    const handlePointerDown = (e: PointerEvent) => {
+      if (!isToolStylusOnly()) return;
+      
+      // Only allow pen (stylus) events through for drawing tools
+      if (e.pointerType !== "pen") {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+      } else {
+        isDrawingWithPenRef.current = true;
+      }
+    };
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (!isToolStylusOnly()) return;
+      if (e.pointerType !== "pen") {
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+      }
+    };
+
+    const handlePointerUp = (e: PointerEvent) => {
+      if (e.pointerType === "pen") {
+        isDrawingWithPenRef.current = false;
+      }
+      if (!isToolStylusOnly()) return;
+      if (e.pointerType !== "pen") {
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+      }
+    };
+
+    // Attach to both container and canvas with capture to intercept early
+    const targets = canvasEl ? [container, canvasEl] : [container];
+    targets.forEach(target => {
+      target.addEventListener("pointerdown", handlePointerDown, { capture: true });
+      target.addEventListener("pointermove", handlePointerMove, { capture: true });
+      target.addEventListener("pointerup", handlePointerUp, { capture: true });
+      target.addEventListener("pointercancel", handlePointerUp, { capture: true });
+    });
+
+    return () => {
+      targets.forEach(target => {
+        target.removeEventListener("pointerdown", handlePointerDown, { capture: true });
+        target.removeEventListener("pointermove", handlePointerMove, { capture: true });
+        target.removeEventListener("pointerup", handlePointerUp, { capture: true });
+        target.removeEventListener("pointercancel", handlePointerUp, { capture: true });
+      });
+    };
+  }, [isToolStylusOnly]);
+
+  // Eraser handlers
   const eraseAlongSegment = useCallback((start: { x: number; y: number }, end: { x: number; y: number }) => {
     const canvas = fabricRef.current;
     if (!canvas) return;
@@ -605,58 +906,10 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     canvas.requestRenderAll();
   }, [settings.strokeWidth, settings.eraserType]);
 
-  // Update drawing mode based on tool
-  useEffect(() => {
-    const canvas = fabricRef.current;
-    if (!canvas) return;
-
-    const isDrawing = settings.tool === "pen" || settings.tool === "highlighter";
-    canvas.isDrawingMode = isDrawing;
-    canvas.selection = settings.tool === "select";
-    canvas.skipTargetFind = settings.tool === "eraser";
-
-    if (settings.tool === "eraser") {
-      canvas.discardActiveObject();
-      canvas.requestRenderAll();
-    }
-
-    if (isDrawing) {
-      if (!canvas.freeDrawingBrush || !(canvas.freeDrawingBrush instanceof PencilBrush)) {
-        canvas.freeDrawingBrush = new PencilBrush(canvas);
-      }
-      canvas.freeDrawingBrush.color = settings.tool === "highlighter"
-        ? settings.color + "80"
-        : settings.color;
-      canvas.freeDrawingBrush.width = settings.tool === "highlighter"
-        ? settings.strokeWidth * 3
-        : settings.strokeWidth;
-      (canvas.freeDrawingBrush as any).opacity = settings.opacity;
-    }
-
-    if (settings.tool === "eraser") {
-      canvas.on("mouse:down", handleEraserStart as any);
-      canvas.on("mouse:move", handleEraserMove as any);
-      canvas.on("mouse:up", handleEraserEnd);
-    } else {
-      canvas.off("mouse:down", handleEraserStart as any);
-      canvas.off("mouse:move", handleEraserMove as any);
-      canvas.off("mouse:up", handleEraserEnd);
-    }
-  }, [settings]);
-
-  // Handle zoom
-  useEffect(() => {
-    const canvas = fabricRef.current;
-    if (!canvas) return;
-    
-    canvas.setZoom(zoom);
-    canvas.renderAll();
-  }, [zoom]);
-
-  // Eraser handlers - stroke eraser uses a continuous path
   const handleEraserStart = useCallback((opt: TPointerEventInfo<TPointerEvent>) => {
     const canvas = fabricRef.current;
-    if (!canvas || !isPenEvent(opt.e)) return;
+    const e = opt.e as PointerEvent;
+    if (!canvas || !e || e.pointerType !== "pen") return;
 
     eraserActiveRef.current = true;
     const pointer = canvas.getScenePoint(opt.e);
@@ -666,7 +919,8 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
 
   const handleEraserMove = useCallback((opt: TPointerEventInfo<TPointerEvent>) => {
     const canvas = fabricRef.current;
-    if (!canvas || !eraserActiveRef.current || !isPenEvent(opt.e)) return;
+    const e = opt.e as PointerEvent;
+    if (!canvas || !eraserActiveRef.current || !e || e.pointerType !== "pen") return;
 
     const pointer = canvas.getScenePoint(opt.e);
     if (eraserLastPointRef.current) {
@@ -679,6 +933,28 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     eraserActiveRef.current = false;
     eraserLastPointRef.current = null;
   }, []);
+
+  // Attach eraser handlers
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+
+    if (settings.tool === "eraser") {
+      canvas.on("mouse:down", handleEraserStart as any);
+      canvas.on("mouse:move", handleEraserMove as any);
+      canvas.on("mouse:up", handleEraserEnd);
+    } else {
+      canvas.off("mouse:down", handleEraserStart as any);
+      canvas.off("mouse:move", handleEraserMove as any);
+      canvas.off("mouse:up", handleEraserEnd);
+    }
+
+    return () => {
+      canvas.off("mouse:down", handleEraserStart as any);
+      canvas.off("mouse:move", handleEraserMove as any);
+      canvas.off("mouse:up", handleEraserEnd);
+    };
+  }, [settings.tool, handleEraserStart, handleEraserMove, handleEraserEnd]);
 
   // Add shape
   const addShape = useCallback((x: number, y: number) => {
@@ -790,7 +1066,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       canvas.discardActiveObject();
     }
     canvas.requestRenderAll();
-  }, [polygonIntersectsRect, rectsIntersect]);
+  }, []);
 
   // Handle image upload
   const handleImageUpload = useCallback((file: File) => {
@@ -818,7 +1094,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     reader.readAsDataURL(file);
   }, []);
 
-  // Canvas click handler
+  // Canvas click handler for shapes and text
   useEffect(() => {
     const canvas = fabricRef.current;
     if (!canvas) return;
@@ -845,8 +1121,10 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     if (!canvas) return;
 
     const handleLassoStart = (opt: TPointerEventInfo<TPointerEvent>) => {
-      if (!isPenEvent(opt.e)) return;
+      const e = opt.e as PointerEvent;
+      if (!e || e.pointerType !== "pen") return;
       if (opt.target) return;
+      
       const pointer = canvas.getScenePoint(opt.e);
       lassoActiveRef.current = true;
       lassoPointsRef.current = [pointer];
@@ -885,7 +1163,9 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     };
 
     const handleLassoMove = (opt: TPointerEventInfo<TPointerEvent>) => {
-      if (!lassoActiveRef.current || !isPenEvent(opt.e)) return;
+      const e = opt.e as PointerEvent;
+      if (!lassoActiveRef.current || !e || e.pointerType !== "pen") return;
+      
       const pointer = canvas.getScenePoint(opt.e);
       const points = lassoPointsRef.current;
       points.push(pointer);
@@ -953,268 +1233,67 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     };
   }, [finalizeLassoSelection, settings.lassoMode, settings.tool]);
 
-  // Panning with space + drag
+  // Keyboard panning with space + drag (for desktop)
   useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+
+    let isPanningWithSpace = false;
+    let lastPanPosition = { x: 0, y: 0 };
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === "Space" && !isPanning) {
-        setIsPanning(true);
-        if (fabricRef.current) {
-          fabricRef.current.defaultCursor = "grab";
-        }
+      if (e.code === "Space" && !isPanningWithSpace) {
+        isPanningWithSpace = true;
+        canvas.defaultCursor = "grab";
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.code === "Space") {
-        setIsPanning(false);
-        if (fabricRef.current) {
-          fabricRef.current.defaultCursor = "default";
-        }
+        isPanningWithSpace = false;
+        canvas.defaultCursor = "default";
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
-    };
-  }, [isPanning]);
-
-  // Pan handlers
-  useEffect(() => {
-    const canvas = fabricRef.current;
-    if (!canvas) return;
-
     const handleMouseDown = (opt: any) => {
-      if (isPanning) {
+      if (isPanningWithSpace) {
         canvas.defaultCursor = "grabbing";
-        lastPanPosition.current = { x: opt.e.clientX, y: opt.e.clientY };
+        lastPanPosition = { x: opt.e.clientX, y: opt.e.clientY };
       }
     };
 
     const handleMouseMove = (opt: any) => {
-      if (isPanning && opt.e.buttons === 1) {
+      if (isPanningWithSpace && opt.e.buttons === 1) {
         const vpt = canvas.viewportTransform;
         if (vpt) {
-          vpt[4] += opt.e.clientX - lastPanPosition.current.x;
-          vpt[5] += opt.e.clientY - lastPanPosition.current.y;
+          vpt[4] += opt.e.clientX - lastPanPosition.x;
+          vpt[5] += opt.e.clientY - lastPanPosition.y;
           canvas.requestRenderAll();
-          lastPanPosition.current = { x: opt.e.clientX, y: opt.e.clientY };
+          lastPanPosition = { x: opt.e.clientX, y: opt.e.clientY };
         }
       }
     };
 
     const handleMouseUp = () => {
-      if (isPanning) {
+      if (isPanningWithSpace) {
         canvas.defaultCursor = "grab";
       }
     };
 
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
     canvas.on("mouse:down", handleMouseDown);
     canvas.on("mouse:move", handleMouseMove);
     canvas.on("mouse:up", handleMouseUp);
 
     return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
       canvas.off("mouse:down", handleMouseDown);
       canvas.off("mouse:move", handleMouseMove);
       canvas.off("mouse:up", handleMouseUp);
     };
-  }, [isPanning]);
-
-  // Touch event handlers with palm rejection
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || !palmRejectionEnabled) return;
-
-    const handleTouchStart = (e: TouchEvent) => {
-      const canvas = fabricRef.current;
-      if (!canvas) return;
-
-      for (let i = 0; i < e.changedTouches.length; i++) {
-        const touch = e.changedTouches[i];
-        const touchInfo: TouchInfo = {
-          identifier: touch.identifier,
-          startTime: Date.now(),
-          startX: touch.clientX,
-          startY: touch.clientY,
-          // Heuristics for palm detection
-          isPalm: (touch.radiusX && touch.radiusX > PALM_THRESHOLD_SIZE) ||
-                  (touch.radiusY && touch.radiusY > PALM_THRESHOLD_SIZE) ||
-                  e.touches.length >= PALM_THRESHOLD_TOUCHES,
-        };
-        touchTracking.current.set(touch.identifier, touchInfo);
-
-        // First non-palm touch becomes primary
-        if (primaryTouchId.current === null && !touchInfo.isPalm) {
-          primaryTouchId.current = touch.identifier;
-        }
-      }
-
-      // If using stylus (force > 0), always allow
-      const stylusTouch = Array.from(e.touches).find(t => (t as any).force > 0);
-      if (stylusTouch) {
-        primaryTouchId.current = stylusTouch.identifier;
-      }
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      if (!palmRejectionEnabled) return;
-
-      // Only allow primary touch through
-      for (let i = 0; i < e.changedTouches.length; i++) {
-        const touch = e.changedTouches[i];
-        const info = touchTracking.current.get(touch.identifier);
-        
-        if (info?.isPalm || (primaryTouchId.current !== null && touch.identifier !== primaryTouchId.current)) {
-          e.preventDefault();
-        }
-      }
-    };
-
-    const handleTouchEnd = (e: TouchEvent) => {
-      for (let i = 0; i < e.changedTouches.length; i++) {
-        const touch = e.changedTouches[i];
-        touchTracking.current.delete(touch.identifier);
-        
-        if (touch.identifier === primaryTouchId.current) {
-          primaryTouchId.current = null;
-        }
-      }
-    };
-
-    container.addEventListener("touchstart", handleTouchStart, { passive: false });
-    container.addEventListener("touchmove", handleTouchMove, { passive: false });
-    container.addEventListener("touchend", handleTouchEnd);
-
-    return () => {
-      container.removeEventListener("touchstart", handleTouchStart);
-      container.removeEventListener("touchmove", handleTouchMove);
-      container.removeEventListener("touchend", handleTouchEnd);
-    };
-  }, [palmRejectionEnabled]);
-
-  // Block non-stylus input for drawing tools (Apple Pencil / stylus only)
-  useEffect(() => {
-    const container = containerRef.current;
-    const canvasEl = canvasRef.current;
-    if (!container) return;
-
-    const requiresStylus = stylusOnlyTools.current.has(settings.tool);
-
-    const shouldBlock = (event: PointerEvent) => {
-      if (!requiresStylus) return false;
-      // Always allow pen (stylus)
-      if (event.pointerType === "pen") return false;
-      // Block touch and mouse when stylus-only tools are active
-      // Allow mouse on desktop (non-touch devices) for testing
-      if (event.pointerType === "touch") return true;
-      // If pen was recently active, block mouse too (palm can register as mouse)
-      if (penActiveRef.current && event.pointerType !== "pen") return true;
-      return false;
-    };
-
-    const shouldBlockTouch = (event: TouchEvent) => {
-      if (!requiresStylus) return false;
-      // Allow multi-touch gestures (2-finger undo, 3-finger redo, pinch zoom)
-      if (event.touches.length >= 2) return false;
-      // Block single-finger touch unless it's a stylus
-      const isStylus = Array.from(event.touches).some(
-        touch => (touch as any).touchType === "stylus",
-      );
-      return !isStylus;
-    };
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (event.pointerType === "pen") {
-        penActiveRef.current = true;
-        if (nonPenSuppressionTimeout.current) {
-          window.clearTimeout(nonPenSuppressionTimeout.current);
-          nonPenSuppressionTimeout.current = null;
-        }
-      }
-
-      if (shouldBlock(event)) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-      }
-    };
-
-    const handlePointerMove = (event: PointerEvent) => {
-      if (shouldBlock(event)) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-      }
-    };
-
-    const handlePointerUp = (event: PointerEvent) => {
-      if (event.pointerType === "pen") {
-        scheduleNonPenRelease();
-      }
-      if (shouldBlock(event)) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-      }
-    };
-
-    const handlePointerCancel = (event: PointerEvent) => {
-      if (event.pointerType === "pen") {
-        clearNonPenSuppression();
-      }
-      if (shouldBlock(event)) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-      }
-    };
-
-    const handleTouchStart = (event: TouchEvent) => {
-      if (shouldBlockTouch(event)) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-      }
-    };
-
-    const handleTouchMove = (event: TouchEvent) => {
-      if (shouldBlockTouch(event)) {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-      }
-    };
-
-    const handleTouchEnd = (event: TouchEvent) => {
-      // Don't block touchend to allow gesture detection
-    };
-
-    // Attach to BOTH container and canvas element to ensure Fabric.js events are blocked
-    const targets = canvasEl ? [container, canvasEl] : [container];
-    targets.forEach(target => {
-      target.addEventListener("pointerdown", handlePointerDown, { capture: true });
-      target.addEventListener("pointermove", handlePointerMove, { capture: true });
-      target.addEventListener("pointerup", handlePointerUp, { capture: true });
-      target.addEventListener("pointercancel", handlePointerCancel, { capture: true });
-      target.addEventListener("touchstart", handleTouchStart, { capture: true, passive: false });
-      target.addEventListener("touchmove", handleTouchMove, { capture: true, passive: false });
-      target.addEventListener("touchend", handleTouchEnd, { capture: true, passive: false });
-    });
-
-    return () => {
-      targets.forEach(target => {
-        target.removeEventListener("pointerdown", handlePointerDown, { capture: true });
-        target.removeEventListener("pointermove", handlePointerMove, { capture: true });
-        target.removeEventListener("pointerup", handlePointerUp, { capture: true });
-        target.removeEventListener("pointercancel", handlePointerCancel, { capture: true });
-        target.removeEventListener("touchstart", handleTouchStart, { capture: true });
-        target.removeEventListener("touchmove", handleTouchMove, { capture: true });
-        target.removeEventListener("touchend", handleTouchEnd, { capture: true });
-      });
-    };
-  }, [settings.tool]);
+  }, []);
 
   // Undo/Redo
   const handleUndo = useCallback(() => {
@@ -1252,70 +1331,6 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     });
   }, [redoStack, onSave, zoom]);
 
-  // Touch gesture shortcuts: 2-finger tap = undo, 3-finger tap = redo
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    let touchStartTime = 0;
-    let touchStartCount = 0;
-    let touchStartPositions: { x: number; y: number }[] = [];
-
-    const handleGestureTouchStart = (e: TouchEvent) => {
-      touchStartTime = Date.now();
-      touchStartCount = e.touches.length;
-      touchStartPositions = Array.from(e.touches).map(t => ({ x: t.clientX, y: t.clientY }));
-    };
-
-    const handleGestureTouchEnd = (e: TouchEvent) => {
-      const touchDuration = Date.now() - touchStartTime;
-      const endTouchCount = e.changedTouches.length;
-      
-      // Check if it was a quick tap (not a drag)
-      if (touchDuration < TAP_THRESHOLD_MS) {
-        // Verify touches didn't move much (it's a tap, not a swipe)
-        let isTap = true;
-        for (let i = 0; i < e.changedTouches.length && i < touchStartPositions.length; i++) {
-          const touch = e.changedTouches[i];
-          const startPos = touchStartPositions.find((_, idx) => idx === i);
-          if (startPos) {
-            const dx = Math.abs(touch.clientX - startPos.x);
-            const dy = Math.abs(touch.clientY - startPos.y);
-            if (dx > TAP_MOVEMENT_THRESHOLD || dy > TAP_MOVEMENT_THRESHOLD) {
-              isTap = false;
-              break;
-            }
-          }
-        }
-
-        if (isTap) {
-          // 2-finger tap = undo
-          if (touchStartCount === 2 && endTouchCount === 2) {
-            e.preventDefault();
-            handleUndo();
-            toast.info("Undo", { duration: 1000 });
-          }
-          // 3-finger tap = redo
-          else if (touchStartCount === 3 && endTouchCount === 3) {
-            e.preventDefault();
-            handleRedo();
-            toast.info("Redo", { duration: 1000 });
-          }
-        }
-      }
-
-      touchStartPositions = [];
-    };
-
-    container.addEventListener("touchstart", handleGestureTouchStart, { passive: true });
-    container.addEventListener("touchend", handleGestureTouchEnd, { passive: false });
-
-    return () => {
-      container.removeEventListener("touchstart", handleGestureTouchStart);
-      container.removeEventListener("touchend", handleGestureTouchEnd);
-    };
-  }, [handleUndo, handleRedo]);
-
   // Copy/Paste for lasso selection
   const handleCopy = useCallback(() => {
     const canvas = fabricRef.current;
@@ -1327,7 +1342,6 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       return;
     }
 
-    // Clone objects
     const clones: FabricObject[] = [];
     activeObjects.forEach(obj => {
       obj.clone().then((cloned: FabricObject) => {
@@ -1347,111 +1361,82 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       return;
     }
 
-    // Paste with offset
-    clipboard.forEach((obj) => {
+    const pastedObjects: FabricObject[] = [];
+    clipboard.forEach(obj => {
       obj.clone().then((cloned: FabricObject) => {
         cloned.set({
           left: (cloned.left || 0) + 20,
           top: (cloned.top || 0) + 20,
         });
         canvas.add(cloned);
+        pastedObjects.push(cloned);
+
+        if (pastedObjects.length === clipboard.length) {
+          canvas.discardActiveObject();
+          if (pastedObjects.length === 1) {
+            canvas.setActiveObject(pastedObjects[0]);
+          } else {
+            const selection = new ActiveSelection(pastedObjects, { canvas });
+            canvas.setActiveObject(selection);
+          }
+          canvas.requestRenderAll();
+          toast.success(`Pasted ${pastedObjects.length} object${pastedObjects.length > 1 ? "s" : ""}`);
+        }
       });
     });
-
-    canvas.renderAll();
-    toast.success(`Pasted ${clipboard.length} object${clipboard.length > 1 ? "s" : ""}`);
   }, [clipboard]);
 
   const handleCut = useCallback(() => {
     const canvas = fabricRef.current;
     if (!canvas) return;
 
-    const activeObjects = canvas.getActiveObjects();
-    if (activeObjects.length === 0) {
-      toast.error("Nothing selected to cut");
-      return;
-    }
-
     handleCopy();
     
-    // Remove selected objects
-    activeObjects.forEach(obj => canvas.remove(obj));
-    canvas.discardActiveObject();
-    canvas.renderAll();
-  }, [handleCopy]);
-
-  // Handwriting to text conversion
-  const handleConvertToText = useCallback(async () => {
-    const canvas = fabricRef.current;
-    if (!canvas) return;
-
     const activeObjects = canvas.getActiveObjects();
-    if (activeObjects.length === 0) {
-      toast.error("Select handwritten content to convert");
-      return;
-    }
-
-    toast.info("Converting handwriting to text...");
-
-    // Simulate OCR processing (in production, this would call a real OCR API)
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    // Get bounding box of selection
-    const activeSelection = canvas.getActiveObject();
-    if (!activeSelection) return;
-
-    const bounds = activeSelection.getBoundingRect();
-
-    // Remove selected objects
     activeObjects.forEach(obj => canvas.remove(obj));
     canvas.discardActiveObject();
-
-    // Add text in place of handwriting
-    const text = new IText("Converted text placeholder", {
-      left: bounds.left,
-      top: bounds.top,
-      fontSize: 18,
-      fill: "#1a1a1a",
-      fontFamily: "Inter, sans-serif",
-    });
-
-    canvas.add(text);
-    canvas.setActiveObject(text);
-    canvas.renderAll();
-
-    toast.success("Handwriting converted to text!");
-  }, []);
+    canvas.requestRenderAll();
+  }, [handleCopy]);
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      const isMod = e.metaKey || e.ctrlKey;
-      
-      if (isMod && e.key === "z") {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      // Undo/Redo
+      if ((e.metaKey || e.ctrlKey) && e.key === "z") {
         e.preventDefault();
         if (e.shiftKey) {
           handleRedo();
         } else {
           handleUndo();
         }
-      } else if (isMod && e.key === "c") {
-        e.preventDefault();
+        return;
+      }
+
+      // Copy/Paste/Cut
+      if ((e.metaKey || e.ctrlKey) && e.key === "c") {
         handleCopy();
-      } else if (isMod && e.key === "v") {
-        e.preventDefault();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "v") {
         handlePaste();
-      } else if (isMod && e.key === "x") {
-        e.preventDefault();
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "x") {
         handleCut();
-      } else if (e.key === "Delete" || e.key === "Backspace") {
+        return;
+      }
+
+      // Delete
+      if (e.key === "Delete" || e.key === "Backspace") {
         const canvas = fabricRef.current;
-        const activeObj = canvas?.getActiveObject();
-        const isEditing = activeObj && "isEditing" in activeObj && (activeObj as any).isEditing;
-        if (canvas && !isEditing) {
-          const activeObjects = canvas.getActiveObjects();
+        if (!canvas) return;
+        const activeObjects = canvas.getActiveObjects();
+        if (activeObjects.length > 0) {
           activeObjects.forEach(obj => canvas.remove(obj));
           canvas.discardActiveObject();
-          canvas.renderAll();
+          canvas.requestRenderAll();
         }
       }
     };
@@ -1460,57 +1445,29 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleUndo, handleRedo, handleCopy, handlePaste, handleCut]);
 
-  // Handle text insertion from modules
-  const handleInsertText = useCallback((text: string) => {
-    const canvas = fabricRef.current;
-    if (!canvas) return;
-
-    const textObj = new IText(text, {
-      left: 100 + Math.random() * 200,
-      top: 100 + Math.random() * 200,
-      fontSize: 16,
-      fill: "#1a1a1a",
-      fontFamily: "Inter, sans-serif",
-    });
-
-    canvas.add(textObj);
-    canvas.setActiveObject(textObj);
-    canvas.renderAll();
-    toast.success("Text inserted");
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      clearNonPenSuppression();
-    };
+  // Module embedding handler
+  const handleAddModule = useCallback((type: ModuleType) => {
+    addModuleRef.current?.(type);
   }, []);
 
   return (
-    <div className="relative flex-1 h-full overflow-hidden">
-      {/* Canvas background with grid */}
+    <div className="flex flex-col h-full">
       <div
         ref={containerRef}
         className={cn(
-          "absolute inset-0 bg-background touch-none",
-          "[background-image:radial-gradient(circle,hsl(var(--muted-foreground)/0.15)_1px,transparent_1px)]",
-          "[background-size:24px_24px]"
+          "flex-1 relative overflow-hidden bg-background",
+          "touch-none" // Prevent browser touch handling
         )}
-        style={{
-          backgroundPositionX: `${(fabricRef.current?.viewportTransform?.[4] || 0) % 24}px`,
-          backgroundPositionY: `${(fabricRef.current?.viewportTransform?.[5] || 0) % 24}px`,
-        }}
+        style={{ touchAction: "none" }} // Critical for custom touch handling
       >
-        <canvas ref={canvasRef} className="absolute inset-0 touch-none" />
+        <canvas ref={canvasRef} className="absolute inset-0" />
+        
+        <EmbeddedModules 
+          canvasRef={fabricRef} 
+          onAddModule={(fn) => { addModuleRef.current = fn; }} 
+        />
       </div>
 
-      {/* Embedded modules layer */}
-      <EmbeddedModules 
-        noteContent={note.canvasState}
-        onInsertText={handleInsertText}
-        onModuleAdd={(callback) => { addModuleRef.current = callback; }}
-      />
-
-      {/* Toolbar */}
       <DrawingToolbar
         settings={settings}
         onSettingsChange={setSettings}
@@ -1524,11 +1481,8 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
         onPaste={handlePaste}
         onCut={handleCut}
         hasClipboard={!!clipboard && clipboard.length > 0}
-        onConvertToText={handleConvertToText}
-        palmRejectionEnabled={palmRejectionEnabled}
-        onPalmRejectionChange={setPalmRejectionEnabled}
         onImageUpload={handleImageUpload}
-        onAddModule={(type) => addModuleRef.current?.(type)}
+        onAddModule={handleAddModule}
       />
     </div>
   );
