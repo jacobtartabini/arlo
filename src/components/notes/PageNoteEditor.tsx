@@ -690,6 +690,13 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     
     setPages(prev => [...prev, newPage]);
     setCurrentPage(newPageNumber);
+    
+    // Scroll to new page after render
+    requestAnimationFrame(() => {
+      const el = pageRefsMap.current.get(newPageNumber);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    
     toast.success(`Page ${newPageNumber} added`);
   }, [pages.length, saveCurrentPageState]);
 
