@@ -1269,25 +1269,23 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
           </DropdownMenu>
         </div>
 
-        {/* Document Page Area */}
-        <div className="flex-1 overflow-auto flex justify-center py-8 px-4 print:py-0 print:px-0">
-          <div
-            ref={pageContainerRef}
-            data-note-content="true"
-            className={cn(
-              "relative bg-white dark:bg-zinc-900 rounded-sm shadow-xl print:shadow-none print:rounded-none",
-              "w-full max-w-[816px] min-h-[1056px]",
-              "border border-border/20 print:border-0"
-            )}
-            style={{
-              background: getBackgroundCSS(),
-              backgroundSize: getBackgroundSize(),
-              backgroundColor: "hsl(var(--background))",
-            }}
-            onClick={mode === "write" && settings.tool !== "eraser" ? handleCanvasClick : undefined}
-          >
-            {/* Type Mode Editor */}
-            {mode === "type" && (
+        {/* Document Area */}
+        {mode === "type" ? (
+          <div className="flex-1 overflow-auto flex justify-center py-8 px-4 print:py-0 print:px-0">
+            <div
+              ref={pageContainerRef}
+              data-note-content="true"
+              className={cn(
+                "relative rounded-sm shadow-xl print:shadow-none print:rounded-none",
+                "w-full max-w-[816px] min-h-[1056px]",
+                "border border-border/20 print:border-0"
+              )}
+              style={{
+                background: getBackgroundCSS(),
+                backgroundSize: getBackgroundSize(),
+                backgroundColor: "hsl(var(--background))",
+              }}
+            >
               <div className="p-12 pt-16 print:p-8">
                 <div
                   ref={editorRef}
@@ -1315,27 +1313,97 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
                   data-placeholder="Start typing..."
                 />
               </div>
-            )}
-
-            {/* Write Mode Canvas */}
-            {mode === "write" && (
-              <div 
-                ref={canvasContainerRef}
-                className="absolute inset-0 w-full h-full"
-                onPointerDown={settings.tool === "eraser" ? handleEraserStart : undefined}
-                onPointerMove={settings.tool === "eraser" ? handleEraserMove : undefined}
-                onPointerUp={settings.tool === "eraser" ? handleEraserEnd : undefined}
-                onPointerLeave={settings.tool === "eraser" ? handleEraserEnd : undefined}
-              >
-                <canvas
-                  ref={canvasRef}
-                  className="absolute inset-0 w-full h-full touch-none"
-                  style={{ touchAction: 'none' }}
-                />
-              </div>
-            )}
+            </div>
           </div>
-        </div>
+        ) : (
+          /* Write Mode - Continuous vertical scroll of all pages */
+          <div
+            ref={scrollContainerRef}
+            className="flex-1 overflow-auto"
+            style={{ 
+              backgroundColor: 'hsl(var(--muted))',
+              touchAction: 'pan-y',
+            }}
+            onScroll={handleScrollDetection}
+          >
+            <div className="flex flex-col items-center py-8 px-4 gap-8" data-note-content="true">
+              {pages.map((page) => (
+                <div
+                  key={page.id}
+                  ref={(el) => {
+                    if (el) {
+                      pageRefsMap.current.set(page.pageNumber, el);
+                      if (page.pageNumber === currentPage) {
+                        pageContainerRef.current = el;
+                      }
+                    }
+                  }}
+                  className={cn(
+                    "relative rounded-sm flex-shrink-0 transition-shadow duration-200",
+                    "border border-border/20",
+                    page.pageNumber === currentPage 
+                      ? "shadow-xl ring-2 ring-primary/20" 
+                      : "shadow-lg"
+                  )}
+                  style={{
+                    width: 816,
+                    height: 1056,
+                    background: getBackgroundCSS(),
+                    backgroundSize: getBackgroundSize(),
+                    backgroundColor: "hsl(var(--background))",
+                  }}
+                  onClick={page.pageNumber === currentPage && settings.tool !== "eraser" ? handleCanvasClick : undefined}
+                >
+                  {/* Active page: Fabric.js canvas */}
+                  {page.pageNumber === currentPage && (
+                    <div
+                      ref={canvasContainerRef}
+                      className="absolute inset-0 w-full h-full"
+                      onPointerDown={settings.tool === "eraser" ? handleEraserStart : undefined}
+                      onPointerMove={settings.tool === "eraser" ? handleEraserMove : undefined}
+                      onPointerUp={settings.tool === "eraser" ? handleEraserEnd : undefined}
+                      onPointerLeave={settings.tool === "eraser" ? handleEraserEnd : undefined}
+                    >
+                      <canvas
+                        ref={canvasRef}
+                        className="absolute inset-0 w-full h-full"
+                      />
+                    </div>
+                  )}
+                  {/* Inactive page: static preview */}
+                  {page.pageNumber !== currentPage && pagePreviews.get(page.pageNumber) && (
+                    <img
+                      src={pagePreviews.get(page.pageNumber)}
+                      className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                      alt={`Page ${page.pageNumber}`}
+                    />
+                  )}
+                  
+                  {/* Page number label */}
+                  <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs text-muted-foreground select-none">
+                    Page {page.pageNumber}
+                  </div>
+                </div>
+              ))}
+              
+              {/* Add page button */}
+              {!note.importedPdfUrl && (
+                <button
+                  onClick={handleAddPage}
+                  className={cn(
+                    "flex items-center justify-center gap-2 px-6 py-3 mb-8",
+                    "rounded-lg border-2 border-dashed border-border/60",
+                    "hover:border-primary/50 hover:bg-card/50 transition-colors",
+                    "text-sm text-muted-foreground"
+                  )}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Page
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Modules */}
