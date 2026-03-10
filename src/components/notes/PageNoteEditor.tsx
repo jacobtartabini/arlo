@@ -1238,12 +1238,6 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
           {/* Spacer */}
           <div className="flex-1" />
 
-          {/* Page indicator in toolbar */}
-          {mode === "write" && (
-            <div className="text-xs text-muted-foreground mr-2">
-              Page {currentPage} of {pages.length}
-            </div>
-          )}
 
           {/* Add Module Dropdown */}
           <DropdownMenu>
