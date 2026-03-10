@@ -637,6 +637,39 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     setCurrentPage(pageNumber);
   }, [currentPage, saveCurrentPageState, clearTrail]);
 
+  // Detect active page from scroll position in continuous scroll
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleScrollDetection = useCallback(() => {
+    if (mode !== "write") return;
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    
+    scrollTimeoutRef.current = setTimeout(() => {
+      const container = scrollContainerRef.current;
+      if (!container) return;
+      
+      const containerRect = container.getBoundingClientRect();
+      const viewportCenter = containerRect.top + containerRect.height / 2;
+      
+      let closestPage = currentPage;
+      let closestDistance = Infinity;
+      
+      pageRefsMap.current.forEach((element, pageNum) => {
+        const rect = element.getBoundingClientRect();
+        const pageCenter = rect.top + rect.height / 2;
+        const distance = Math.abs(viewportCenter - pageCenter);
+        
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestPage = pageNum;
+        }
+      });
+      
+      if (closestPage !== currentPage) {
+        handlePageChange(closestPage);
+      }
+    }, 100);
+  }, [mode, currentPage, handlePageChange]);
+
   // Load new page's state when page changes
   useEffect(() => {
     if (mode === "write" && fabricRef.current) {
