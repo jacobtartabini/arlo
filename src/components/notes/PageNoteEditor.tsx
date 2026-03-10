@@ -117,6 +117,8 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pageContainerRef = useRef<HTMLDivElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const pageRefsMap = useRef<Map<number, HTMLDivElement>>(new Map());
   const fabricRef = useRef<FabricCanvas | null>(null);
   
   // Use locked pageMode from note if available
