@@ -6,7 +6,7 @@ import { Canvas as FabricCanvas, PencilBrush, IText, FabricObject, FabricImage, 
 import { Note, PageMode, BackgroundStyle, DrawingSettings, DEFAULT_DRAWING_SETTINGS, LassoMode, NotePage } from "@/types/notes";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { PagesPanel } from "./PagesPanel";
+
 import { renderPdfPageToDataUrl, getPdfInfo } from "@/lib/pdf-renderer";
 import { useEraserTrail } from "./EraserTrail";
 import {
@@ -117,6 +117,8 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pageContainerRef = useRef<HTMLDivElement>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const pageRefsMap = useRef<Map<number, HTMLDivElement>>(new Map());
   const fabricRef = useRef<FabricCanvas | null>(null);
   
   // Use locked pageMode from note if available
@@ -146,7 +148,7 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
   });
   const [pdfBackgroundUrl, setPdfBackgroundUrl] = useState<string | null>(null);
   const [isLoadingPdf, setIsLoadingPdf] = useState(false);
-  const [pagesPanelCollapsed, setPagesPanelCollapsed] = useState(false);
+  const [pagePreviews, setPagePreviews] = useState<Map<number, string>>(new Map());
   
   // Per-page undo/redo history
   const [pageHistories, setPageHistories] = useState<Map<number, { undoStack: HistoryState[]; redoStack: HistoryState[] }>>(
@@ -195,6 +197,19 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     if (!fabricRef.current || mode !== "write") return;
     
     const canvasJson = JSON.stringify(fabricRef.current.toJSON());
+    
+    // Capture preview image for inactive page display
+    try {
+      const previewUrl = fabricRef.current.toDataURL({ format: 'png', quality: 0.3, multiplier: 0.25 });
+      setPagePreviews(prev => {
+        const newMap = new Map(prev);
+        newMap.set(currentPage, previewUrl);
+        return newMap;
+      });
+    } catch {
+      // Preview generation is optional
+    }
+    
     setPages(prev => {
       const updated = [...prev];
       const pageIndex = updated.findIndex(p => p.pageNumber === currentPage);
@@ -325,7 +340,18 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
       height: Math.max(container.clientHeight, 1056),
       backgroundColor: "transparent",
       isDrawingMode: true,
-      allowTouchScrolling: false,
+      allowTouchScrolling: true,
+    });
+
+    // Block non-stylus input from reaching Fabric.js (palm rejection)
+    canvas.on("mouse:down:before", (opt: any) => {
+      const e = opt.e as PointerEvent;
+      if (!e || typeof e.pointerType !== "string") return;
+      if (e.pointerType !== "pen") {
+        canvas.isDrawingMode = false;
+        canvas.selection = false;
+        opt.e = null;
+      }
     });
 
     canvas.freeDrawingBrush = new PencilBrush(canvas);
@@ -396,18 +422,20 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     canvas.on("object:modified", handleChange);
     canvas.on("object:removed", handleChange);
 
-    // Apple Pencil detection
+    // Stylus-only drawing: finger touches pass through for scrolling
     const handleTouchStart = (e: TouchEvent) => {
       if (!isPencilOnly) return;
       
       const touch = e.touches[0];
       if (touch && (touch as any).touchType !== 'stylus') {
         canvas.isDrawingMode = false;
-        e.preventDefault();
+        canvas.selection = false;
+        // Don't preventDefault — allow browser to handle scrolling
       } else {
         if (settings.tool === "pen" || settings.tool === "highlighter") {
           canvas.isDrawingMode = true;
         }
+        canvas.selection = settings.tool === "select" || settings.tool === "lasso";
       }
     };
 
@@ -417,7 +445,7 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
       }
     };
 
-    canvasRef.current.addEventListener('touchstart', handleTouchStart, { passive: false });
+    canvasRef.current.addEventListener('touchstart', handleTouchStart, { passive: true });
     canvasRef.current.addEventListener('touchend', handleTouchEnd);
 
     return () => {
@@ -609,6 +637,39 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     setCurrentPage(pageNumber);
   }, [currentPage, saveCurrentPageState, clearTrail]);
 
+  // Detect active page from scroll position in continuous scroll
+  const scrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleScrollDetection = useCallback(() => {
+    if (mode !== "write") return;
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    
+    scrollTimeoutRef.current = setTimeout(() => {
+      const container = scrollContainerRef.current;
+      if (!container) return;
+      
+      const containerRect = container.getBoundingClientRect();
+      const viewportCenter = containerRect.top + containerRect.height / 2;
+      
+      let closestPage = currentPage;
+      let closestDistance = Infinity;
+      
+      pageRefsMap.current.forEach((element, pageNum) => {
+        const rect = element.getBoundingClientRect();
+        const pageCenter = rect.top + rect.height / 2;
+        const distance = Math.abs(viewportCenter - pageCenter);
+        
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestPage = pageNum;
+        }
+      });
+      
+      if (closestPage !== currentPage) {
+        handlePageChange(closestPage);
+      }
+    }, 100);
+  }, [mode, currentPage, handlePageChange]);
+
   // Load new page's state when page changes
   useEffect(() => {
     if (mode === "write" && fabricRef.current) {
@@ -629,6 +690,13 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     
     setPages(prev => [...prev, newPage]);
     setCurrentPage(newPageNumber);
+    
+    // Scroll to new page after render
+    requestAnimationFrame(() => {
+      const el = pageRefsMap.current.get(newPageNumber);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    
     toast.success(`Page ${newPageNumber} added`);
   }, [pages.length, saveCurrentPageState]);
 
@@ -910,20 +978,6 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
 
   return (
     <div className="flex h-full bg-muted/30 relative print:bg-white print:m-0">
-      {/* Pages Panel - Scrollable sidebar */}
-      {mode === "write" && (
-        <PagesPanel
-          pages={pages}
-          currentPage={currentPage}
-          onPageChange={handlePageChange}
-          onAddPage={handleAddPage}
-          showAddButton={!note.importedPdfUrl}
-          pdfUrl={note.importedPdfUrl}
-          collapsed={pagesPanelCollapsed}
-          onToggleCollapse={() => setPagesPanelCollapsed(!pagesPanelCollapsed)}
-          className="print:hidden shrink-0"
-        />
-      )}
 
       <div className="flex flex-col flex-1 min-w-0">
         {/* Toolbar */}
@@ -1184,12 +1238,6 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
           {/* Spacer */}
           <div className="flex-1" />
 
-          {/* Page indicator in toolbar */}
-          {mode === "write" && (
-            <div className="text-xs text-muted-foreground mr-2">
-              Page {currentPage} of {pages.length}
-            </div>
-          )}
 
           {/* Add Module Dropdown */}
           <DropdownMenu>
@@ -1221,25 +1269,23 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
           </DropdownMenu>
         </div>
 
-        {/* Document Page Area */}
-        <div className="flex-1 overflow-auto flex justify-center py-8 px-4 print:py-0 print:px-0">
-          <div
-            ref={pageContainerRef}
-            data-note-content="true"
-            className={cn(
-              "relative bg-white dark:bg-zinc-900 rounded-sm shadow-xl print:shadow-none print:rounded-none",
-              "w-full max-w-[816px] min-h-[1056px]",
-              "border border-border/20 print:border-0"
-            )}
-            style={{
-              background: getBackgroundCSS(),
-              backgroundSize: getBackgroundSize(),
-              backgroundColor: "hsl(var(--background))",
-            }}
-            onClick={mode === "write" && settings.tool !== "eraser" ? handleCanvasClick : undefined}
-          >
-            {/* Type Mode Editor */}
-            {mode === "type" && (
+        {/* Document Area */}
+        {mode === "type" ? (
+          <div className="flex-1 overflow-auto flex justify-center py-8 px-4 print:py-0 print:px-0">
+            <div
+              ref={pageContainerRef}
+              data-note-content="true"
+              className={cn(
+                "relative rounded-sm shadow-xl print:shadow-none print:rounded-none",
+                "w-full max-w-[816px] min-h-[1056px]",
+                "border border-border/20 print:border-0"
+              )}
+              style={{
+                background: getBackgroundCSS(),
+                backgroundSize: getBackgroundSize(),
+                backgroundColor: "hsl(var(--background))",
+              }}
+            >
               <div className="p-12 pt-16 print:p-8">
                 <div
                   ref={editorRef}
@@ -1267,27 +1313,97 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
                   data-placeholder="Start typing..."
                 />
               </div>
-            )}
-
-            {/* Write Mode Canvas */}
-            {mode === "write" && (
-              <div 
-                ref={canvasContainerRef}
-                className="absolute inset-0 w-full h-full"
-                onPointerDown={settings.tool === "eraser" ? handleEraserStart : undefined}
-                onPointerMove={settings.tool === "eraser" ? handleEraserMove : undefined}
-                onPointerUp={settings.tool === "eraser" ? handleEraserEnd : undefined}
-                onPointerLeave={settings.tool === "eraser" ? handleEraserEnd : undefined}
-              >
-                <canvas
-                  ref={canvasRef}
-                  className="absolute inset-0 w-full h-full touch-none"
-                  style={{ touchAction: 'none' }}
-                />
-              </div>
-            )}
+            </div>
           </div>
-        </div>
+        ) : (
+          /* Write Mode - Continuous vertical scroll of all pages */
+          <div
+            ref={scrollContainerRef}
+            className="flex-1 overflow-auto"
+            style={{ 
+              backgroundColor: 'hsl(var(--muted))',
+              touchAction: 'pan-y',
+            }}
+            onScroll={handleScrollDetection}
+          >
+            <div className="flex flex-col items-center py-8 px-4 gap-8" data-note-content="true">
+              {pages.map((page) => (
+                <div
+                  key={page.id}
+                  ref={(el) => {
+                    if (el) {
+                      pageRefsMap.current.set(page.pageNumber, el);
+                      if (page.pageNumber === currentPage) {
+                        pageContainerRef.current = el;
+                      }
+                    }
+                  }}
+                  className={cn(
+                    "relative rounded-sm flex-shrink-0 transition-shadow duration-200",
+                    "border border-border/20",
+                    page.pageNumber === currentPage 
+                      ? "shadow-xl ring-2 ring-primary/20" 
+                      : "shadow-lg"
+                  )}
+                  style={{
+                    width: 816,
+                    height: 1056,
+                    background: getBackgroundCSS(),
+                    backgroundSize: getBackgroundSize(),
+                    backgroundColor: "hsl(var(--background))",
+                  }}
+                  onClick={page.pageNumber === currentPage && settings.tool !== "eraser" ? handleCanvasClick : undefined}
+                >
+                  {/* Active page: Fabric.js canvas */}
+                  {page.pageNumber === currentPage && (
+                    <div
+                      ref={canvasContainerRef}
+                      className="absolute inset-0 w-full h-full"
+                      onPointerDown={settings.tool === "eraser" ? handleEraserStart : undefined}
+                      onPointerMove={settings.tool === "eraser" ? handleEraserMove : undefined}
+                      onPointerUp={settings.tool === "eraser" ? handleEraserEnd : undefined}
+                      onPointerLeave={settings.tool === "eraser" ? handleEraserEnd : undefined}
+                    >
+                      <canvas
+                        ref={canvasRef}
+                        className="absolute inset-0 w-full h-full"
+                      />
+                    </div>
+                  )}
+                  {/* Inactive page: static preview */}
+                  {page.pageNumber !== currentPage && pagePreviews.get(page.pageNumber) && (
+                    <img
+                      src={pagePreviews.get(page.pageNumber)}
+                      className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                      alt={`Page ${page.pageNumber}`}
+                    />
+                  )}
+                  
+                  {/* Page number label */}
+                  <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-xs text-muted-foreground select-none">
+                    Page {page.pageNumber}
+                  </div>
+                </div>
+              ))}
+              
+              {/* Add page button */}
+              {!note.importedPdfUrl && (
+                <button
+                  onClick={handleAddPage}
+                  className={cn(
+                    "flex items-center justify-center gap-2 px-6 py-3 mb-8",
+                    "rounded-lg border-2 border-dashed border-border/60",
+                    "hover:border-primary/50 hover:bg-card/50 transition-colors",
+                    "text-sm text-muted-foreground"
+                  )}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add Page
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Modules */}
