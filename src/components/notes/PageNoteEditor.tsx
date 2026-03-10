@@ -197,6 +197,19 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     if (!fabricRef.current || mode !== "write") return;
     
     const canvasJson = JSON.stringify(fabricRef.current.toJSON());
+    
+    // Capture preview image for inactive page display
+    try {
+      const previewUrl = fabricRef.current.toDataURL({ format: 'png', quality: 0.3, multiplier: 0.25 });
+      setPagePreviews(prev => {
+        const newMap = new Map(prev);
+        newMap.set(currentPage, previewUrl);
+        return newMap;
+      });
+    } catch {
+      // Preview generation is optional
+    }
+    
     setPages(prev => {
       const updated = [...prev];
       const pageIndex = updated.findIndex(p => p.pageNumber === currentPage);
