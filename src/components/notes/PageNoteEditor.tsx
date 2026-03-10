@@ -148,7 +148,7 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
   });
   const [pdfBackgroundUrl, setPdfBackgroundUrl] = useState<string | null>(null);
   const [isLoadingPdf, setIsLoadingPdf] = useState(false);
-  const [pagesPanelCollapsed, setPagesPanelCollapsed] = useState(false);
+  const [pagePreviews, setPagePreviews] = useState<Map<number, string>>(new Map());
   
   // Per-page undo/redo history
   const [pageHistories, setPageHistories] = useState<Map<number, { undoStack: HistoryState[]; redoStack: HistoryState[] }>>(
