@@ -6,7 +6,7 @@ import { Canvas as FabricCanvas, PencilBrush, IText, FabricObject, FabricImage, 
 import { Note, PageMode, BackgroundStyle, DrawingSettings, DEFAULT_DRAWING_SETTINGS, LassoMode, NotePage } from "@/types/notes";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { PagesPanel } from "./PagesPanel";
+
 import { renderPdfPageToDataUrl, getPdfInfo } from "@/lib/pdf-renderer";
 import { useEraserTrail } from "./EraserTrail";
 import {
