@@ -340,7 +340,18 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
       height: Math.max(container.clientHeight, 1056),
       backgroundColor: "transparent",
       isDrawingMode: true,
-      allowTouchScrolling: false,
+      allowTouchScrolling: true,
+    });
+
+    // Block non-stylus input from reaching Fabric.js (palm rejection)
+    canvas.on("mouse:down:before", (opt: any) => {
+      const e = opt.e as PointerEvent;
+      if (!e || typeof e.pointerType !== "string") return;
+      if (e.pointerType !== "pen") {
+        canvas.isDrawingMode = false;
+        canvas.selection = false;
+        opt.e = null;
+      }
     });
 
     canvas.freeDrawingBrush = new PencilBrush(canvas);
