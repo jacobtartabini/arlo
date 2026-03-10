@@ -978,20 +978,6 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
 
   return (
     <div className="flex h-full bg-muted/30 relative print:bg-white print:m-0">
-      {/* Pages Panel - Scrollable sidebar */}
-      {mode === "write" && (
-        <PagesPanel
-          pages={pages}
-          currentPage={currentPage}
-          onPageChange={handlePageChange}
-          onAddPage={handleAddPage}
-          showAddButton={!note.importedPdfUrl}
-          pdfUrl={note.importedPdfUrl}
-          collapsed={pagesPanelCollapsed}
-          onToggleCollapse={() => setPagesPanelCollapsed(!pagesPanelCollapsed)}
-          className="print:hidden shrink-0"
-        />
-      )}
 
       <div className="flex flex-col flex-1 min-w-0">
         {/* Toolbar */}
