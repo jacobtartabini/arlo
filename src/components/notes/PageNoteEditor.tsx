@@ -422,18 +422,20 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     canvas.on("object:modified", handleChange);
     canvas.on("object:removed", handleChange);
 
-    // Apple Pencil detection
+    // Stylus-only drawing: finger touches pass through for scrolling
     const handleTouchStart = (e: TouchEvent) => {
       if (!isPencilOnly) return;
       
       const touch = e.touches[0];
       if (touch && (touch as any).touchType !== 'stylus') {
         canvas.isDrawingMode = false;
-        e.preventDefault();
+        canvas.selection = false;
+        // Don't preventDefault — allow browser to handle scrolling
       } else {
         if (settings.tool === "pen" || settings.tool === "highlighter") {
           canvas.isDrawingMode = true;
         }
+        canvas.selection = settings.tool === "select" || settings.tool === "lasso";
       }
     };
 
@@ -443,7 +445,7 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
       }
     };
 
-    canvasRef.current.addEventListener('touchstart', handleTouchStart, { passive: false });
+    canvasRef.current.addEventListener('touchstart', handleTouchStart, { passive: true });
     canvasRef.current.addEventListener('touchend', handleTouchEnd);
 
     return () => {
