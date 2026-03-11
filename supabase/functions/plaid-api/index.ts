@@ -69,17 +69,20 @@ async function plaidRequest(endpoint: string, body: Record<string, unknown>) {
   return data;
 }
 
+function getSupabaseClient() {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  return createClient(supabaseUrl, supabaseKey);
+}
+
 Deno.serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return handleCorsOptions(req);
   }
 
-  // Validate origin
   const originError = validateOrigin(req);
   if (originError) return originError;
 
-  // Verify JWT
   const auth = await verifyArloJWT(req);
   if (!auth.authenticated) {
     return unauthorizedResponse(req, auth.error || 'Unauthorized');
@@ -87,7 +90,7 @@ Deno.serve(async (req) => {
 
   const userKey = auth.userId;
   
-  // Hash the userKey to a non-sensitive ID for Plaid (it rejects emails)
+  // Hash the userKey to a non-sensitive ID for Plaid
   const encoder = new TextEncoder();
   const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(userKey));
   const hashArray = Array.from(new Uint8Array(hashBuffer));
@@ -96,12 +99,11 @@ Deno.serve(async (req) => {
   try {
     const body: PlaidRequest = await req.json();
     const url = new URL(req.url);
-    // Supabase may or may not include the function name in the path
     const pathname = url.pathname;
     const functionPathIndex = pathname.indexOf('/plaid-api');
     const subPath = functionPathIndex >= 0
       ? pathname.slice(functionPathIndex + '/plaid-api'.length)
-      : pathname; // Use full pathname if function name not found (Supabase strips it)
+      : pathname;
     
     let pathAction: string | undefined;
     if (subPath === '/plaid/create_link_token' || subPath === '/create_link_token') {
@@ -113,14 +115,10 @@ Deno.serve(async (req) => {
     const action = pathAction ?? body.action;
     console.log('[plaid-api] Resolved action:', action, 'pathname:', pathname, 'subPath:', subPath);
 
-    // Initialize Supabase client
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = getSupabaseClient();
 
     switch (action) {
       case 'create_link_token': {
-        // Create a link token for Plaid Link
         const webhookUrl = Deno.env.get('PLAID_WEBHOOK_URL');
         const linkTokenPayload: Record<string, unknown> = {
           user: { client_user_id: plaidUserId },
@@ -130,19 +128,16 @@ Deno.serve(async (req) => {
           language: 'en',
         };
         
-        // Only include webhook if configured
         if (webhookUrl && webhookUrl.startsWith('https://')) {
           linkTokenPayload.webhook = webhookUrl;
         }
         
         const data = await plaidRequest('/link/token/create', linkTokenPayload);
-
         return jsonResponse(req, { link_token: data.link_token });
       }
 
       case 'exchange_token':
       case 'exchange_public_token': {
-        // Exchange public token for access token
         if (!body.public_token) {
           return errorResponse(req, 'public_token required', 400);
         }
@@ -154,13 +149,16 @@ Deno.serve(async (req) => {
         const accessToken = exchangeData.access_token;
         const itemId = exchangeData.item_id;
 
+        if (!accessToken || !itemId) {
+          return errorResponse(req, 'Plaid exchange failed: missing access_token or item_id', 500);
+        }
+
         const metadataInstitution = body.metadata?.institution;
         const fallbackItemData = !metadataInstitution?.institution_id
           ? await plaidRequest('/item/get', { access_token: accessToken })
           : null;
         const institutionId = metadataInstitution?.institution_id ?? fallbackItemData?.item?.institution_id;
         
-        // Get institution details
         let institutionName = 'Unknown Bank';
         let institutionLogo = null;
         try {
@@ -179,22 +177,24 @@ Deno.serve(async (req) => {
           console.log('[plaid-api] Could not fetch institution details:', e);
         }
 
-        // Get accounts
+        // Get ALL accounts for this item
         const accountsData = await plaidRequest('/accounts/get', {
           access_token: accessToken,
         });
 
-        // Encrypt and store access token
-        const encryptedToken = encrypt(accessToken);
+        const encryptedToken = await encrypt(accessToken);
+        const accounts = accountsData.accounts || [];
+        const storedAccounts: string[] = [];
+        const errors: string[] = [];
 
-        // Store each account
-        const accounts = accountsData.accounts;
+        // Store ONE ROW PER PLAID ACCOUNT
         for (const account of accounts) {
           const { error } = await supabase
             .from('finance_linked_accounts')
             .upsert({
               user_key: userKey,
               plaid_item_id: itemId,
+              plaid_account_id: account.account_id,
               plaid_access_token: encryptedToken,
               institution_id: institutionId,
               institution_name: institutionName,
@@ -208,24 +208,40 @@ Deno.serve(async (req) => {
               currency: account.balances.iso_currency_code || 'USD',
               last_synced_at: new Date().toISOString(),
               is_active: true,
+              error_code: null,
+              error_message: null,
             }, { 
-              onConflict: 'plaid_item_id',
-              ignoreDuplicates: false 
+              onConflict: 'user_key,plaid_account_id',
+              ignoreDuplicates: false,
             });
 
           if (error) {
-            console.error('[plaid-api] Error storing account:', error);
+            console.error('[plaid-api] Error storing account:', account.account_id, error);
+            errors.push(`${account.name}: ${error.message}`);
+          } else {
+            storedAccounts.push(account.account_id);
           }
         }
 
-        // Trigger initial transaction sync
-        await syncTransactions(supabase, userKey, itemId, encryptedToken);
+        if (storedAccounts.length === 0) {
+          return errorResponse(req, `Failed to store any accounts: ${errors.join('; ')}`, 500);
+        }
 
-        return jsonResponse(req, { item_id: itemId });
+        // Trigger initial transaction sync
+        try {
+          await syncTransactions(supabase, userKey, itemId, encryptedToken);
+        } catch (syncErr) {
+          console.error('[plaid-api] Initial sync failed (non-fatal):', syncErr);
+        }
+
+        return jsonResponse(req, { 
+          success: true,
+          item_id: itemId,
+          accounts_stored: storedAccounts.length,
+        });
       }
 
       case 'sync_transactions': {
-        // Sync transactions for all linked accounts or specific item
         const { data: accounts, error } = await supabase
           .from('finance_linked_accounts')
           .select('*')
@@ -236,31 +252,44 @@ Deno.serve(async (req) => {
           return errorResponse(req, 'Failed to fetch accounts', 500);
         }
 
+        if (!accounts || accounts.length === 0) {
+          return jsonResponse(req, { success: true, total_synced: 0, results: [], message: 'No linked accounts found' });
+        }
+
+        // Group accounts by item_id (they share access tokens)
+        const itemGroups = new Map<string, typeof accounts>();
+        for (const account of accounts) {
+          if (body.item_id && account.plaid_item_id !== body.item_id) continue;
+          const existing = itemGroups.get(account.plaid_item_id) || [];
+          existing.push(account);
+          itemGroups.set(account.plaid_item_id, existing);
+        }
+
         let totalSynced = 0;
         const results = [];
 
-        for (const account of accounts || []) {
-          if (body.item_id && account.plaid_item_id !== body.item_id) continue;
-
+        for (const [itemId, itemAccounts] of itemGroups) {
+          // Use the first account's token and cursor (they share the same token)
+          const firstAccount = itemAccounts[0];
           try {
             const synced = await syncTransactions(
               supabase, 
               userKey, 
-              account.plaid_item_id, 
-              account.plaid_access_token,
-              account.sync_cursor
+              itemId, 
+              firstAccount.plaid_access_token,
+              firstAccount.sync_cursor
             );
             totalSynced += synced.added;
             results.push({ 
-              item_id: account.plaid_item_id, 
+              item_id: itemId, 
               added: synced.added,
               modified: synced.modified,
               removed: synced.removed,
             });
           } catch (e) {
-            console.error('[plaid-api] Sync error for item:', account.plaid_item_id, e);
+            console.error('[plaid-api] Sync error for item:', itemId, e);
             results.push({ 
-              item_id: account.plaid_item_id, 
+              item_id: itemId, 
               error: e instanceof Error ? e.message : 'Sync failed',
             });
           }
@@ -274,7 +303,6 @@ Deno.serve(async (req) => {
       }
 
       case 'get_balances': {
-        // Get fresh balances for all accounts
         const { data: accounts, error } = await supabase
           .from('finance_linked_accounts')
           .select('*')
@@ -287,14 +315,23 @@ Deno.serve(async (req) => {
 
         const results = [];
 
+        // Group by item to avoid duplicate API calls (same access token)
+        const itemGroups = new Map<string, typeof accounts>();
         for (const account of accounts || []) {
+          const existing = itemGroups.get(account.plaid_item_id) || [];
+          existing.push(account);
+          itemGroups.set(account.plaid_item_id, existing);
+        }
+
+        for (const [, itemAccounts] of itemGroups) {
           try {
-            const accessToken = decrypt(account.plaid_access_token);
+            const accessToken = await decrypt(itemAccounts[0].plaid_access_token);
             const balanceData = await plaidRequest('/accounts/balance/get', {
               access_token: accessToken,
             });
 
             for (const acc of balanceData.accounts) {
+              // Update the specific account row by plaid_account_id
               await supabase
                 .from('finance_linked_accounts')
                 .update({
@@ -302,7 +339,8 @@ Deno.serve(async (req) => {
                   available_balance: acc.balances.available,
                   last_synced_at: new Date().toISOString(),
                 })
-                .eq('plaid_item_id', account.plaid_item_id);
+                .eq('user_key', userKey)
+                .eq('plaid_account_id', acc.account_id);
 
               results.push({
                 account_id: acc.account_id,
@@ -320,7 +358,6 @@ Deno.serve(async (req) => {
       }
 
       case 'get_recurring': {
-        // Get recurring transactions (subscriptions)
         const { data: accounts, error } = await supabase
           .from('finance_linked_accounts')
           .select('*')
@@ -333,21 +370,29 @@ Deno.serve(async (req) => {
 
         const allSubscriptions = [];
 
+        // Group by item to avoid duplicate API calls
+        const seenItems = new Set<string>();
         for (const account of accounts || []) {
+          if (seenItems.has(account.plaid_item_id)) continue;
+          seenItems.add(account.plaid_item_id);
+
           try {
-            const accessToken = decrypt(account.plaid_access_token);
+            const accessToken = await decrypt(account.plaid_access_token);
             const recurringData = await plaidRequest('/transactions/recurring/get', {
               access_token: accessToken,
             });
 
-            // Process inflow and outflow streams
             const streams = [
               ...recurringData.inflow_streams || [],
               ...recurringData.outflow_streams || [],
             ];
 
             for (const stream of streams) {
-              // Upsert subscription
+              // Find the matching linked account for this stream's account_id
+              const matchingAccount = (accounts || []).find(
+                a => a.plaid_account_id === stream.account_id
+              );
+
               const { error: upsertError } = await supabase
                 .from('finance_subscriptions')
                 .upsert({
@@ -363,7 +408,7 @@ Deno.serve(async (req) => {
                   category: stream.personal_finance_category?.primary,
                   is_active: stream.is_active,
                   is_manual: false,
-                  linked_account_id: account.id,
+                  linked_account_id: matchingAccount?.id || account.id,
                 }, {
                   onConflict: 'plaid_stream_id',
                   ignoreDuplicates: false,
@@ -393,21 +438,22 @@ Deno.serve(async (req) => {
       }
 
       case 'remove_item': {
-        // Remove a linked account
         if (!body.item_id) {
           return errorResponse(req, 'item_id required', 400);
         }
 
+        // Get one account for this item to get the access token
         const { data: account } = await supabase
           .from('finance_linked_accounts')
           .select('plaid_access_token')
           .eq('user_key', userKey)
           .eq('plaid_item_id', body.item_id)
+          .limit(1)
           .single();
 
         if (account) {
           try {
-            const accessToken = decrypt(account.plaid_access_token);
+            const accessToken = await decrypt(account.plaid_access_token);
             await plaidRequest('/item/remove', {
               access_token: accessToken,
             });
@@ -416,7 +462,7 @@ Deno.serve(async (req) => {
           }
         }
 
-        // Mark as inactive in our database
+        // Mark ALL accounts for this item as inactive
         await supabase
           .from('finance_linked_accounts')
           .update({ is_active: false })
@@ -435,7 +481,8 @@ Deno.serve(async (req) => {
   }
 });
 
-// Helper function to sync transactions
+// Helper function to sync transactions for an item
+// Maps each transaction to the correct linked_account row by plaid_account_id
 async function syncTransactions(
   supabase: ReturnType<typeof createClient>,
   userKey: string,
@@ -443,13 +490,27 @@ async function syncTransactions(
   encryptedToken: string,
   cursor?: string | null
 ) {
-  const accessToken = decrypt(encryptedToken);
+  const accessToken = await decrypt(encryptedToken);
   
   let hasMore = true;
   let currentCursor = cursor || undefined;
   let added = 0;
   let modified = 0;
   let removed = 0;
+
+  // Pre-fetch all linked accounts for this item to map plaid_account_id -> DB id
+  const { data: linkedAccounts } = await supabase
+    .from('finance_linked_accounts')
+    .select('id, plaid_account_id')
+    .eq('plaid_item_id', itemId)
+    .eq('user_key', userKey);
+
+  const accountMap = new Map<string, string>();
+  for (const la of linkedAccounts || []) {
+    if (la.plaid_account_id) {
+      accountMap.set(la.plaid_account_id, la.id);
+    }
+  }
 
   while (hasMore) {
     const syncData = await plaidRequest('/transactions/sync', {
@@ -458,22 +519,17 @@ async function syncTransactions(
       count: 500,
     });
 
-    // Get account ID for linking
-    const { data: linkedAccount } = await supabase
-      .from('finance_linked_accounts')
-      .select('id')
-      .eq('plaid_item_id', itemId)
-      .single();
-
     // Process added transactions
     for (const tx of syncData.added || []) {
+      const linkedAccountId = accountMap.get(tx.account_id) || null;
+      
       const { error } = await supabase
         .from('finance_transactions')
         .upsert({
           user_key: userKey,
-          linked_account_id: linkedAccount?.id,
+          linked_account_id: linkedAccountId,
           plaid_transaction_id: tx.transaction_id,
-          amount: tx.amount, // Plaid: positive = expense, negative = income
+          amount: tx.amount,
           currency: tx.iso_currency_code || 'USD',
           date: tx.date,
           name: tx.name,
@@ -495,6 +551,7 @@ async function syncTransactions(
 
     // Process modified transactions
     for (const tx of syncData.modified || []) {
+      const linkedAccountId = accountMap.get(tx.account_id) || null;
       await supabase
         .from('finance_transactions')
         .update({
@@ -504,6 +561,7 @@ async function syncTransactions(
           category: tx.personal_finance_category?.primary,
           category_detailed: tx.personal_finance_category?.detailed,
           pending: tx.pending,
+          linked_account_id: linkedAccountId,
         })
         .eq('plaid_transaction_id', tx.transaction_id);
       modified++;
@@ -522,14 +580,15 @@ async function syncTransactions(
     hasMore = syncData.has_more;
   }
 
-  // Update cursor for next sync
+  // Update sync cursor on ALL accounts for this item
   await supabase
     .from('finance_linked_accounts')
     .update({ 
       sync_cursor: currentCursor,
       last_synced_at: new Date().toISOString(),
     })
-    .eq('plaid_item_id', itemId);
+    .eq('plaid_item_id', itemId)
+    .eq('user_key', userKey);
 
   return { added, modified, removed };
 }
