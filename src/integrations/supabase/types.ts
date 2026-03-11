@@ -696,6 +696,7 @@ export type Database = {
           is_active: boolean | null
           last_synced_at: string | null
           plaid_access_token: string
+          plaid_account_id: string | null
           plaid_item_id: string
           sync_cursor: string | null
           updated_at: string | null
@@ -719,6 +720,7 @@ export type Database = {
           is_active?: boolean | null
           last_synced_at?: string | null
           plaid_access_token: string
+          plaid_account_id?: string | null
           plaid_item_id: string
           sync_cursor?: string | null
           updated_at?: string | null
@@ -742,6 +744,7 @@ export type Database = {
           is_active?: boolean | null
           last_synced_at?: string | null
           plaid_access_token?: string
+          plaid_account_id?: string | null
           plaid_item_id?: string
           sync_cursor?: string | null
           updated_at?: string | null

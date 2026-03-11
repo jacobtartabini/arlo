@@ -44,12 +44,10 @@ interface JWKSet {
   }>;
 }
 
-// Cache for JWK keys
 let jwkCache: { keys: JWKSet; fetchedAt: number } | null = null;
-const JWK_CACHE_TTL = 3600000; // 1 hour in ms
+const JWK_CACHE_TTL = 3600000;
 
 async function getPlaidJWKS(): Promise<JWKSet> {
-  // Return cached keys if valid
   if (jwkCache && Date.now() - jwkCache.fetchedAt < JWK_CACHE_TTL) {
     return jwkCache.keys;
   }
@@ -75,12 +73,7 @@ async function getPlaidJWKS(): Promise<JWKSet> {
 async function importKey(jwk: JWKSet['keys'][0]): Promise<CryptoKey> {
   return await crypto.subtle.importKey(
     'jwk',
-    {
-      kty: jwk.kty,
-      crv: jwk.crv,
-      x: jwk.x,
-      y: jwk.y,
-    },
+    { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y },
     { name: 'ECDSA', namedCurve: 'P-256' },
     true,
     ['verify']
@@ -88,7 +81,6 @@ async function importKey(jwk: JWKSet['keys'][0]): Promise<CryptoKey> {
 }
 
 function base64UrlDecode(str: string): Uint8Array {
-  // Replace URL-safe characters and add padding
   const base64 = str.replace(/-/g, '+').replace(/_/g, '/');
   const paddedBase64 = base64 + '='.repeat((4 - base64.length % 4) % 4);
   const binaryString = atob(paddedBase64);
@@ -104,7 +96,6 @@ async function verifyPlaidWebhook(
   signedJwt: string
 ): Promise<{ valid: boolean; error?: string }> {
   try {
-    // Parse JWT
     const parts = signedJwt.split('.');
     if (parts.length !== 3) {
       return { valid: false, error: 'Invalid JWT format' };
@@ -114,28 +105,31 @@ async function verifyPlaidWebhook(
     const headerJson = new TextDecoder().decode(base64UrlDecode(headerB64));
     const header = JSON.parse(headerJson);
 
-    // Get the key ID from the header
     const kid = header.kid;
     if (!kid) {
       return { valid: false, error: 'Missing key ID in JWT header' };
     }
 
     // Fetch JWKS and find matching key
-    const jwks = await getPlaidJWKS();
-    const jwk = jwks.keys?.find((k) => k.kid === kid);
+    let jwks = await getPlaidJWKS();
+    let jwk = jwks.keys?.find((k) => k.kid === kid);
     if (!jwk) {
       // Clear cache and retry once
       jwkCache = null;
-      const refreshedJwks = await getPlaidJWKS();
-      const refreshedJwk = refreshedJwks.keys?.find((k) => k.kid === kid);
-      if (!refreshedJwk) {
+      jwks = await getPlaidJWKS();
+      jwk = jwks.keys?.find((k) => k.kid === kid);
+      if (!jwk) {
         return { valid: false, error: 'Key not found in JWKS' };
       }
     }
 
-    const key = await importKey(jwk!);
+    // Check if key is expired
+    if (jwk.expired_at && jwk.expired_at < Math.floor(Date.now() / 1000)) {
+      return { valid: false, error: 'Signing key is expired' };
+    }
 
-    // Verify signature
+    const key = await importKey(jwk);
+
     const signedData = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
     const signature = base64UrlDecode(signatureB64);
 
@@ -150,19 +144,17 @@ async function verifyPlaidWebhook(
       return { valid: false, error: 'Invalid signature' };
     }
 
-    // Parse and verify payload
+    // Verify payload claims
     const payloadJson = new TextDecoder().decode(base64UrlDecode(payloadB64));
     const payload = JSON.parse(payloadJson);
 
-    // Check expiration
     const now = Math.floor(Date.now() / 1000);
-    if (payload.iat && now - payload.iat > 300) { // 5 minute window
-      return { valid: false, error: 'JWT expired' };
+    if (payload.iat && now - payload.iat > 300) {
+      return { valid: false, error: 'JWT expired (older than 5 minutes)' };
     }
 
     // Verify body hash
-    const encoder = new TextEncoder();
-    const data = encoder.encode(body);
+    const data = new TextEncoder().encode(body);
     const hashBuffer = await crypto.subtle.digest('SHA-256', data);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     const bodyHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
@@ -178,7 +170,7 @@ async function verifyPlaidWebhook(
   }
 }
 
-async function plaidRequest(endpoint: string, body: Record<string, unknown>) {
+async function plaidApiRequest(endpoint: string, body: Record<string, unknown>) {
   const clientId = Deno.env.get('PLAID_CLIENT_ID');
   const secret = Deno.env.get('PLAID_SECRET');
   
@@ -189,11 +181,7 @@ async function plaidRequest(endpoint: string, body: Record<string, unknown>) {
   const response = await fetch(`${PLAID_BASE_URL}${endpoint}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      client_id: clientId,
-      secret: secret,
-      ...body,
-    }),
+    body: JSON.stringify({ client_id: clientId, secret, ...body }),
   });
 
   return await response.json();
@@ -205,10 +193,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Get the raw body for signature verification
     const rawBody = await req.text();
-    
-    // Get the Plaid-Verification header
     const plaidSignature = req.headers.get('plaid-verification');
     
     if (!plaidSignature) {
@@ -219,17 +204,16 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Verify the webhook signature
+    // Verify the webhook signature - DO NOT process data if verification fails
     const verifyResult = await verifyPlaidWebhook(rawBody, plaidSignature);
     if (!verifyResult.valid) {
-      console.error('[plaid-webhook] Invalid signature:', verifyResult.error);
-      return new Response(JSON.stringify({ error: 'Invalid signature' }), {
+      console.error('[plaid-webhook] REJECTED - Invalid signature:', verifyResult.error);
+      return new Response(JSON.stringify({ error: 'Invalid signature', detail: verifyResult.error }), {
         status: 401,
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    // Parse the verified body
     const webhook: PlaidWebhook = JSON.parse(rawBody);
     console.log('[plaid-webhook] Verified webhook:', webhook.webhook_type, webhook.webhook_code);
 
@@ -237,20 +221,31 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get the linked account for this item
-    const { data: account } = await supabase
+    // Get ALL accounts for this item (there can be multiple)
+    const { data: accounts } = await supabase
       .from('finance_linked_accounts')
       .select('*')
-      .eq('plaid_item_id', webhook.item_id)
-      .single();
+      .eq('plaid_item_id', webhook.item_id);
 
-    if (!account) {
-      console.log('[plaid-webhook] No account found for item:', webhook.item_id);
+    if (!accounts || accounts.length === 0) {
+      console.log('[plaid-webhook] No accounts found for item:', webhook.item_id);
       return new Response(JSON.stringify({ received: true }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
     }
+
+    // Build account map for transaction mapping
+    const accountMap = new Map<string, string>();
+    for (const acc of accounts) {
+      if (acc.plaid_account_id) {
+        accountMap.set(acc.plaid_account_id, acc.id);
+      }
+    }
+
+    // Use the first account's credentials (all share the same access token per item)
+    const firstAccount = accounts[0];
+    const userKey = firstAccount.user_key;
 
     switch (webhook.webhook_type) {
       case 'TRANSACTIONS': {
@@ -259,27 +254,26 @@ Deno.serve(async (req) => {
           case 'INITIAL_UPDATE':
           case 'HISTORICAL_UPDATE':
           case 'DEFAULT_UPDATE': {
-            // Sync transactions
-            const accessToken = decrypt(account.plaid_access_token);
+            const accessToken = await decrypt(firstAccount.plaid_access_token);
             
             let hasMore = true;
-            let cursor = account.sync_cursor || undefined;
+            let cursor = firstAccount.sync_cursor || undefined;
             let totalAdded = 0;
 
             while (hasMore) {
-              const syncData = await plaidRequest('/transactions/sync', {
+              const syncData = await plaidApiRequest('/transactions/sync', {
                 access_token: accessToken,
                 cursor: cursor,
                 count: 500,
               });
 
-              // Process added transactions
               for (const tx of syncData.added || []) {
+                const linkedAccountId = accountMap.get(tx.account_id) || null;
                 await supabase
                   .from('finance_transactions')
                   .upsert({
-                    user_key: account.user_key,
-                    linked_account_id: account.id,
+                    user_key: userKey,
+                    linked_account_id: linkedAccountId,
                     plaid_transaction_id: tx.transaction_id,
                     amount: tx.amount,
                     currency: tx.iso_currency_code || 'USD',
@@ -300,7 +294,6 @@ Deno.serve(async (req) => {
                 totalAdded++;
               }
 
-              // Process removed transactions
               for (const tx of syncData.removed || []) {
                 await supabase
                   .from('finance_transactions')
@@ -312,21 +305,20 @@ Deno.serve(async (req) => {
               hasMore = syncData.has_more;
             }
 
-            // Update cursor
+            // Update cursor on ALL accounts for this item
             await supabase
               .from('finance_linked_accounts')
               .update({
                 sync_cursor: cursor,
                 last_synced_at: new Date().toISOString(),
               })
-              .eq('id', account.id);
+              .eq('plaid_item_id', webhook.item_id);
 
             console.log('[plaid-webhook] Synced', totalAdded, 'transactions');
             break;
           }
 
           case 'TRANSACTIONS_REMOVED': {
-            // Remove specific transactions
             for (const txId of webhook.removed_transactions || []) {
               await supabase
                 .from('finance_transactions')
@@ -342,26 +334,25 @@ Deno.serve(async (req) => {
       case 'ITEM': {
         switch (webhook.webhook_code) {
           case 'ERROR': {
-            // Update account with error status
+            // Update ALL accounts for this item with error
             await supabase
               .from('finance_linked_accounts')
               .update({
                 error_code: webhook.error?.error_code,
                 error_message: webhook.error?.error_message,
               })
-              .eq('id', account.id);
+              .eq('plaid_item_id', webhook.item_id);
             break;
           }
 
           case 'PENDING_EXPIRATION': {
-            // Mark account as needing re-authentication
             await supabase
               .from('finance_linked_accounts')
               .update({
                 error_code: 'PENDING_EXPIRATION',
                 error_message: 'Account credentials will expire soon',
               })
-              .eq('id', account.id);
+              .eq('plaid_item_id', webhook.item_id);
             break;
           }
         }
