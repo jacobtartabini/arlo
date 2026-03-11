@@ -14,6 +14,7 @@ interface LinkedAccount {
   id: string;
   user_key: string;
   plaid_item_id: string;
+  plaid_account_id: string | null;
   institution_id: string | null;
   institution_name: string;
   institution_logo: string | null;
