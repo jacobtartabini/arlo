@@ -112,6 +112,10 @@ const BACKGROUND_STYLES: { id: BackgroundStyle; label: string; icon: React.Eleme
 
 const MAX_HISTORY = 50;
 
+const isPenPointerEvent = (event: Event | null | undefined): event is PointerEvent => {
+  return !!event && "pointerType" in event && (event as PointerEvent).pointerType === "pen";
+};
+
 export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -362,7 +366,7 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
       const e = opt.e as PointerEvent;
       if (!e || typeof e.pointerType !== "string") return;
       
-      if (e.pointerType === "pen") {
+      if (isPenPointerEvent(e)) {
         // Apple Pencil — ensure drawing mode is active for drawing tools
         const tool = settingsRef.current.tool;
         if (tool === "pen" || tool === "highlighter") {
@@ -455,7 +459,7 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     // This prevents non-pen events from reaching Fabric's internal handlers
     const upperCanvas = (canvas as any).upperCanvasEl as HTMLCanvasElement | undefined;
     const blockNonPen = (e: PointerEvent) => {
-      if (e.pointerType !== "pen") {
+      if (!isPenPointerEvent(e)) {
         // Stop propagation to Fabric, but don't preventDefault
         // so finger scrolling/pinch still works on the container
         e.stopPropagation();
@@ -464,15 +468,19 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     };
     
     if (upperCanvas) {
-      upperCanvas.style.touchAction = 'none';
+      upperCanvas.style.touchAction = "pan-x pan-y pinch-zoom";
       upperCanvas.addEventListener('pointerdown', blockNonPen, { capture: true });
       upperCanvas.addEventListener('pointermove', blockNonPen, { capture: true });
+      upperCanvas.addEventListener('pointerup', blockNonPen, { capture: true });
+      upperCanvas.addEventListener('pointercancel', blockNonPen, { capture: true });
     }
 
     return () => {
       if (upperCanvas) {
         upperCanvas.removeEventListener('pointerdown', blockNonPen, { capture: true });
         upperCanvas.removeEventListener('pointermove', blockNonPen, { capture: true });
+        upperCanvas.removeEventListener('pointerup', blockNonPen, { capture: true });
+        upperCanvas.removeEventListener('pointercancel', blockNonPen, { capture: true });
       }
       canvas.dispose();
       fabricRef.current = null;
@@ -486,6 +494,7 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
 
     if (settings.tool === "pen" || settings.tool === "highlighter") {
       canvas.isDrawingMode = true;
+      canvas.selection = false;
       if (canvas.freeDrawingBrush) {
         canvas.freeDrawingBrush.color = settings.tool === "highlighter" 
           ? settings.color + "80" 
@@ -561,7 +570,7 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
   // Eraser with visual trail — stylus only (using Fabric events, declared after eraseAtPoint/eraseAlongPath)
   const handleEraserStartFabric = useCallback((opt: any) => {
     const e = opt.e as PointerEvent;
-    if (!e || e.pointerType !== "pen") return;
+    if (!isPenPointerEvent(e)) return;
     const canvas = fabricRef.current;
     const container = canvasContainerRef.current;
     if (!canvas || !container) return;
@@ -576,7 +585,7 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
   const handleEraserMoveFabric = useCallback((opt: any) => {
     if (!eraserActiveRef.current) return;
     const e = opt.e as PointerEvent;
-    if (!e || e.pointerType !== "pen") return;
+    if (!isPenPointerEvent(e)) return;
     const container = canvasContainerRef.current;
     if (!container) return;
     const rect = container.getBoundingClientRect();

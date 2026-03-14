@@ -401,18 +401,8 @@ const segmentHitsObject = (obj: FabricObject, start: { x: number; y: number }, e
   return false;
 };
 
-// Check if this is a pen/stylus event (Apple Pencil)
-const isPenPointerEvent = (e: PointerEvent): boolean => {
-  return e.pointerType === "pen";
-};
-
-// Check if touch event is from stylus
-const isStylusTouch = (touch: Touch): boolean => {
-  // Safari/WebKit touchType property
-  if ((touch as any).touchType === "stylus") return true;
-  // Fallback: stylus has very small radius and force > 0
-  if (touch.force > 0 && touch.radiusX <= 2 && touch.radiusY <= 2) return true;
-  return false;
+const isPenPointerEvent = (event: Event | null | undefined): event is PointerEvent => {
+  return !!event && "pointerType" in event && (event as PointerEvent).pointerType === "pen";
 };
 
 export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
@@ -560,7 +550,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       const requiresStylus = stylusOnlyTools.has(tool);
       
       // For stylus-only tools, ONLY allow pen input to reach Fabric.js
-      if (requiresStylus && e.pointerType !== "pen") {
+      if (requiresStylus && !isPenPointerEvent(e)) {
         // Completely block this event from Fabric
         canvas.isDrawingMode = false;
         opt.e = null; // Nullify the event
@@ -569,7 +559,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       
       // For non-stylus tools (select, shape, text), allow all input
       // but still track that pen is being used
-      if (e.pointerType === "pen") {
+      if (isPenPointerEvent(e)) {
         isDrawingWithPenRef.current = true;
       }
     };
@@ -639,13 +629,6 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       gesture.touchStartCount = e.touches.length;
       gesture.touchStartPositions = Array.from(e.touches).map(t => ({ x: t.clientX, y: t.clientY }));
 
-      // Check if any touch is a stylus
-      const hasStylus = Array.from(e.touches).some(isStylusTouch);
-      
-      // If stylus is involved and tool requires stylus, let Fabric handle it
-      if (hasStylus && isToolStylusOnly()) {
-        return;
-      }
 
       // For finger touches on stylus-only tools: use for navigation
       if (isToolStylusOnly()) {
@@ -654,9 +637,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
         // Update active touches
         for (let i = 0; i < e.touches.length; i++) {
           const touch = e.touches[i];
-          if (!isStylusTouch(touch)) {
-            nav.activeTouches.set(touch.identifier, { x: touch.clientX, y: touch.clientY });
-          }
+          nav.activeTouches.set(touch.identifier, { x: touch.clientX, y: touch.clientY });
         }
 
         if (nav.activeTouches.size === 1) {
@@ -686,12 +667,6 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       const canvas = fabricRef.current;
       if (!canvas) return;
 
-      // Check if any touch is a stylus
-      const hasStylus = Array.from(e.touches).some(isStylusTouch);
-      if (hasStylus && isToolStylusOnly()) {
-        return; // Let Fabric handle stylus
-      }
-
       if (!isToolStylusOnly()) return;
 
       e.preventDefault();
@@ -699,7 +674,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       // Update touch positions
       for (let i = 0; i < e.touches.length; i++) {
         const touch = e.touches[i];
-        if (!isStylusTouch(touch) && nav.activeTouches.has(touch.identifier)) {
+        if (nav.activeTouches.has(touch.identifier)) {
           nav.activeTouches.set(touch.identifier, { x: touch.clientX, y: touch.clientY });
         }
       }
@@ -832,7 +807,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
     const upperCanvas = (canvas as any).upperCanvasEl as HTMLCanvasElement | undefined;
 
     const blockNonPen = (e: PointerEvent) => {
-      if (e.pointerType === "pen") {
+      if (isPenPointerEvent(e)) {
         if (e.type === "pointerdown") isDrawingWithPenRef.current = true;
         if (e.type === "pointerup") isDrawingWithPenRef.current = false;
         return; // Allow pen through
@@ -856,7 +831,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
 
     // Also set touch-action on upper canvas to prevent browser gestures
     if (upperCanvas) {
-      upperCanvas.style.touchAction = 'none';
+      upperCanvas.style.touchAction = "pan-x pan-y pinch-zoom";
     }
 
     return () => {
@@ -901,7 +876,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
   const handleEraserStart = useCallback((opt: TPointerEventInfo<TPointerEvent>) => {
     const canvas = fabricRef.current;
     const e = opt.e as PointerEvent;
-    if (!canvas || !e || e.pointerType !== "pen") return;
+    if (!canvas || !isPenPointerEvent(e)) return;
 
     eraserActiveRef.current = true;
     const pointer = canvas.getScenePoint(opt.e);
@@ -912,7 +887,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
   const handleEraserMove = useCallback((opt: TPointerEventInfo<TPointerEvent>) => {
     const canvas = fabricRef.current;
     const e = opt.e as PointerEvent;
-    if (!canvas || !eraserActiveRef.current || !e || e.pointerType !== "pen") return;
+    if (!canvas || !eraserActiveRef.current || !isPenPointerEvent(e)) return;
 
     const pointer = canvas.getScenePoint(opt.e);
     if (eraserLastPointRef.current) {
@@ -1114,7 +1089,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
 
     const handleLassoStart = (opt: TPointerEventInfo<TPointerEvent>) => {
       const e = opt.e as PointerEvent;
-      if (!e || e.pointerType !== "pen") return;
+      if (!isPenPointerEvent(e)) return;
       if (opt.target) return;
       
       const pointer = canvas.getScenePoint(opt.e);
@@ -1156,7 +1131,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
 
     const handleLassoMove = (opt: TPointerEventInfo<TPointerEvent>) => {
       const e = opt.e as PointerEvent;
-      if (!lassoActiveRef.current || !e || e.pointerType !== "pen") return;
+      if (!lassoActiveRef.current || !isPenPointerEvent(e)) return;
       
       const pointer = canvas.getScenePoint(opt.e);
       const points = lassoPointsRef.current;
