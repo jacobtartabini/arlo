@@ -529,7 +529,7 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     
     // Perform initial erase
     eraseAtPoint(point);
-  }, [isPencilOnly, startTrail]);
+  }, [startTrail]);
 
   const handleEraserMove = useCallback((e: React.PointerEvent) => {
     if (!eraserActiveRef.current) return;
