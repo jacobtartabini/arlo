@@ -508,95 +508,18 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     }
   }, [settings, mode]);
 
-  // Eraser with visual trail — stylus only (using Fabric events)
-  const handleEraserStartFabric = useCallback((opt: any) => {
-    const e = opt.e as PointerEvent;
-    if (!e || e.pointerType !== "pen") return;
-    
-    const canvas = fabricRef.current;
-    const container = canvasContainerRef.current;
-    if (!canvas || !container) return;
-
-    eraserActiveRef.current = true;
-    
-    const rect = container.getBoundingClientRect();
-    const point = {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    };
-    
-    eraserLastPointRef.current = point;
-    startTrail(point);
-    
-    // Perform initial erase
-    eraseAtPoint(point);
-  }, [startTrail, eraseAtPoint]);
-
-  const handleEraserMoveFabric = useCallback((opt: any) => {
-    if (!eraserActiveRef.current) return;
-    const e = opt.e as PointerEvent;
-    if (!e || e.pointerType !== "pen") return;
-    
-    const canvas = fabricRef.current;
-    const container = canvasContainerRef.current;
-    if (!canvas || !container) return;
-
-    const rect = container.getBoundingClientRect();
-    const point = {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    };
-    
-    continueTrail(point);
-    
-    // Erase along path
-    if (eraserLastPointRef.current) {
-      eraseAlongPath(eraserLastPointRef.current, point);
-    }
-    
-    eraserLastPointRef.current = point;
-  }, [continueTrail, eraseAlongPath]);
-
-  const handleEraserEndFabric = useCallback(() => {
-    if (!eraserActiveRef.current) return;
-    
-    eraserActiveRef.current = false;
-    eraserLastPointRef.current = null;
-    endTrail();
-  }, [endTrail]);
-
-  // Attach eraser handlers to Fabric canvas events
-  useEffect(() => {
-    const canvas = fabricRef.current;
-    if (!canvas || mode !== "write") return;
-
-    if (settingsRef.current.tool === "eraser") {
-      canvas.on("mouse:down", handleEraserStartFabric);
-      canvas.on("mouse:move", handleEraserMoveFabric);
-      canvas.on("mouse:up", handleEraserEndFabric);
-    }
-
-    return () => {
-      canvas.off("mouse:down", handleEraserStartFabric);
-      canvas.off("mouse:move", handleEraserMoveFabric);
-      canvas.off("mouse:up", handleEraserEndFabric);
-    };
-  }, [mode, settings.tool, handleEraserStartFabric, handleEraserMoveFabric, handleEraserEndFabric]);
-
   const eraseAtPoint = useCallback((point: { x: number; y: number }) => {
     const canvas = fabricRef.current;
     if (!canvas) return;
-
     const radius = settings.eraserType === "precision" 
       ? settings.strokeWidth * 2 
       : settings.strokeWidth * 5;
-
     const objects = canvas.getObjects();
     for (let i = objects.length - 1; i >= 0; i--) {
       const obj = objects[i];
       if (obj.containsPoint({ x: point.x, y: point.y } as any)) {
         canvas.remove(obj);
-        if (settings.eraserType === "stroke") break; // Only remove one for stroke mode
+        if (settings.eraserType === "stroke") break;
       }
     }
     canvas.renderAll();
@@ -605,31 +528,22 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
   const eraseAlongPath = useCallback((start: { x: number; y: number }, end: { x: number; y: number }) => {
     const canvas = fabricRef.current;
     if (!canvas) return;
-
     const radius = settings.eraserType === "precision" 
       ? settings.strokeWidth * 2 
       : settings.strokeWidth * 5;
-
-    // Sample points along the line
     const distance = Math.hypot(end.x - start.x, end.y - start.y);
     const steps = Math.max(1, Math.ceil(distance / 6));
-    
     const objectsToRemove: FabricObject[] = [];
     const objects = canvas.getObjects();
-
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
       const x = start.x + (end.x - start.x) * t;
       const y = start.y + (end.y - start.y) * t;
-
       for (const obj of objects) {
         if (objectsToRemove.includes(obj)) continue;
-        
-        // Check if object is within eraser radius
         const bounds = obj.getBoundingRect();
         const centerX = bounds.left + bounds.width / 2;
         const centerY = bounds.top + bounds.height / 2;
-        
         if (Math.hypot(x - centerX, y - centerY) < radius + Math.max(bounds.width, bounds.height) / 2) {
           if (obj.containsPoint({ x, y } as any)) {
             objectsToRemove.push(obj);
@@ -638,12 +552,63 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
         }
       }
     }
-
     objectsToRemove.forEach(obj => canvas.remove(obj));
     if (objectsToRemove.length > 0) {
       canvas.renderAll();
     }
   }, [settings.eraserType, settings.strokeWidth]);
+
+  // Eraser with visual trail — stylus only (using Fabric events, declared after eraseAtPoint/eraseAlongPath)
+  const handleEraserStartFabric = useCallback((opt: any) => {
+    const e = opt.e as PointerEvent;
+    if (!e || e.pointerType !== "pen") return;
+    const canvas = fabricRef.current;
+    const container = canvasContainerRef.current;
+    if (!canvas || !container) return;
+    eraserActiveRef.current = true;
+    const rect = container.getBoundingClientRect();
+    const point = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    eraserLastPointRef.current = point;
+    startTrail(point);
+    eraseAtPoint(point);
+  }, [startTrail, eraseAtPoint]);
+
+  const handleEraserMoveFabric = useCallback((opt: any) => {
+    if (!eraserActiveRef.current) return;
+    const e = opt.e as PointerEvent;
+    if (!e || e.pointerType !== "pen") return;
+    const container = canvasContainerRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const point = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    continueTrail(point);
+    if (eraserLastPointRef.current) {
+      eraseAlongPath(eraserLastPointRef.current, point);
+    }
+    eraserLastPointRef.current = point;
+  }, [continueTrail, eraseAlongPath]);
+
+  const handleEraserEndFabric = useCallback(() => {
+    if (!eraserActiveRef.current) return;
+    eraserActiveRef.current = false;
+    eraserLastPointRef.current = null;
+    endTrail();
+  }, [endTrail]);
+
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!canvas || mode !== "write") return;
+    if (settingsRef.current.tool === "eraser") {
+      canvas.on("mouse:down", handleEraserStartFabric);
+      canvas.on("mouse:move", handleEraserMoveFabric);
+      canvas.on("mouse:up", handleEraserEndFabric);
+    }
+    return () => {
+      canvas.off("mouse:down", handleEraserStartFabric);
+      canvas.off("mouse:move", handleEraserMoveFabric);
+      canvas.off("mouse:up", handleEraserEndFabric);
+    };
+  }, [mode, settings.tool, handleEraserStartFabric, handleEraserMoveFabric, handleEraserEndFabric]);
 
   // Save content helper
   const saveContent = useCallback(() => {
