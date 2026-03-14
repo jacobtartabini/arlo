@@ -508,9 +508,10 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     }
   }, [settings, mode]);
 
-  // Eraser with visual trail — stylus only
-  const handleEraserStart = useCallback((e: React.PointerEvent) => {
-    if (e.pointerType !== "pen") return;
+  // Eraser with visual trail — stylus only (using Fabric events)
+  const handleEraserStartFabric = useCallback((opt: any) => {
+    const e = opt.e as PointerEvent;
+    if (!e || e.pointerType !== "pen") return;
     
     const canvas = fabricRef.current;
     const container = canvasContainerRef.current;
@@ -529,11 +530,12 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     
     // Perform initial erase
     eraseAtPoint(point);
-  }, [startTrail]);
+  }, [startTrail, eraseAtPoint]);
 
-  const handleEraserMove = useCallback((e: React.PointerEvent) => {
+  const handleEraserMoveFabric = useCallback((opt: any) => {
     if (!eraserActiveRef.current) return;
-    if (e.pointerType !== "pen") return;
+    const e = opt.e as PointerEvent;
+    if (!e || e.pointerType !== "pen") return;
     
     const canvas = fabricRef.current;
     const container = canvasContainerRef.current;
@@ -553,15 +555,33 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     }
     
     eraserLastPointRef.current = point;
-  }, [continueTrail]);
+  }, [continueTrail, eraseAlongPath]);
 
-  const handleEraserEnd = useCallback(() => {
+  const handleEraserEndFabric = useCallback(() => {
     if (!eraserActiveRef.current) return;
     
     eraserActiveRef.current = false;
     eraserLastPointRef.current = null;
     endTrail();
   }, [endTrail]);
+
+  // Attach eraser handlers to Fabric canvas events
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!canvas || mode !== "write") return;
+
+    if (settingsRef.current.tool === "eraser") {
+      canvas.on("mouse:down", handleEraserStartFabric);
+      canvas.on("mouse:move", handleEraserMoveFabric);
+      canvas.on("mouse:up", handleEraserEndFabric);
+    }
+
+    return () => {
+      canvas.off("mouse:down", handleEraserStartFabric);
+      canvas.off("mouse:move", handleEraserMoveFabric);
+      canvas.off("mouse:up", handleEraserEndFabric);
+    };
+  }, [mode, settings.tool, handleEraserStartFabric, handleEraserMoveFabric, handleEraserEndFabric]);
 
   const eraseAtPoint = useCallback((point: { x: number; y: number }) => {
     const canvas = fabricRef.current;
