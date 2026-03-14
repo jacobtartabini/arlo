@@ -1491,10 +1491,6 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
                     <div
                       ref={canvasContainerRef}
                       className="absolute inset-0 w-full h-full"
-                      onPointerDown={settings.tool === "eraser" ? handleEraserStart : undefined}
-                      onPointerMove={settings.tool === "eraser" ? handleEraserMove : undefined}
-                      onPointerUp={settings.tool === "eraser" ? handleEraserEnd : undefined}
-                      onPointerLeave={settings.tool === "eraser" ? handleEraserEnd : undefined}
                     >
                       <canvas
                         ref={canvasRef}
