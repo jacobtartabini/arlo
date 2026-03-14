@@ -164,6 +164,21 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     lastCenter: { x: 0, y: 0 },
   });
 
+  // Per-page undo/redo history
+  const [pageHistories, setPageHistories] = useState<Map<number, { undoStack: HistoryState[]; redoStack: HistoryState[] }>>(
+    new Map()
+  );
+  const isUndoingRef = useRef(false);
+  
+  // Eraser state
+  const eraserActiveRef = useRef(false);
+  const eraserLastPointRef = useRef<{ x: number; y: number } | null>(null);
+  
+  // Modules
+  const [researchPanelOpen, setResearchPanelOpen] = useState(false);
+  const [calculatorOpen, setCalculatorOpen] = useState(false);
+  const [arloAiOpen, setArloAiOpen] = useState(false);
+
   // Eraser trail hook
   const { startTrail, continueTrail, endTrail, clearTrail } = useEraserTrail({
     isActive: settings.tool === "eraser" && mode === "write",
