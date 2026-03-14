@@ -1309,6 +1309,22 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
             </>
           )}
 
+          {/* Zoom indicator/reset */}
+          {mode === "write" && pageZoom !== 1 && (
+            <>
+              <Separator orientation="vertical" className="mx-2 h-6" />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs gap-1"
+                onClick={() => { setPageZoom(1); setPagePanOffset({ x: 0, y: 0 }); }}
+                title="Reset zoom"
+              >
+                {Math.round(pageZoom * 100)}% ✕
+              </Button>
+            </>
+          )}
+
           {/* Spacer */}
           <div className="flex-1" />
 
