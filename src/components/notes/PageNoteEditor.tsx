@@ -518,7 +518,7 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
 
   const handleEraserMove = useCallback((e: React.PointerEvent) => {
     if (!eraserActiveRef.current) return;
-    if (e.pointerType !== "pen" && isPencilOnly) return;
+    if (e.pointerType !== "pen") return;
     
     const canvas = fabricRef.current;
     const container = canvasContainerRef.current;
