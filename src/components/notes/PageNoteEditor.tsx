@@ -493,9 +493,9 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     }
   }, [settings, mode]);
 
-  // Eraser with visual trail
+  // Eraser with visual trail — stylus only
   const handleEraserStart = useCallback((e: React.PointerEvent) => {
-    if (e.pointerType !== "pen" && isPencilOnly) return;
+    if (e.pointerType !== "pen") return;
     
     const canvas = fabricRef.current;
     const container = canvasContainerRef.current;
