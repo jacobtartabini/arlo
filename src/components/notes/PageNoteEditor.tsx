@@ -553,7 +553,7 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     }
     
     eraserLastPointRef.current = point;
-  }, [isPencilOnly, continueTrail]);
+  }, [continueTrail]);
 
   const handleEraserEnd = useCallback(() => {
     if (!eraserActiveRef.current) return;
