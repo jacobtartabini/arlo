@@ -844,7 +844,7 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
       }
     };
 
-    const targets = [container];
+    const targets: (HTMLElement | HTMLCanvasElement)[] = [container];
     if (upperCanvas) targets.push(upperCanvas);
 
     targets.forEach(target => {
