@@ -137,6 +137,8 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     ...DEFAULT_DRAWING_SETTINGS,
     lassoMode: "freeform" as LassoMode,
   });
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   
   // Multi-page support with per-page state
   const [currentPage, setCurrentPage] = useState(note.currentPage || 1);
@@ -150,6 +152,18 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
   const [isLoadingPdf, setIsLoadingPdf] = useState(false);
   const [pagePreviews, setPagePreviews] = useState<Map<number, string>>(new Map());
   
+  // Page zoom/pan state (Notability-style pinch-to-zoom)
+  const [pageZoom, setPageZoom] = useState(1);
+  const [pagePanOffset, setPagePanOffset] = useState({ x: 0, y: 0 });
+  const pageZoomRef = useRef(1);
+  pageZoomRef.current = pageZoom;
+  const pinchRef = useRef({
+    active: false,
+    initialDistance: 0,
+    initialZoom: 1,
+    lastCenter: { x: 0, y: 0 },
+  });
+
   // Per-page undo/redo history
   const [pageHistories, setPageHistories] = useState<Map<number, { undoStack: HistoryState[]; redoStack: HistoryState[] }>>(
     new Map()
@@ -164,9 +178,6 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
   const [researchPanelOpen, setResearchPanelOpen] = useState(false);
   const [calculatorOpen, setCalculatorOpen] = useState(false);
   const [arloAiOpen, setArloAiOpen] = useState(false);
-  
-  // Apple Pencil detection
-  const [isPencilOnly, setIsPencilOnly] = useState(true);
 
   // Eraser trail hook
   const { startTrail, continueTrail, endTrail, clearTrail } = useEraserTrail({
@@ -339,19 +350,39 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
       width: container.clientWidth,
       height: Math.max(container.clientHeight, 1056),
       backgroundColor: "transparent",
-      isDrawingMode: true,
-      allowTouchScrolling: true,
+      isDrawingMode: settingsRef.current.tool === "pen" || settingsRef.current.tool === "highlighter",
+      allowTouchScrolling: false, // We handle touch ourselves
     });
 
-    // Block non-stylus input from reaching Fabric.js (palm rejection)
+    // ========================================
+    // CORE PALM REJECTION + STYLUS-ONLY DRAWING
+    // Block ALL non-pen (finger, mouse) from Fabric.js
+    // ========================================
     canvas.on("mouse:down:before", (opt: any) => {
       const e = opt.e as PointerEvent;
       if (!e || typeof e.pointerType !== "string") return;
-      if (e.pointerType !== "pen") {
+      
+      if (e.pointerType === "pen") {
+        // Apple Pencil — ensure drawing mode is active for drawing tools
+        const tool = settingsRef.current.tool;
+        if (tool === "pen" || tool === "highlighter") {
+          canvas.isDrawingMode = true;
+        }
+      } else {
+        // Finger or mouse — completely block from Fabric
         canvas.isDrawingMode = false;
         canvas.selection = false;
-        opt.e = null;
+        opt.e = null; // Nullify so Fabric ignores this event
       }
+    });
+
+    // Restore drawing mode after any pointer up so next pen stroke works
+    canvas.on("mouse:up", () => {
+      const tool = settingsRef.current.tool;
+      if (tool === "pen" || tool === "highlighter") {
+        canvas.isDrawingMode = true;
+      }
+      canvas.selection = tool === "select" || tool === "lasso";
     });
 
     canvas.freeDrawingBrush = new PencilBrush(canvas);
@@ -366,7 +397,6 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
       try {
         canvas.loadFromJSON(JSON.parse(currentPageData.canvasState)).then(() => {
           canvas.renderAll();
-          // Initialize history
           setPageHistories(prev => {
             const newMap = new Map(prev);
             if (!newMap.has(currentPage)) {
@@ -410,7 +440,6 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
       saveCurrentPageState();
       saveContent();
       
-      // Add to history
       const json = JSON.stringify(canvas.toJSON());
       setCurrentHistory(prev => ({
         undoStack: [...prev.undoStack, { json, timestamp: Date.now() }].slice(-MAX_HISTORY),
@@ -422,39 +451,33 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     canvas.on("object:modified", handleChange);
     canvas.on("object:removed", handleChange);
 
-    // Stylus-only drawing: finger touches pass through for scrolling
-    const handleTouchStart = (e: TouchEvent) => {
-      if (!isPencilOnly) return;
-      
-      const touch = e.touches[0];
-      if (touch && (touch as any).touchType !== 'stylus') {
-        canvas.isDrawingMode = false;
-        canvas.selection = false;
-        // Don't preventDefault — allow browser to handle scrolling
-      } else {
-        if (settings.tool === "pen" || settings.tool === "highlighter") {
-          canvas.isDrawingMode = true;
-        }
-        canvas.selection = settings.tool === "select" || settings.tool === "lasso";
+    // DOM-level pointer blocking on Fabric's upper canvas element
+    // This prevents non-pen events from reaching Fabric's internal handlers
+    const upperCanvas = (canvas as any).upperCanvasEl as HTMLCanvasElement | undefined;
+    const blockNonPen = (e: PointerEvent) => {
+      if (e.pointerType !== "pen") {
+        // Stop propagation to Fabric, but don't preventDefault
+        // so finger scrolling/pinch still works on the container
+        e.stopPropagation();
+        e.stopImmediatePropagation();
       }
     };
-
-    const handleTouchEnd = () => {
-      if (settings.tool === "pen" || settings.tool === "highlighter") {
-        canvas.isDrawingMode = true;
-      }
-    };
-
-    canvasRef.current.addEventListener('touchstart', handleTouchStart, { passive: true });
-    canvasRef.current.addEventListener('touchend', handleTouchEnd);
+    
+    if (upperCanvas) {
+      upperCanvas.style.touchAction = 'none';
+      upperCanvas.addEventListener('pointerdown', blockNonPen, { capture: true });
+      upperCanvas.addEventListener('pointermove', blockNonPen, { capture: true });
+    }
 
     return () => {
-      canvasRef.current?.removeEventListener('touchstart', handleTouchStart);
-      canvasRef.current?.removeEventListener('touchend', handleTouchEnd);
+      if (upperCanvas) {
+        upperCanvas.removeEventListener('pointerdown', blockNonPen, { capture: true });
+        upperCanvas.removeEventListener('pointermove', blockNonPen, { capture: true });
+      }
       canvas.dispose();
       fabricRef.current = null;
     };
-  }, [mode, note.id, currentPage, isPencilOnly]);
+  }, [mode, note.id, currentPage]);
 
   // Update brush settings and handle eraser
   useEffect(() => {
@@ -485,9 +508,9 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     }
   }, [settings, mode]);
 
-  // Eraser with visual trail
+  // Eraser with visual trail — stylus only
   const handleEraserStart = useCallback((e: React.PointerEvent) => {
-    if (e.pointerType !== "pen" && isPencilOnly) return;
+    if (e.pointerType !== "pen") return;
     
     const canvas = fabricRef.current;
     const container = canvasContainerRef.current;
@@ -506,11 +529,11 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     
     // Perform initial erase
     eraseAtPoint(point);
-  }, [isPencilOnly, startTrail]);
+  }, [startTrail]);
 
   const handleEraserMove = useCallback((e: React.PointerEvent) => {
     if (!eraserActiveRef.current) return;
-    if (e.pointerType !== "pen" && isPencilOnly) return;
+    if (e.pointerType !== "pen") return;
     
     const canvas = fabricRef.current;
     const container = canvasContainerRef.current;
@@ -530,7 +553,7 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     }
     
     eraserLastPointRef.current = point;
-  }, [isPencilOnly, continueTrail]);
+  }, [continueTrail]);
 
   const handleEraserEnd = useCallback(() => {
     if (!eraserActiveRef.current) return;
@@ -904,6 +927,72 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     };
   }, [handleUndo, handleRedo]);
 
+  // Pinch-to-zoom on the write mode scroll container (Notability-style)
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || mode !== "write") return;
+
+    const pinch = pinchRef.current;
+
+    const getDistance = (t1: Touch, t2: Touch) =>
+      Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+
+    const getCenter = (t1: Touch, t2: Touch) => ({
+      x: (t1.clientX + t2.clientX) / 2,
+      y: (t1.clientY + t2.clientY) / 2,
+    });
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 2) return;
+      // Only handle finger touches (not stylus)
+      const allFingers = Array.from(e.touches).every(
+        t => (t as any).touchType !== 'stylus'
+      );
+      if (!allFingers) return;
+
+      e.preventDefault();
+      pinch.active = true;
+      pinch.initialDistance = getDistance(e.touches[0], e.touches[1]);
+      pinch.initialZoom = pageZoomRef.current;
+      pinch.lastCenter = getCenter(e.touches[0], e.touches[1]);
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!pinch.active || e.touches.length < 2) return;
+      e.preventDefault();
+
+      const dist = getDistance(e.touches[0], e.touches[1]);
+      const scale = dist / pinch.initialDistance;
+      const newZoom = Math.max(0.5, Math.min(5, pinch.initialZoom * scale));
+
+      const center = getCenter(e.touches[0], e.touches[1]);
+      const dx = center.x - pinch.lastCenter.x;
+      const dy = center.y - pinch.lastCenter.y;
+
+      setPageZoom(newZoom);
+      setPagePanOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+      pinch.lastCenter = center;
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        pinch.active = false;
+      }
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd);
+    container.addEventListener('touchcancel', handleTouchEnd);
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, [mode]);
+
   // Background pattern CSS
   const getBackgroundCSS = (): string => {
     switch (backgroundStyle) {
@@ -1235,6 +1324,22 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
             </>
           )}
 
+          {/* Zoom indicator/reset */}
+          {mode === "write" && pageZoom !== 1 && (
+            <>
+              <Separator orientation="vertical" className="mx-2 h-6" />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs gap-1"
+                onClick={() => { setPageZoom(1); setPagePanOffset({ x: 0, y: 0 }); }}
+                title="Reset zoom"
+              >
+                {Math.round(pageZoom * 100)}% ✕
+              </Button>
+            </>
+          )}
+
           {/* Spacer */}
           <div className="flex-1" />
 
@@ -1316,17 +1421,24 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
             </div>
           </div>
         ) : (
-          /* Write Mode - Continuous vertical scroll of all pages */
+          /* Write Mode - Continuous vertical scroll of all pages with pinch-to-zoom */
           <div
             ref={scrollContainerRef}
             className="flex-1 overflow-auto"
             style={{ 
               backgroundColor: 'hsl(var(--muted))',
-              touchAction: 'pan-y',
             }}
             onScroll={handleScrollDetection}
           >
-            <div className="flex flex-col items-center py-8 px-4 gap-8" data-note-content="true">
+            <div
+              className="flex flex-col items-center py-8 px-4 gap-8"
+              data-note-content="true"
+              style={{
+                transform: pageZoom !== 1 ? `scale(${pageZoom}) translate(${pagePanOffset.x / pageZoom}px, ${pagePanOffset.y / pageZoom}px)` : undefined,
+                transformOrigin: 'top center',
+                transition: pinchRef.current.active ? 'none' : 'transform 0.1s ease-out',
+              }}
+            >
               {pages.map((page) => (
                 <div
                   key={page.id}
