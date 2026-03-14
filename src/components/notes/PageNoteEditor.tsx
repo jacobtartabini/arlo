@@ -912,6 +912,72 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     };
   }, [handleUndo, handleRedo]);
 
+  // Pinch-to-zoom on the write mode scroll container (Notability-style)
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || mode !== "write") return;
+
+    const pinch = pinchRef.current;
+
+    const getDistance = (t1: Touch, t2: Touch) =>
+      Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+
+    const getCenter = (t1: Touch, t2: Touch) => ({
+      x: (t1.clientX + t2.clientX) / 2,
+      y: (t1.clientY + t2.clientY) / 2,
+    });
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 2) return;
+      // Only handle finger touches (not stylus)
+      const allFingers = Array.from(e.touches).every(
+        t => (t as any).touchType !== 'stylus'
+      );
+      if (!allFingers) return;
+
+      e.preventDefault();
+      pinch.active = true;
+      pinch.initialDistance = getDistance(e.touches[0], e.touches[1]);
+      pinch.initialZoom = pageZoomRef.current;
+      pinch.lastCenter = getCenter(e.touches[0], e.touches[1]);
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!pinch.active || e.touches.length < 2) return;
+      e.preventDefault();
+
+      const dist = getDistance(e.touches[0], e.touches[1]);
+      const scale = dist / pinch.initialDistance;
+      const newZoom = Math.max(0.5, Math.min(5, pinch.initialZoom * scale));
+
+      const center = getCenter(e.touches[0], e.touches[1]);
+      const dx = center.x - pinch.lastCenter.x;
+      const dy = center.y - pinch.lastCenter.y;
+
+      setPageZoom(newZoom);
+      setPagePanOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+      pinch.lastCenter = center;
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        pinch.active = false;
+      }
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd);
+    container.addEventListener('touchcancel', handleTouchEnd);
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, [mode]);
+
   // Background pattern CSS
   const getBackgroundCSS = (): string => {
     switch (backgroundStyle) {
