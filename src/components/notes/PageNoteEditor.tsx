@@ -335,19 +335,39 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
       width: container.clientWidth,
       height: Math.max(container.clientHeight, 1056),
       backgroundColor: "transparent",
-      isDrawingMode: true,
-      allowTouchScrolling: true,
+      isDrawingMode: settingsRef.current.tool === "pen" || settingsRef.current.tool === "highlighter",
+      allowTouchScrolling: false, // We handle touch ourselves
     });
 
-    // Block non-stylus input from reaching Fabric.js (palm rejection)
+    // ========================================
+    // CORE PALM REJECTION + STYLUS-ONLY DRAWING
+    // Block ALL non-pen (finger, mouse) from Fabric.js
+    // ========================================
     canvas.on("mouse:down:before", (opt: any) => {
       const e = opt.e as PointerEvent;
       if (!e || typeof e.pointerType !== "string") return;
-      if (e.pointerType !== "pen") {
+      
+      if (e.pointerType === "pen") {
+        // Apple Pencil — ensure drawing mode is active for drawing tools
+        const tool = settingsRef.current.tool;
+        if (tool === "pen" || tool === "highlighter") {
+          canvas.isDrawingMode = true;
+        }
+      } else {
+        // Finger or mouse — completely block from Fabric
         canvas.isDrawingMode = false;
         canvas.selection = false;
-        opt.e = null;
+        opt.e = null; // Nullify so Fabric ignores this event
       }
+    });
+
+    // Restore drawing mode after any pointer up so next pen stroke works
+    canvas.on("mouse:up", () => {
+      const tool = settingsRef.current.tool;
+      if (tool === "pen" || tool === "highlighter") {
+        canvas.isDrawingMode = true;
+      }
+      canvas.selection = tool === "select" || tool === "lasso";
     });
 
     canvas.freeDrawingBrush = new PencilBrush(canvas);
@@ -362,7 +382,6 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
       try {
         canvas.loadFromJSON(JSON.parse(currentPageData.canvasState)).then(() => {
           canvas.renderAll();
-          // Initialize history
           setPageHistories(prev => {
             const newMap = new Map(prev);
             if (!newMap.has(currentPage)) {
@@ -406,7 +425,6 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
       saveCurrentPageState();
       saveContent();
       
-      // Add to history
       const json = JSON.stringify(canvas.toJSON());
       setCurrentHistory(prev => ({
         undoStack: [...prev.undoStack, { json, timestamp: Date.now() }].slice(-MAX_HISTORY),
@@ -418,39 +436,33 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     canvas.on("object:modified", handleChange);
     canvas.on("object:removed", handleChange);
 
-    // Stylus-only drawing: finger touches pass through for scrolling
-    const handleTouchStart = (e: TouchEvent) => {
-      if (!isPencilOnly) return;
-      
-      const touch = e.touches[0];
-      if (touch && (touch as any).touchType !== 'stylus') {
-        canvas.isDrawingMode = false;
-        canvas.selection = false;
-        // Don't preventDefault — allow browser to handle scrolling
-      } else {
-        if (settings.tool === "pen" || settings.tool === "highlighter") {
-          canvas.isDrawingMode = true;
-        }
-        canvas.selection = settings.tool === "select" || settings.tool === "lasso";
+    // DOM-level pointer blocking on Fabric's upper canvas element
+    // This prevents non-pen events from reaching Fabric's internal handlers
+    const upperCanvas = (canvas as any).upperCanvasEl as HTMLCanvasElement | undefined;
+    const blockNonPen = (e: PointerEvent) => {
+      if (e.pointerType !== "pen") {
+        // Stop propagation to Fabric, but don't preventDefault
+        // so finger scrolling/pinch still works on the container
+        e.stopPropagation();
+        e.stopImmediatePropagation();
       }
     };
-
-    const handleTouchEnd = () => {
-      if (settings.tool === "pen" || settings.tool === "highlighter") {
-        canvas.isDrawingMode = true;
-      }
-    };
-
-    canvasRef.current.addEventListener('touchstart', handleTouchStart, { passive: true });
-    canvasRef.current.addEventListener('touchend', handleTouchEnd);
+    
+    if (upperCanvas) {
+      upperCanvas.style.touchAction = 'none';
+      upperCanvas.addEventListener('pointerdown', blockNonPen, { capture: true });
+      upperCanvas.addEventListener('pointermove', blockNonPen, { capture: true });
+    }
 
     return () => {
-      canvasRef.current?.removeEventListener('touchstart', handleTouchStart);
-      canvasRef.current?.removeEventListener('touchend', handleTouchEnd);
+      if (upperCanvas) {
+        upperCanvas.removeEventListener('pointerdown', blockNonPen, { capture: true });
+        upperCanvas.removeEventListener('pointermove', blockNonPen, { capture: true });
+      }
       canvas.dispose();
       fabricRef.current = null;
     };
-  }, [mode, note.id, currentPage, isPencilOnly]);
+  }, [mode, note.id, currentPage]);
 
   // Update brush settings and handle eraser
   useEffect(() => {
