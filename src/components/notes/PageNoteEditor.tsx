@@ -1406,17 +1406,24 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
             </div>
           </div>
         ) : (
-          /* Write Mode - Continuous vertical scroll of all pages */
+          /* Write Mode - Continuous vertical scroll of all pages with pinch-to-zoom */
           <div
             ref={scrollContainerRef}
             className="flex-1 overflow-auto"
             style={{ 
               backgroundColor: 'hsl(var(--muted))',
-              touchAction: 'pan-y',
             }}
             onScroll={handleScrollDetection}
           >
-            <div className="flex flex-col items-center py-8 px-4 gap-8" data-note-content="true">
+            <div
+              className="flex flex-col items-center py-8 px-4 gap-8"
+              data-note-content="true"
+              style={{
+                transform: pageZoom !== 1 ? `scale(${pageZoom}) translate(${pagePanOffset.x / pageZoom}px, ${pagePanOffset.y / pageZoom}px)` : undefined,
+                transformOrigin: 'top center',
+                transition: pinchRef.current.active ? 'none' : 'transform 0.1s ease-out',
+              }}
+            >
               {pages.map((page) => (
                 <div
                   key={page.id}
