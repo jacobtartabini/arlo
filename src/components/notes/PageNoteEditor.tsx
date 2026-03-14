@@ -137,6 +137,8 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
     ...DEFAULT_DRAWING_SETTINGS,
     lassoMode: "freeform" as LassoMode,
   });
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   
   // Multi-page support with per-page state
   const [currentPage, setCurrentPage] = useState(note.currentPage || 1);
@@ -150,23 +152,17 @@ export function PageNoteEditor({ note, onSave, onSaveNote }: PageNoteEditorProps
   const [isLoadingPdf, setIsLoadingPdf] = useState(false);
   const [pagePreviews, setPagePreviews] = useState<Map<number, string>>(new Map());
   
-  // Per-page undo/redo history
-  const [pageHistories, setPageHistories] = useState<Map<number, { undoStack: HistoryState[]; redoStack: HistoryState[] }>>(
-    new Map()
-  );
-  const isUndoingRef = useRef(false);
-  
-  // Eraser state
-  const eraserActiveRef = useRef(false);
-  const eraserLastPointRef = useRef<{ x: number; y: number } | null>(null);
-  
-  // Modules
-  const [researchPanelOpen, setResearchPanelOpen] = useState(false);
-  const [calculatorOpen, setCalculatorOpen] = useState(false);
-  const [arloAiOpen, setArloAiOpen] = useState(false);
-  
-  // Apple Pencil detection
-  const [isPencilOnly, setIsPencilOnly] = useState(true);
+  // Page zoom/pan state (Notability-style pinch-to-zoom)
+  const [pageZoom, setPageZoom] = useState(1);
+  const [pagePanOffset, setPagePanOffset] = useState({ x: 0, y: 0 });
+  const pageZoomRef = useRef(1);
+  pageZoomRef.current = pageZoom;
+  const pinchRef = useRef({
+    active: false,
+    initialDistance: 0,
+    initialZoom: 1,
+    lastCenter: { x: 0, y: 0 },
+  });
 
   // Eraser trail hook
   const { startTrail, continueTrail, endTrail, clearTrail } = useEraserTrail({
