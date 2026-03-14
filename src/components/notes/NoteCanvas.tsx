@@ -820,62 +820,54 @@ export function NoteCanvas({ note, onSave }: NoteCanvasProps) {
 
   // ============================================================
   // POINTER EVENTS: Block non-pen for stylus-only tools
+  // Must attach to Fabric's UPPER canvas element (not lower canvas)
+  // because Fabric renders its upper canvas on top for all interaction
   // ============================================================
   useEffect(() => {
+    const canvas = fabricRef.current;
     const container = containerRef.current;
-    const canvasEl = canvasRef.current;
-    if (!container) return;
+    if (!canvas || !container) return;
 
-    const handlePointerDown = (e: PointerEvent) => {
-      if (!isToolStylusOnly()) return;
-      
-      // Only allow pen (stylus) events through for drawing tools
-      if (e.pointerType !== "pen") {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-      } else {
-        isDrawingWithPenRef.current = true;
-      }
-    };
+    // Get Fabric's upper canvas element — this is what receives all pointer events
+    const upperCanvas = (canvas as any).upperCanvasEl as HTMLCanvasElement | undefined;
 
-    const handlePointerMove = (e: PointerEvent) => {
-      if (!isToolStylusOnly()) return;
-      if (e.pointerType !== "pen") {
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-      }
-    };
-
-    const handlePointerUp = (e: PointerEvent) => {
+    const blockNonPen = (e: PointerEvent) => {
       if (e.pointerType === "pen") {
-        isDrawingWithPenRef.current = false;
+        if (e.type === "pointerdown") isDrawingWithPenRef.current = true;
+        if (e.type === "pointerup") isDrawingWithPenRef.current = false;
+        return; // Allow pen through
       }
-      if (!isToolStylusOnly()) return;
-      if (e.pointerType !== "pen") {
+      // Block finger/mouse from reaching Fabric for stylus-only tools
+      if (stylusOnlyTools.has(settingsRef.current.tool)) {
         e.stopPropagation();
         e.stopImmediatePropagation();
       }
     };
 
-    // Attach to both container and canvas with capture to intercept early
-    const targets = canvasEl ? [container, canvasEl] : [container];
+    const targets: (HTMLElement | HTMLCanvasElement)[] = [container];
+    if (upperCanvas) targets.push(upperCanvas);
+
     targets.forEach(target => {
-      target.addEventListener("pointerdown", handlePointerDown, { capture: true });
-      target.addEventListener("pointermove", handlePointerMove, { capture: true });
-      target.addEventListener("pointerup", handlePointerUp, { capture: true });
-      target.addEventListener("pointercancel", handlePointerUp, { capture: true });
+      target.addEventListener("pointerdown", blockNonPen, { capture: true });
+      target.addEventListener("pointermove", blockNonPen, { capture: true });
+      target.addEventListener("pointerup", blockNonPen, { capture: true });
+      target.addEventListener("pointercancel", blockNonPen, { capture: true });
     });
+
+    // Also set touch-action on upper canvas to prevent browser gestures
+    if (upperCanvas) {
+      upperCanvas.style.touchAction = 'none';
+    }
 
     return () => {
       targets.forEach(target => {
-        target.removeEventListener("pointerdown", handlePointerDown, { capture: true });
-        target.removeEventListener("pointermove", handlePointerMove, { capture: true });
-        target.removeEventListener("pointerup", handlePointerUp, { capture: true });
-        target.removeEventListener("pointercancel", handlePointerUp, { capture: true });
+        target.removeEventListener("pointerdown", blockNonPen, { capture: true });
+        target.removeEventListener("pointermove", blockNonPen, { capture: true });
+        target.removeEventListener("pointerup", blockNonPen, { capture: true });
+        target.removeEventListener("pointercancel", blockNonPen, { capture: true });
       });
     };
-  }, [isToolStylusOnly]);
+  }, []);
 
   // Eraser handlers
   const eraseAlongSegment = useCallback((start: { x: number; y: number }, end: { x: number; y: number }) => {
