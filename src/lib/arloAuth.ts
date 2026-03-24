@@ -11,6 +11,7 @@ const DEFAULT_AEGIS_BASE_URL = 'https://auth.jacobtartabini.com';
 const DEFAULT_APP_NAME = 'arlo';
 const DEFAULT_CALLBACK_PATH = '/auth/callback';
 const STORAGE_TOKEN_KEY = 'arlo_auth_token';
+const AUTH_BYPASS_PATH_PREFIXES = ['/auth/callback', '/login', '/book', '/booking'];
 
 // Buffer time before expiry to force refresh (15 seconds)
 const REFRESH_BUFFER_MS = 15 * 1000;
@@ -96,6 +97,13 @@ function buildAbsoluteUrl(pathOrUrl: string): string {
   return new URL(pathOrUrl, window.location.origin).toString();
 }
 
+function toSafeReturnPath(rawPath: string): string {
+  if (!rawPath) return '/';
+  if (/^https?:\/\//i.test(rawPath)) return '/';
+  if (!rawPath.startsWith('/')) return '/';
+  return rawPath;
+}
+
 function validateToken(token: string): TokenValidationResult {
   const payload = decodeJwtPayload<JwtPayload>(token);
 
@@ -171,10 +179,12 @@ export function getAegisAuthorizeUrl(returnTo?: string): string {
 
 export function redirectToAegisAuth(returnTo?: string): void {
   if (returnTo) {
-    sessionStorage.setItem('arlo_auth_return_to', returnTo);
+    sessionStorage.setItem('arlo_auth_return_to', toSafeReturnPath(returnTo));
   }
 
-  const target = returnTo ?? getStoredReturnTo() ?? `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  const target = toSafeReturnPath(
+    returnTo ?? getStoredReturnTo() ?? `${window.location.pathname}${window.location.search}${window.location.hash}`
+  );
   window.location.assign(getAegisAuthorizeUrl(target));
 }
 
@@ -270,13 +280,18 @@ export async function getAuthHeadersWithContentType(): Promise<HeadersInit | nul
 }
 
 export function getPostAuthReturnPath(preferred?: string | null): string {
-  if (preferred) return preferred;
+  if (preferred) return toSafeReturnPath(preferred);
 
   const stored = getStoredReturnTo();
   if (stored) {
     clearStoredReturnTo();
-    return stored;
+    return toSafeReturnPath(stored);
   }
 
   return '/';
+}
+
+export function shouldBypassAuthRedirect(pathname: string = window.location.pathname): boolean {
+  if (isPublicBookingDomain()) return true;
+  return AUTH_BYPASS_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }

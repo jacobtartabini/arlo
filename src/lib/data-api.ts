@@ -3,7 +3,7 @@
  * All database operations go through the edge function which validates JWT tokens.
  */
 
-import { getArloToken, isAuthenticated } from '@/lib/arloAuth';
+import { getArloToken, isAuthenticated, redirectToAegisAuth, shouldBypassAuthRedirect } from '@/lib/arloAuth';
 import { emitSecurityDebugEntry } from '@/lib/security-debug';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -65,13 +65,18 @@ export async function dataApi<T = unknown>(request: DataApiRequest): Promise<Dat
   const token = await getArloToken();
   
   if (!token) {
+    if (!shouldBypassAuthRedirect()) {
+      const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      redirectToAegisAuth(currentPath);
+    }
+
     emitSecurityDebugEntry({
       label: `data-api:${request.action}`,
       ok: false,
       status: 401,
-      message: 'Authentication required',
+      message: 'Authentication required - redirecting to Aegis',
     });
-    return { error: { message: 'Authentication required' } };
+    return { error: { message: 'Authentication required - redirecting to sign-in' } };
   }
 
   try {

@@ -6,6 +6,7 @@ import {
   isAuthenticated as checkIsAuthenticated,
   getIdentity,
   redirectToAegisAuth,
+  shouldBypassAuthRedirect,
 } from '@/lib/arloAuth';
 import { isPublicBookingDomain } from '@/lib/domain-utils';
 
@@ -78,6 +79,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           identity: null,
           userKey: null,
         });
+
+        if (!shouldBypassAuthRedirect()) {
+          const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+          redirectToAegisAuth(currentPath);
+        }
       } catch (error) {
         console.error('Auth initialization failed:', error);
         clearLegacyAuthFlags();
@@ -88,6 +94,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           identity: null,
           userKey: null,
         });
+
+        if (!shouldBypassAuthRedirect()) {
+          const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+          redirectToAegisAuth(currentPath);
+        }
       }
     };
 
@@ -128,8 +139,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         userKey: null,
       });
 
-      const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-      redirectToAegisAuth(currentPath);
+      if (!shouldBypassAuthRedirect()) {
+        const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        redirectToAegisAuth(currentPath);
+      }
       return false;
     } catch (error) {
       console.error('Auth verification failed:', error);
@@ -142,8 +155,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         userKey: null,
       });
 
-      const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-      redirectToAegisAuth(currentPath);
+      if (!shouldBypassAuthRedirect()) {
+        const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        redirectToAegisAuth(currentPath);
+      }
       return false;
     }
   }, []);
