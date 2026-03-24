@@ -1,5 +1,4 @@
 import React, { ReactNode, useEffect, useState } from 'react';
-import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/providers/AuthProvider';
 import { Loader2 } from 'lucide-react';
 
@@ -11,22 +10,15 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { isAuthenticated, isLoading, verifyAuth } = useAuth();
   const [hasAttemptedVerify, setHasAttemptedVerify] = useState(false);
 
-  // Attempt to verify auth on mount if not already authenticated
   useEffect(() => {
     if (!isAuthenticated && !isLoading && !hasAttemptedVerify) {
-      if (import.meta.env.DEV) {
-        console.log('[ProtectedRoute] verifyAuth() start');
-      }
       setHasAttemptedVerify(true);
-      verifyAuth().finally(() => {
-        if (import.meta.env.DEV) {
-          console.log('[ProtectedRoute] verifyAuth() done');
-        }
+      verifyAuth().catch((error) => {
+        console.error('[ProtectedRoute] verifyAuth failed:', error);
       });
     }
   }, [isAuthenticated, isLoading, hasAttemptedVerify, verifyAuth]);
 
-  // Show loading spinner while checking authentication
   if (isLoading || (!isAuthenticated && !hasAttemptedVerify)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background/95 to-background/90">
@@ -40,12 +32,14 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     );
   }
 
-  // Redirect to login if not authenticated after verification attempt
-  if (!isAuthenticated && hasAttemptedVerify) {
-    return <Navigate to="/login" replace />;
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background/95 to-background/90">
+        <div className="text-center text-muted-foreground">Redirecting to secure sign-in…</div>
+      </div>
+    );
   }
 
-  // Render protected content
   return <>{children}</>;
 };
 

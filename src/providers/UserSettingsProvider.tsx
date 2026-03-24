@@ -95,7 +95,7 @@ export function UserSettingsProvider({ children }: { children: React.ReactNode }
 
   const updateSettings = useCallback(async (updates: UserSettingsUpdate) => {
     if (!isAuthenticated || !settings) {
-      toast.error('Please connect via Tailscale to update settings');
+      toast.error('Please sign in to continue updating settings');
       return;
     }
 
