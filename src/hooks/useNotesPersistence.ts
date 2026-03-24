@@ -82,10 +82,17 @@ export function useNotesPersistence() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [folders, setFolders] = useState<NoteFolder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
 
   // Fetch notes and folders - bypass isAuthenticated check to allow async token resolution
   const fetchNotes = useCallback(async () => {
+    if (!isAuthenticated || authLoading) {
+      setNotes([]);
+      setFolders([]);
+      setIsLoading(false);
+      return;
+    }
+
     try {
       setIsLoading(true);
 
@@ -124,11 +131,12 @@ export function useNotesPersistence() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [authLoading, isAuthenticated]);
 
   useEffect(() => {
+    if (authLoading) return;
     fetchNotes();
-  }, [fetchNotes]);
+  }, [authLoading, fetchNotes]);
 
   // Sort helper
   const sortNotes = (notesList: Note[]): Note[] => {
