@@ -7,7 +7,7 @@
 
 import { isPublicBookingDomain } from '@/lib/domain-utils';
 
-const DEFAULT_AEGIS_BASE_URL = 'https://auth.jacobtartabini.com';
+const DEFAULT_AEGIS_BASE_URL = 'https://raspberrypi.tailf531bd.ts.net';
 const DEFAULT_APP_NAME = 'arlo';
 const DEFAULT_CALLBACK_PATH = '/auth/callback';
 const STORAGE_TOKEN_KEY = 'arlo_auth_token';
