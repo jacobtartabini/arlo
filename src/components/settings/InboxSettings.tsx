@@ -194,7 +194,7 @@ export default function InboxSettings({ embedded = false }: InboxSettingsProps) 
   const handleConnect = async (provider: InboxProvider) => {
     // Ensure authentication is ready
     if (!isAuthenticated || !userKey) {
-      toast.error('Authentication required. Please verify your Tailscale connection.');
+      toast.error('Authentication required. Please sign in to Aegis.');
       return;
     }
     
@@ -293,7 +293,7 @@ export default function InboxSettings({ embedded = false }: InboxSettingsProps) 
       {!isAuthenticated && (
         <div className="p-4 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900/30">
           <p className="text-sm text-amber-900 dark:text-amber-200">
-            Authentication required. Please verify your Tailscale connection to connect inbox accounts.
+            Authentication required. Please sign in to Aegis to connect inbox accounts.
           </p>
         </div>
       )}

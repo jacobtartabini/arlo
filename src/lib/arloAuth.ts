@@ -1,29 +1,46 @@
 /**
  * Arlo Authentication Module
- * 
- * Handles JWT-based authentication with the Raspberry Pi auth server.
- * Token is cached in memory only (no localStorage/sessionStorage).
- * 
- * Authentication is REQUIRED - there is no fallback or demo mode.
- * On public booking domains (e.g., meet.jacobtartabini.com), authentication
- * is completely disabled to allow guest access for booking.
+ *
+ * Arlo is now a client of the standalone Aegis auth service.
+ * This module manages JWT storage/validation and centralizes redirect flow.
  */
 
 import { isPublicBookingDomain } from '@/lib/domain-utils';
 
-const AUTH_ENDPOINT = 'https://raspberrypi.tailf531bd.ts.net/auth/verify';
+const DEFAULT_AEGIS_BASE_URL = 'https://auth.jacobtartabini.com';
+const DEFAULT_APP_NAME = 'arlo';
+const DEFAULT_CALLBACK_PATH = '/auth/callback';
+const STORAGE_TOKEN_KEY = 'arlo_auth_token';
 
-// Buffer time before expiry to trigger refresh (15 seconds)
+// Buffer time before expiry to force refresh (15 seconds)
 const REFRESH_BUFFER_MS = 15 * 1000;
 
-// Network timeout for auth requests (10 seconds)
-const AUTH_TIMEOUT_MS = 10 * 1000;
+interface JwtPayload {
+  sub?: unknown;
+  exp?: unknown;
+  iss?: unknown;
+  aud?: unknown;
+}
+
+interface CachedToken {
+  token: string;
+  expiresAt: number;
+  payload: JwtPayload;
+}
+
+interface TokenValidationResult {
+  valid: boolean;
+  reason?: string;
+  payload?: JwtPayload;
+  expiresAt?: number;
+}
+
+let cachedToken: CachedToken | null = null;
 
 function base64UrlToString(input: string): string {
   const pad = '='.repeat((4 - (input.length % 4)) % 4);
   const base64 = (input + pad).replace(/-/g, '+').replace(/_/g, '/');
 
-  // atob() returns a binary string. This keeps Unicode safe when present.
   try {
     return decodeURIComponent(
       atob(base64)
@@ -48,236 +65,218 @@ function decodeJwtPayload<T = unknown>(token: string): T | null {
   }
 }
 
-function deriveUserKeyFromJwt(token: string): string | null {
-  const payload = decodeJwtPayload<{ sub?: unknown }>(token);
+function normalizeAudience(aud: unknown): string[] {
+  if (typeof aud === 'string') return [aud];
+  if (Array.isArray(aud)) return aud.filter((entry): entry is string => typeof entry === 'string');
+  return [];
+}
+
+function getAegisBaseUrl(): string {
+  return (import.meta.env.VITE_AEGIS_BASE_URL || DEFAULT_AEGIS_BASE_URL).replace(/\/$/, '');
+}
+
+function getAegisAppName(): string {
+  return import.meta.env.VITE_AEGIS_APP_NAME || DEFAULT_APP_NAME;
+}
+
+function getCallbackPath(): string {
+  return import.meta.env.VITE_AEGIS_CALLBACK_PATH || DEFAULT_CALLBACK_PATH;
+}
+
+function getExpectedIssuer(): string | null {
+  return import.meta.env.VITE_AEGIS_EXPECTED_ISSUER || null;
+}
+
+function getExpectedAudience(): string | null {
+  return import.meta.env.VITE_AEGIS_EXPECTED_AUDIENCE || null;
+}
+
+function buildAbsoluteUrl(pathOrUrl: string): string {
+  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+  return new URL(pathOrUrl, window.location.origin).toString();
+}
+
+function validateToken(token: string): TokenValidationResult {
+  const payload = decodeJwtPayload<JwtPayload>(token);
+
+  if (!payload) {
+    return { valid: false, reason: 'Token payload could not be decoded' };
+  }
+
+  if (typeof payload.exp !== 'number') {
+    return { valid: false, reason: 'Token is missing exp claim' };
+  }
+
+  const expiresAt = payload.exp * 1000;
+  if (expiresAt - Date.now() <= REFRESH_BUFFER_MS) {
+    return { valid: false, reason: 'Token is expired' };
+  }
+
+  const expectedIssuer = getExpectedIssuer();
+  if (expectedIssuer) {
+    if (typeof payload.iss !== 'string' || payload.iss !== expectedIssuer) {
+      return {
+        valid: false,
+        reason: `Unexpected issuer: ${String(payload.iss)}`,
+      };
+    }
+  }
+
+  const expectedAudience = getExpectedAudience();
+  if (expectedAudience) {
+    const audiences = normalizeAudience(payload.aud);
+    if (!audiences.includes(expectedAudience)) {
+      return {
+        valid: false,
+        reason: `Unexpected audience: ${JSON.stringify(payload.aud)}`,
+      };
+    }
+  }
+
+  return { valid: true, payload, expiresAt };
+}
+
+function saveToken(token: string, payload: JwtPayload, expiresAt: number): void {
+  cachedToken = { token, payload, expiresAt };
+  sessionStorage.setItem(STORAGE_TOKEN_KEY, token);
+}
+
+function loadTokenFromSessionStorage(): string | null {
+  return sessionStorage.getItem(STORAGE_TOKEN_KEY);
+}
+
+function deriveUserKey(payload: JwtPayload | null): string | null {
   const sub = payload?.sub;
   return typeof sub === 'string' && sub.length > 0 ? sub : null;
 }
 
-interface ArloAuthResponse {
-  status: string;
-  token: string;
-  expiresAt: string; // ISO timestamp
-  identity: {
-    user?: string;
-    node?: string;
-    tailnet?: string;
-  };
+function getStoredReturnTo(): string | null {
+  return sessionStorage.getItem('arlo_auth_return_to');
 }
 
-interface CachedToken {
-  token: string;
-  expiresAt: number; // Unix timestamp in ms
-  identity: ArloAuthResponse['identity'];
+function clearStoredReturnTo(): void {
+  sessionStorage.removeItem('arlo_auth_return_to');
 }
 
-// In-memory token cache (NOT persisted)
-let cachedToken: CachedToken | null = null;
+export function getAegisAuthorizeUrl(returnTo?: string): string {
+  const callbackPath = getCallbackPath();
+  const callbackUrl = new URL(buildAbsoluteUrl(callbackPath));
 
-// Promise to prevent concurrent refresh attempts
-let refreshPromise: Promise<string | null> | null = null;
-
-/**
- * Check if the cached token is valid and not expiring soon
- */
-function isTokenValid(): boolean {
-  if (!cachedToken) return false;
-  
-  const now = Date.now();
-  const expiresIn = cachedToken.expiresAt - now;
-  
-  // Token is valid if it has more than REFRESH_BUFFER_MS left
-  return expiresIn > REFRESH_BUFFER_MS;
-}
-
-/**
- * Fetch with timeout using AbortController
- */
-async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-  
-  try {
-    const response = await fetch(url, {
-      ...options,
-      signal: controller.signal,
-    });
-    return response;
-  } finally {
-    clearTimeout(timeoutId);
+  if (returnTo) {
+    callbackUrl.searchParams.set('return_to', returnTo);
   }
+
+  return `${getAegisBaseUrl()}/authorize?app_name=${encodeURIComponent(getAegisAppName())}&next=${encodeURIComponent(callbackUrl.toString())}`;
 }
 
-/**
- * Fetch a new token from the auth server.
- * No fallback - authentication is required.
- */
-async function fetchNewToken(): Promise<CachedToken | null> {
-  try {
-    const response = await fetchWithTimeout(
-      AUTH_ENDPOINT,
-      {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      },
-      AUTH_TIMEOUT_MS
-    );
-
-    if (!response.ok) {
-      console.error('[arloAuth] Auth endpoint returned:', response.status);
-      return null;
-    }
-
-    const data: ArloAuthResponse = await response.json();
-    
-    if (!data.token || !data.expiresAt) {
-      console.error('[arloAuth] Invalid response from auth endpoint:', data);
-      return null;
-    }
-
-    const expiresAt = new Date(data.expiresAt).getTime();
-
-    // Single source of truth: user_key comes from JWT `sub`
-    const userKey = deriveUserKeyFromJwt(data.token) ?? data.identity?.user ?? null;
-
-    return {
-      token: data.token,
-      expiresAt,
-      identity: {
-        ...data.identity,
-        user: userKey ?? undefined,
-      },
-    };
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      console.error('[arloAuth] Auth request timed out');
-    } else {
-      console.error('[arloAuth] Failed to fetch token:', error);
-    }
-    return null;
+export function redirectToAegisAuth(returnTo?: string): void {
+  if (returnTo) {
+    sessionStorage.setItem('arlo_auth_return_to', returnTo);
   }
+
+  const target = returnTo ?? getStoredReturnTo() ?? `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  window.location.assign(getAegisAuthorizeUrl(target));
 }
 
-/**
- * Get a valid Arlo token, refreshing if necessary.
- * Returns null if authentication fails.
- */
+export function completeAuthFromCallback(rawToken: string | null): boolean {
+  if (!rawToken) return false;
+
+  const result = validateToken(rawToken);
+  if (!result.valid || !result.payload || !result.expiresAt) {
+    if (import.meta.env.DEV) {
+      console.warn('[arloAuth] Callback token rejected:', result.reason);
+    }
+    clearArloToken();
+    return false;
+  }
+
+  saveToken(rawToken, result.payload, result.expiresAt);
+  return true;
+}
+
 export async function getArloToken(): Promise<string | null> {
-  // On public booking domains, don't attempt authentication at all
-  if (isPublicBookingDomain()) {
+  if (isPublicBookingDomain()) return null;
+
+  if (cachedToken) {
+    const result = validateToken(cachedToken.token);
+    if (result.valid) return cachedToken.token;
+    clearArloToken();
+  }
+
+  const stored = loadTokenFromSessionStorage();
+  if (!stored) return null;
+
+  const result = validateToken(stored);
+  if (!result.valid || !result.payload || !result.expiresAt) {
+    clearArloToken();
     return null;
   }
 
-  // Return cached token if still valid
-  if (isTokenValid() && cachedToken) {
-    return cachedToken.token;
-  }
-
-  // If already refreshing, wait for that promise
-  if (refreshPromise) {
-    return refreshPromise;
-  }
-
-  // Start refresh
-  refreshPromise = (async () => {
-    try {
-      const newToken = await fetchNewToken();
-      
-      if (newToken) {
-        cachedToken = newToken;
-        return newToken.token;
-      } else {
-        // Clear cache on failure
-        cachedToken = null;
-        return null;
-      }
-    } finally {
-      refreshPromise = null;
-    }
-  })();
-
-  return refreshPromise;
+  saveToken(stored, result.payload, result.expiresAt);
+  return stored;
 }
 
-/**
- * Check if we currently have a valid token (synchronous check)
- */
 export function isAuthenticated(): boolean {
-  return isTokenValid();
+  if (!cachedToken) return false;
+
+  return validateToken(cachedToken.token).valid;
 }
 
-/**
- * Get the current identity info if authenticated
- */
-export function getIdentity(): ArloAuthResponse['identity'] | null {
+export function getIdentity(): { user?: string } | null {
   if (!cachedToken) return null;
 
-  // Backfill userKey from JWT if the verify endpoint didn't include it
-  if (!cachedToken.identity?.user) {
-    const derived = deriveUserKeyFromJwt(cachedToken.token);
-    if (derived) {
-      return { ...cachedToken.identity, user: derived };
-    }
-  }
+  const user = deriveUserKey(cachedToken.payload);
+  if (!user) return null;
 
-  return cachedToken.identity;
+  return { user };
 }
 
-/** Canonical user identifier used across the app (maps to DB `user_key`). */
 export function getUserKey(): string | null {
   return getIdentity()?.user ?? null;
 }
 
-/**
- * Clear the cached token (logout)
- */
 export function clearArloToken(): void {
   cachedToken = null;
+  sessionStorage.removeItem(STORAGE_TOKEN_KEY);
 }
 
-/**
- * Get token expiry time in ms from now (or 0 if no token)
- */
 export function getTokenExpiresIn(): number {
   if (!cachedToken) return 0;
   return Math.max(0, cachedToken.expiresAt - Date.now());
 }
 
-/**
- * Verify authentication by attempting to get a token.
- * This is the main entry point for protected pages.
- */
 export async function verifyArloAuth(): Promise<boolean> {
   const token = await getArloToken();
   return token !== null;
 }
 
-/**
- * Create headers for authenticated API calls.
- * NOTE: Do NOT include Content-Type when using supabase.functions.invoke()
- * as it handles JSON serialization automatically. Including Content-Type
- * bypasses automatic stringification and causes "[object Object]" errors.
- */
 export async function getAuthHeaders(): Promise<HeadersInit | null> {
   const token = await getArloToken();
-  
   if (!token) return null;
-  
+
   return {
-    'Authorization': `Bearer ${token}`,
+    Authorization: `Bearer ${token}`,
   };
 }
 
-/**
- * Create headers for raw fetch() calls (includes Content-Type)
- */
 export async function getAuthHeadersWithContentType(): Promise<HeadersInit | null> {
   const token = await getArloToken();
-  
   if (!token) return null;
-  
+
   return {
-    'Authorization': `Bearer ${token}`,
+    Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',
   };
+}
+
+export function getPostAuthReturnPath(preferred?: string | null): string {
+  if (preferred) return preferred;
+
+  const stored = getStoredReturnTo();
+  if (stored) {
+    clearStoredReturnTo();
+    return stored;
+  }
+
+  return '/';
 }

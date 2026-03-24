@@ -1,223 +1,24 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Shield, Wifi, Lock } from 'lucide-react';
-import { useAuth } from '@/providers/AuthProvider';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
-import { getArloToken, getAuthHeaders } from '@/lib/arloAuth';
+import { useEffect } from 'react';
+import { Loader2 } from 'lucide-react';
+import { redirectToAegisAuth } from '@/lib/arloAuth';
 
-// NO MORE HARD-CODED USER ID - identity comes from JWT
-
-interface Message {
-  text: string;
-  icon: React.ReactNode;
-  delay: number;
-}
-
+/**
+ * Backward-compatible login route.
+ * We keep `/login` but it now immediately defers to Aegis.
+ */
 const TailscaleAuth: React.FC = () => {
-  const navigate = useNavigate();
-  const { verifyAuth, identity } = useAuth();
-  const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
-  const [isVerifying, setIsVerifying] = useState(true);
-  const [networkDenied, setNetworkDenied] = useState(false);
-  const [showMessages, setShowMessages] = useState(true);
-
-  const messages: Message[] = [
-    {
-      text: "Verifying secure network access...",
-      icon: <Shield className="w-6 h-6" />,
-      delay: 0
-    },
-    {
-      text: "Scanning Tailscale network...",
-      icon: <Wifi className="w-6 h-6" />,
-      delay: 1500
-    },
-    {
-      text: "Establishing encrypted connection...",
-      icon: <Lock className="w-6 h-6" />,
-      delay: 3000
-    }
-  ];
-
-  // Cycle through messages
   useEffect(() => {
-    if (!showMessages) return;
-
-    const timer = setTimeout(() => {
-      if (currentMessageIndex < messages.length - 1) {
-        setCurrentMessageIndex(prev => prev + 1);
-      }
-    }, messages[currentMessageIndex]?.delay || 1500);
-
-    return () => clearTimeout(timer);
-  }, [currentMessageIndex, showMessages]);
-
-  // Handle Google OAuth callback
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-    const state = params.get('state');
-    
-    if (code && state) {
-      handleGoogleCallback(code, state);
-      // Clean up URL
-      window.history.replaceState({}, '', window.location.pathname);
-    }
+    const returnTo = new URLSearchParams(window.location.search).get('return_to') || '/';
+    redirectToAegisAuth(returnTo);
   }, []);
 
-  const handleGoogleCallback = async (code: string, state: string) => {
-    try {
-      // Get auth headers for the API call - identity comes from JWT
-      const headers = await getAuthHeaders();
-      
-      if (!headers) {
-        throw new Error('Authentication required for OAuth callback');
-      }
-      
-      // Call exchange_code with JWT auth - no userId in body
-      // Server derives user from JWT.sub and validates nonce
-      const { data, error } = await supabase.functions.invoke('google-calendar-auth', {
-        body: { action: 'exchange_code', code, state },
-        headers: headers as Record<string, string>,
-      });
-
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-
-      toast.success('Google Calendar connected successfully');
-      
-      // Trigger initial sync - server uses JWT for user identification
-      await supabase.functions.invoke('calendar-sync', {
-        body: { action: 'sync_provider', provider: 'google' },
-        headers: headers as Record<string, string>,
-      });
-      
-      // Redirect to settings after successful connection
-      navigate('/settings');
-    } catch (error: any) {
-      toast.error('Failed to connect Google Calendar: ' + error.message);
-      navigate('/settings');
-    }
-  };
-
-  // Verify network connection using new JWT auth
-  useEffect(() => {
-    // Skip if this is a Google OAuth callback
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('code') && params.get('state')) {
-      return;
-    }
-
-    const verifyConnection = async () => {
-      try {
-        // Wait a moment for better UX
-        await new Promise(resolve => setTimeout(resolve, 2000));
-
-        // Use the new auth context to verify access
-        const success = await verifyAuth();
-
-        if (success) {
-          // Access verified, proceed with success animation
-          setShowMessages(false);
-          setCurrentMessageIndex(0);
-
-          setTimeout(() => {
-            setIsVerifying(false);
-            setTimeout(() => navigate('/dashboard'), 1000);
-          }, 500);
-        } else {
-          setIsVerifying(false);
-          setNetworkDenied(true);
-          setShowMessages(false);
-        }
-      } catch (error) {
-        console.log('Network verification failed:', error);
-        setIsVerifying(false);
-        setNetworkDenied(true);
-        setShowMessages(false);
-      }
-    };
-
-    verifyConnection();
-  }, [navigate, verifyAuth]);
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 relative overflow-hidden">
-      {/* Subtle floating background elements */}
-      <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-gray-200/30 rounded-full blur-3xl animate-float" />
-        <div className="absolute bottom-1/3 right-1/4 w-48 h-48 bg-gray-300/20 rounded-full blur-2xl animate-float-delayed" />
-        <div className="absolute top-1/2 left-1/2 w-32 h-32 bg-gray-400/10 rounded-full blur-xl animate-pulse transform -translate-x-1/2 -translate-y-1/2" />
-      </div>
-
-      {/* Favicon with entrance animation */}
-      <div className="absolute top-8 left-8 animate-fade-in-down">
-        <img 
-          src="/favicon2.png" 
-          alt="Arlo" 
-          className="w-8 h-8 hover:scale-110 transition-transform duration-300 cursor-pointer" 
-        />
-      </div>
-
-      {/* Content */}
-      <div className="text-center relative z-10">
-        {/* Large Shield Icon with multiple animations */}
-        <div className="flex justify-center mb-8 animate-fade-in-up">
-          <div className="relative group w-36 h-36 flex items-center justify-center">
-            <div
-              className="absolute inset-2 rounded-full border border-gray-300/50 orbit-ring z-0"
-            />
-            <div
-              className="absolute inset-5 rounded-full border border-gray-400/30 orbit-ring-delayed z-0"
-            />
-            <div
-              className="absolute inset-8 rounded-full border border-gray-500/20 orbit-ring-drift z-0"
-            />
-            <Shield
-              className="relative z-10 w-20 h-20 text-gray-800 animate-breathe transition-all duration-500 group-hover:text-gray-600"
-              style={{ animationDuration: '4s', animationIterationCount: 'infinite' }}
-            />
-            <div className="absolute inset-0 rounded-full bg-gray-800/5 scale-150 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl z-0" />
-          </div>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background/95 to-background/90">
+      <div className="text-center">
+        <div className="w-16 h-16 bg-primary/20 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-primary/30 mb-4 mx-auto">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
-
-        {/* App Title with staggered letter animation */}
-        <div className="overflow-hidden animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
-          <h1 className="text-6xl font-semibold text-gray-900 tracking-wide hover:tracking-widest transition-all duration-700 cursor-default">
-            <span className="inline-block animate-bounce-subtle" style={{ animationDelay: '0s' }}>A</span>
-            <span className="inline-block animate-bounce-subtle" style={{ animationDelay: '0.1s' }}>r</span>
-            <span className="inline-block animate-bounce-subtle" style={{ animationDelay: '0.2s' }}>l</span>
-            <span className="inline-block animate-bounce-subtle" style={{ animationDelay: '0.3s' }}>o</span>
-          </h1>
-        </div>
-
-        {/* Loading dots with wave animation */}
-        {isVerifying && (
-          <div className="mt-12 flex justify-center animate-fade-in" style={{ animationDelay: '0.6s' }}>
-            <div className="flex space-x-2">
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-wave" style={{ animationDelay: '0s' }} />
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-wave" style={{ animationDelay: '0.2s' }} />
-              <div className="w-2 h-2 bg-gray-400 rounded-full animate-wave" style={{ animationDelay: '0.4s' }} />
-            </div>
-          </div>
-        )}
-
-        {/* Success state with scale animation */}
-        {!isVerifying && !networkDenied && (
-          <div className="mt-12 animate-scale-in">
-            <div className="text-green-600 text-sm font-medium animate-fade-in">
-              ✓ Connected
-            </div>
-          </div>
-        )}
-
-        {/* Error State with shake animation */}
-        {networkDenied && (
-          <div className="mt-12 text-red-600 text-sm animate-shake">
-            Network access required
-          </div>
-        )}
+        <p className="text-muted-foreground">Redirecting to secure sign-in…</p>
       </div>
     </div>
   );

@@ -463,9 +463,9 @@ export default function Notes() {
       <div className="flex h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4 text-center max-w-md px-4">
           <LogIn className="h-12 w-12 text-muted-foreground" />
-          <h2 className="text-xl font-semibold">Tailscale login required</h2>
+          <h2 className="text-xl font-semibold">Sign-in required</h2>
           <p className="text-muted-foreground">
-            Please connect via Tailscale to access your notes.
+            Please sign in to Aegis to access your notes.
           </p>
           <Button onClick={() => navigate("/login")}>
             Connect
