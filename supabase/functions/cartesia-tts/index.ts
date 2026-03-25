@@ -1,17 +1,17 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
-import { verifyArloJWT } from '../_shared/arloAuth.ts';
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-user-key',
-};
+import { verifyArloJWT, handleCorsOptions, getCorsHeaders, validateOrigin } from '../_shared/arloAuth.ts';
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req.headers.get('origin'));
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return handleCorsOptions(req);
   }
+
+  const originError = validateOrigin(req);
+  if (originError) return originError;
 
   try {
     // Verify JWT
