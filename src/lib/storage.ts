@@ -39,7 +39,7 @@ export async function uploadFile(file: File): Promise<UploadResult> {
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'X-Arlo-Authorization': `Bearer ${token}`,
         },
         body: formData,
       }
@@ -87,7 +87,7 @@ export async function getSignedUrl(path: string, expiresIn = 3600): Promise<{ si
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'X-Arlo-Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ path, expiresIn }),
@@ -123,7 +123,7 @@ export async function deleteFiles(paths: string[]): Promise<{ success: boolean; 
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'X-Arlo-Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ paths }),

@@ -33,7 +33,7 @@ export function TripWeatherWidget({ destination, tripDates }: TripWeatherWidgetP
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
+              'X-Arlo-Authorization': `Bearer ${token}`,
             },
             body: JSON.stringify({
               action: 'weather',

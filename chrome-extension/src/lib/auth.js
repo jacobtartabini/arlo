@@ -9,6 +9,7 @@ const AUTH_ENDPOINT = 'https://raspberrypi.tailf531bd.ts.net/auth/verify';
 const SUPABASE_URL = 'https://zovhwryzsujevrnakfcw.supabase.co';
 const REFRESH_BUFFER_MS = 15 * 1000;
 const AUTH_TIMEOUT_MS = 10 * 1000;
+const ARLO_AUTH_HEADER = 'X-Arlo-Authorization';
 
 // Decode JWT payload
 function decodeJwtPayload(token) {
@@ -167,7 +168,7 @@ export async function getAuthHeaders() {
   if (!token) return null;
   
   return {
-    'Authorization': `Bearer ${token}`,
+    [ARLO_AUTH_HEADER]: `Bearer ${token}`,
     'Content-Type': 'application/json',
   };
 }

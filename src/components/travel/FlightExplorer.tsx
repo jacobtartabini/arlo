@@ -144,7 +144,7 @@ export function FlightExplorer({
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
+            'X-Arlo-Authorization': `Bearer ${token}`,
           },
           body: JSON.stringify({
             action: 'airport_search',
@@ -197,7 +197,7 @@ export function FlightExplorer({
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
+            'X-Arlo-Authorization': `Bearer ${token}`,
           },
           body: JSON.stringify({
             action: 'flight_search',
@@ -248,7 +248,7 @@ export function FlightExplorer({
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
+            'X-Arlo-Authorization': `Bearer ${token}`,
           },
           body: JSON.stringify({
             action: 'hotel_search',
