@@ -12,6 +12,7 @@ const DEFAULT_APP_NAME = 'arlo';
 const DEFAULT_CALLBACK_PATH = '/auth/callback';
 const STORAGE_TOKEN_KEY = 'arlo_auth_token';
 const AUTH_BYPASS_PATH_PREFIXES = ['/auth/callback', '/login', '/book', '/booking'];
+const ARLO_AUTH_HEADER = 'X-Arlo-Authorization';
 
 // Buffer time before expiry to force refresh (15 seconds)
 const REFRESH_BUFFER_MS = 15 * 1000;
@@ -265,7 +266,7 @@ export async function getAuthHeaders(): Promise<HeadersInit | null> {
   if (!token) return null;
 
   return {
-    Authorization: `Bearer ${token}`,
+    [ARLO_AUTH_HEADER]: `Bearer ${token}`,
   };
 }
 
@@ -274,7 +275,7 @@ export async function getAuthHeadersWithContentType(): Promise<HeadersInit | nul
   if (!token) return null;
 
   return {
-    Authorization: `Bearer ${token}`,
+    [ARLO_AUTH_HEADER]: `Bearer ${token}`,
     'Content-Type': 'application/json',
   };
 }

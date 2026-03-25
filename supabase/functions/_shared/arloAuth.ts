@@ -67,7 +67,7 @@ export function getCorsHeaders(requestOrigin?: string | null): Record<string, st
     // Return headers that block the request
     return {
       'Access-Control-Allow-Origin': ALLOWED_ORIGINS[0], // Never echo back invalid origin
-      'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-user-key',
+      'Access-Control-Allow-Headers': 'authorization, x-arlo-authorization, x-client-info, apikey, content-type, x-user-key',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Max-Age': '86400',
       'Vary': 'Origin',
@@ -76,7 +76,7 @@ export function getCorsHeaders(requestOrigin?: string | null): Record<string, st
   
   return {
     'Access-Control-Allow-Origin': requestOrigin,
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-user-key',
+    'Access-Control-Allow-Headers': 'authorization, x-arlo-authorization, x-client-info, apikey, content-type, x-user-key',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
@@ -160,13 +160,16 @@ async function getJWTKey(): Promise<CryptoKey> {
  * No ARLO_USER_ID or hard-coded IDs are used.
  */
 export async function verifyArloJWT(req: Request): Promise<ArloAuthResult> {
-  // Extract Bearer token from Authorization header
-  const authHeader = req.headers.get('authorization');
+  // Prefer Arlo-specific header to avoid conflicts with Supabase's built-in JWT expectations.
+  // Fallback to Authorization for backwards compatibility.
+  const arloHeader = req.headers.get('x-arlo-authorization');
+  const authHeader = arloHeader ?? req.headers.get('authorization');
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    console.log('[arloAuth] Missing or invalid Authorization header');
+    console.log('[arloAuth] Missing or invalid auth header (x-arlo-authorization or authorization)');
     return { 
       authenticated: false, 
-      error: 'Authorization header required',
+      error: 'Bearer token header required',
       userId: ''
     };
   }
@@ -203,9 +206,10 @@ export async function verifyArloJWT(req: Request): Promise<ArloAuthResult> {
       };
     }
     
-    // Validate audience
-    if (payload.aud !== ARLO_JWT_AUDIENCE) {
-      console.log('[arloAuth] Invalid audience:', payload.aud, 'expected:', ARLO_JWT_AUDIENCE);
+    // Validate audience (supports both string and string[] JWT aud formats)
+    const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+    if (!audiences.includes(ARLO_JWT_AUDIENCE)) {
+      console.log('[arloAuth] Invalid audience:', payload.aud, 'expected to include:', ARLO_JWT_AUDIENCE);
       return { 
         authenticated: false, 
         error: 'Invalid token audience',

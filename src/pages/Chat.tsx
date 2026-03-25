@@ -678,7 +678,7 @@ function ChatDesktop() {
           `${SUPABASE_URL}/functions/v1/storage-proxy/upload`,
           {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}` },
+            headers: { 'X-Arlo-Authorization': `Bearer ${token}` },
             body: formData
           }
         );
@@ -697,7 +697,7 @@ function ChatDesktop() {
           {
             method: 'POST',
             headers: { 
-              'Authorization': `Bearer ${token}`,
+              'X-Arlo-Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({ path: result.path, expiresIn: 86400 }) // 24 hours
