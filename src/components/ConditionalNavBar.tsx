@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import NavBar from "./NavBar";
 import { isPublicBookingDomain } from "@/lib/domain-utils";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useAuth } from "@/providers/AuthProvider";
 
 // Show navbar on main app routes
 const visibleRoutes = ["/", "/dashboard", "/chat", "/calendar", "/settings", "/maps"];
@@ -10,6 +11,7 @@ const visibleRoutes = ["/", "/dashboard", "/chat", "/calendar", "/settings", "/m
 export default function ConditionalNavBar() {
   const location = useLocation();
   const isMobile = useIsMobile();
+  const { isAuthenticated } = useAuth();
   
   // Never show navbar on public booking domains
   if (isPublicBookingDomain()) {
@@ -18,6 +20,11 @@ export default function ConditionalNavBar() {
 
   // Hide desktop navbar on mobile - mobile uses bottom tab bar
   if (isMobile) {
+    return null;
+  }
+
+  // Never show authenticated app chrome when auth is missing
+  if (!isAuthenticated) {
     return null;
   }
   

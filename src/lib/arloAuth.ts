@@ -12,7 +12,7 @@ const DEFAULT_APP_NAME = 'arlo';
 const DEFAULT_CALLBACK_PATH = '/auth/callback';
 const STORAGE_TOKEN_KEY = 'arlo_auth_token';
 const AUTH_BYPASS_PATH_PREFIXES = ['/auth/callback', '/login', '/book', '/booking'];
-const ARLO_AUTH_HEADER = 'X-Arlo-Authorization';
+const ARLO_AUTH_HEADER = 'Authorization';
 
 // Buffer time before expiry to force refresh (15 seconds)
 const REFRESH_BUFFER_MS = 15 * 1000;

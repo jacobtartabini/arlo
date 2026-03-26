@@ -3,13 +3,38 @@
  * All database operations go through the edge function which validates JWT tokens.
  */
 
-import { getArloToken, isAuthenticated, redirectToAegisAuth, shouldBypassAuthRedirect } from '@/lib/arloAuth';
+import { clearArloToken, getArloToken, isAuthenticated, redirectToAegisAuth, shouldBypassAuthRedirect } from '@/lib/arloAuth';
 import { emitSecurityDebugEntry } from '@/lib/security-debug';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 
 // Network timeout for data API requests (12 seconds)
 const DATA_API_TIMEOUT_MS = 12 * 1000;
+
+function clearLegacyAuthFlags(): void {
+  sessionStorage.removeItem('arlo_user_id');
+  sessionStorage.removeItem('arlo_access_verified');
+  sessionStorage.removeItem('arlo_access_verified_expiry');
+}
+
+function handleUnauthorizedResponse(errorMessage?: string): void {
+  const message = (errorMessage || '').toLowerCase();
+  const looksLikeTokenFailure =
+    message.includes('jwt') ||
+    message.includes('signature') ||
+    message.includes('token') ||
+    message.includes('bearer');
+
+  if (!looksLikeTokenFailure) return;
+
+  clearArloToken();
+  clearLegacyAuthFlags();
+
+  if (!shouldBypassAuthRedirect()) {
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    window.location.assign(`/login?return_to=${encodeURIComponent(currentPath)}`);
+  }
+}
 
 interface DataApiRequest {
   action: 'select' | 'insert' | 'update' | 'delete' | 'upsert' | 'select_with_in' | 'count' | 'update_where';
@@ -86,7 +111,7 @@ export async function dataApi<T = unknown>(request: DataApiRequest): Promise<Dat
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Arlo-Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify(request),
       },
@@ -98,6 +123,9 @@ export async function dataApi<T = unknown>(request: DataApiRequest): Promise<Dat
 
     if (!response.ok) {
       const errorPayload = result?.error || { message: typeof payload === 'string' ? payload : 'Request failed' };
+      if (response.status === 401) {
+        handleUnauthorizedResponse(errorPayload.message);
+      }
       emitSecurityDebugEntry({
         label: `data-api:${request.action}`,
         ok: false,
