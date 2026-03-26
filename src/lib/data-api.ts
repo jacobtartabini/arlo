@@ -86,7 +86,7 @@ export async function dataApi<T = unknown>(request: DataApiRequest): Promise<Dat
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Arlo-Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify(request),
       },
