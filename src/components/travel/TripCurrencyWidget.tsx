@@ -31,7 +31,7 @@ export function TripCurrencyWidget({ fromCurrency, toCurrency }: TripCurrencyWid
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Arlo-Authorization': `Bearer ${token}`,
+            'Authorization': `Bearer ${token}`,
           },
           body: JSON.stringify({
             action: 'currency',

@@ -86,7 +86,7 @@ export function PlaceSearchCard({
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Arlo-Authorization': `Bearer ${token}`,
+            'Authorization': `Bearer ${token}`,
           },
           body: JSON.stringify({
             query,
@@ -117,7 +117,7 @@ export function PlaceSearchCard({
       
       const response = await fetch(url.toString(), {
         headers: {
-          'X-Arlo-Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${token}`,
         },
       });
       

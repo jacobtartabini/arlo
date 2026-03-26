@@ -151,7 +151,7 @@ export function useFileConversion() {
         const response = await fetch(`${SUPABASE_URL}/functions/v1/file-convert`, {
           method: 'POST',
           headers: {
-            'X-Arlo-Authorization': `Bearer ${token}`,
+            'Authorization': `Bearer ${token}`,
           },
           body: formData,
         });
