@@ -64,7 +64,7 @@ export function TripReservationsTab({
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-Arlo-Authorization': `Bearer ${token}`,
+            'Authorization': `Bearer ${token}`,
           },
           body: JSON.stringify({
             action: 'parse_reservation',
