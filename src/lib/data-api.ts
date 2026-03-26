@@ -29,11 +29,6 @@ function handleUnauthorizedResponse(errorMessage?: string): void {
 
   clearArloToken();
   clearLegacyAuthFlags();
-
-  if (!shouldBypassAuthRedirect()) {
-    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    window.location.assign(`/login?return_to=${encodeURIComponent(currentPath)}`);
-  }
 }
 
 interface DataApiRequest {
