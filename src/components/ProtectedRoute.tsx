@@ -1,6 +1,7 @@
 import React, { ReactNode, useEffect, useState } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { Loader2 } from 'lucide-react';
+import { Navigate, useLocation } from 'react-router-dom';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -9,6 +10,7 @@ interface ProtectedRouteProps {
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { isAuthenticated, isLoading, verifyAuth } = useAuth();
   const [hasAttemptedVerify, setHasAttemptedVerify] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
     if (!isAuthenticated && !isLoading && !hasAttemptedVerify) {
@@ -33,11 +35,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   }
 
   if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background/95 to-background/90">
-        <div className="text-center text-muted-foreground">Redirecting to secure sign-in…</div>
-      </div>
-    );
+    const returnTo = `${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to={`/login?return_to=${encodeURIComponent(returnTo)}`} replace />;
   }
 
   return <>{children}</>;

@@ -31,6 +31,7 @@ import { useNotesPersistence } from "@/hooks/useNotesPersistence";
 import { useArlo } from "@/providers/ArloProvider";
 import { cn } from "@/lib/utils";
 import { isPublicBookingDomain } from "@/lib/domain-utils";
+import { useAuth } from "@/providers/AuthProvider";
 
 type CommandCategory = "Actions" | "Navigation" | "Content" | "Recent";
 
@@ -69,6 +70,7 @@ const moduleIconMap: Record<string, LucideIcon> = {
 const ArloCommandLauncher = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { isAuthenticated } = useAuth();
   const { notes } = useNotesPersistence();
   const { sendMessage } = useArlo();
 
@@ -89,11 +91,6 @@ const ArloCommandLauncher = () => {
   const isPublicDomain = isPublicBookingDomain();
   const showPersistent = isDashboard && !isHiddenRoute && !isPublicDomain;
   
-  // Never render on public booking domains
-  if (isPublicDomain) {
-    return null;
-  }
-
   // Build commands from Arlo's real data
   const allCommands = useMemo((): CommandItem[] => {
     const commands: CommandItem[] = [];
@@ -398,6 +395,10 @@ const ArloCommandLauncher = () => {
 
   const groups = groupedCommands();
   let globalIndex = 0;
+
+  if (isPublicDomain || !isAuthenticated) {
+    return null;
+  }
 
   // Don't render anything on hidden routes unless open via Cmd+K
   if (isHiddenRoute && !open) {
