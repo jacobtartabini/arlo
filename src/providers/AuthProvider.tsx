@@ -7,6 +7,7 @@ import {
   getIdentity,
   redirectToAegisAuth,
   shouldBypassAuthRedirect,
+  ARLO_AUTH_INVALIDATED_EVENT,
 } from '@/lib/arloAuth';
 import { isPublicBookingDomain } from '@/lib/domain-utils';
 
@@ -103,6 +104,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
 
     initAuth();
+  }, []);
+
+  useEffect(() => {
+    const handleAuthInvalidated = () => {
+      clearLegacyAuthFlags();
+      setAuthState({
+        isAuthenticated: false,
+        isLoading: false,
+        error: 'Session expired. Please sign in again.',
+        identity: null,
+        userKey: null,
+      });
+
+      if (!shouldBypassAuthRedirect()) {
+        const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        window.location.assign(`/login?return_to=${encodeURIComponent(currentPath)}`);
+      }
+    };
+
+    window.addEventListener(ARLO_AUTH_INVALIDATED_EVENT, handleAuthInvalidated);
+    return () => window.removeEventListener(ARLO_AUTH_INVALIDATED_EVENT, handleAuthInvalidated);
   }, []);
 
   const verifyAuth = useCallback(async (): Promise<boolean> => {
