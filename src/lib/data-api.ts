@@ -17,16 +17,7 @@ function clearLegacyAuthFlags(): void {
   sessionStorage.removeItem('arlo_access_verified_expiry');
 }
 
-function handleUnauthorizedResponse(errorMessage?: string): void {
-  const message = (errorMessage || '').toLowerCase();
-  const looksLikeTokenFailure =
-    message.includes('jwt') ||
-    message.includes('signature') ||
-    message.includes('token') ||
-    message.includes('bearer');
-
-  if (!looksLikeTokenFailure) return;
-
+function handleUnauthorizedResponse(): void {
   clearArloToken();
   clearLegacyAuthFlags();
 }
@@ -119,7 +110,7 @@ export async function dataApi<T = unknown>(request: DataApiRequest): Promise<Dat
     if (!response.ok) {
       const errorPayload = result?.error || { message: typeof payload === 'string' ? payload : 'Request failed' };
       if (response.status === 401) {
-        handleUnauthorizedResponse(errorPayload.message);
+        handleUnauthorizedResponse();
       }
       emitSecurityDebugEntry({
         label: `data-api:${request.action}`,
