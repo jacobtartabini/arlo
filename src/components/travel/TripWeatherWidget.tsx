@@ -3,7 +3,7 @@ import { Cloud, Sun, CloudRain, CloudSnow, Wind, Droplets, AlertCircle } from "l
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TripDestination, WeatherForecast } from "@/types/travel";
-import { getArloToken } from "@/lib/arloAuth";
+import { getAuthHeadersWithContentType } from "@/lib/arloAuth";
 import { cn } from "@/lib/utils";
 
 interface TripWeatherWidgetProps {
@@ -26,15 +26,11 @@ export function TripWeatherWidget({ destination, tripDates }: TripWeatherWidgetP
       }
 
       try {
-        const token = await getArloToken();
         const response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/travel-api`,
           {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-            },
+            headers: (await getAuthHeadersWithContentType()) ?? {},
             body: JSON.stringify({
               action: 'weather',
               latitude: destination.latitude,

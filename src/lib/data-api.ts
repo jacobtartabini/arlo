@@ -3,10 +3,17 @@
  * All database operations go through the edge function which validates JWT tokens.
  */
 
-import { clearArloToken, getArloToken, isAuthenticated, redirectToAegisAuth, shouldBypassAuthRedirect } from '@/lib/arloAuth';
+import {
+  clearArloToken,
+  getArloToken,
+  isAuthenticated,
+  redirectToAegisAuth,
+  shouldBypassAuthRedirect,
+} from '@/lib/arloAuth';
 import { emitSecurityDebugEntry } from '@/lib/security-debug';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const ARLO_AUTH_HEADER = 'X-Arlo-Authorization';
 
 // Network timeout for data API requests (12 seconds)
 const DATA_API_TIMEOUT_MS = 12 * 1000;
@@ -97,7 +104,7 @@ export async function dataApi<T = unknown>(request: DataApiRequest): Promise<Dat
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          [ARLO_AUTH_HEADER]: `Bearer ${token}`,
         },
         body: JSON.stringify(request),
       },

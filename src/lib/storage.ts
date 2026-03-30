@@ -8,6 +8,7 @@
 import { getArloToken } from './arloAuth';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const ARLO_AUTH_HEADER = 'X-Arlo-Authorization';
 
 export interface UploadResult {
   success: boolean;
@@ -39,7 +40,7 @@ export async function uploadFile(file: File): Promise<UploadResult> {
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          [ARLO_AUTH_HEADER]: `Bearer ${token}`,
         },
         body: formData,
       }
@@ -87,7 +88,7 @@ export async function getSignedUrl(path: string, expiresIn = 3600): Promise<{ si
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          [ARLO_AUTH_HEADER]: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ path, expiresIn }),
@@ -123,7 +124,7 @@ export async function deleteFiles(paths: string[]): Promise<{ success: boolean; 
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          [ARLO_AUTH_HEADER]: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ paths }),
