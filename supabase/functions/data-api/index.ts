@@ -10,6 +10,7 @@ import { encrypt, decrypt, isEncrypted } from '../_shared/encryption.ts'
 import { checkRateLimit, getClientIP } from '../_shared/rateLimit.ts'
 import { AUTH_RATE_LIMITS, logAuthFailure } from '../_shared/authRateLimit.ts'
 
+
 // Create Supabase client with service role key (bypasses RLS)
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
