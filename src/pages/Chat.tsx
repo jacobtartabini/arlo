@@ -674,14 +674,11 @@ function ChatDesktop() {
         formData.append('fileName', file.name);
 
         // Upload via storage-proxy edge function
-        const response = await fetch(
-          `${SUPABASE_URL}/functions/v1/storage-proxy/upload`,
-          {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}` },
-            body: formData
-          }
-        );
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/storage-proxy/upload`, {
+          method: 'POST',
+          headers: { 'X-Arlo-Authorization': `Bearer ${token}` },
+          body: formData,
+        });
 
         const result = await response.json();
         
@@ -692,17 +689,14 @@ function ChatDesktop() {
         }
 
         // Get signed URL for the uploaded file
-        const signedUrlResponse = await fetch(
-          `${SUPABASE_URL}/functions/v1/storage-proxy/signed-url`,
-          {
-            method: 'POST',
-            headers: { 
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ path: result.path, expiresIn: 86400 }) // 24 hours
-          }
-        );
+        const signedUrlResponse = await fetch(`${SUPABASE_URL}/functions/v1/storage-proxy/signed-url`, {
+          method: 'POST',
+          headers: {
+            'X-Arlo-Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ path: result.path, expiresIn: 86400 }), // 24 hours
+        });
 
         const signedUrlResult = await signedUrlResponse.json();
         

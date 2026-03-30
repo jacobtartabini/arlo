@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { getArloToken } from "@/lib/arloAuth";
+import { getAuthHeaders } from "@/lib/arloAuth";
 import { PlaceCollection } from "@/types/travel";
 import { cn } from "@/lib/utils";
 
@@ -80,13 +81,14 @@ export function PlaceSearchCard({
     setIsSearching(true);
     try {
       const token = await getArloToken();
+      const headers = await getAuthHeaders();
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/places-autocomplete`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
+            ...(headers ?? { 'X-Arlo-Authorization': `Bearer ${token}` }),
           },
           body: JSON.stringify({
             query,
@@ -112,12 +114,13 @@ export function PlaceSearchCard({
     
     try {
       const token = await getArloToken();
+      const headers = await getAuthHeaders();
       const url = new URL(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/maps-api/place-details`);
       url.searchParams.set('placeId', placeId);
       
       const response = await fetch(url.toString(), {
         headers: {
-          'Authorization': `Bearer ${token}`,
+          ...(headers ?? { 'X-Arlo-Authorization': `Bearer ${token}` }),
         },
       });
       

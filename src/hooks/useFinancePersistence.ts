@@ -184,7 +184,7 @@ export function useFinancePersistence() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          'X-Arlo-Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ action, table, ...data }),
       });
@@ -220,7 +220,7 @@ export function useFinancePersistence() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          'X-Arlo-Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ action, ...data }),
       });
@@ -256,7 +256,7 @@ export function useFinancePersistence() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          'X-Arlo-Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify(data ?? {}),
       });
@@ -290,7 +290,7 @@ export function useFinancePersistence() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          'X-Arlo-Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ action, ...data }),
       });
