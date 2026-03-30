@@ -11,9 +11,11 @@ const DEFAULT_AEGIS_BASE_URL = 'https://raspberrypi.tailf531bd.ts.net';
 const DEFAULT_APP_NAME = 'arlo';
 const DEFAULT_CALLBACK_PATH = '/auth/callback';
 const STORAGE_TOKEN_KEY = 'arlo_auth_token';
-const AUTH_BYPASS_PATH_PREFIXES = ['/auth/callback', '/login', '/book', '/booking'];
+const AUTH_BYPASS_PATH_PREFIXES = ['/auth/callback', '/auth/error', '/login', '/book', '/booking'];
 const ARLO_AUTH_HEADER = 'X-Arlo-Authorization';
 export const ARLO_AUTH_INVALIDATED_EVENT = 'arlo:auth-invalidated';
+const AUTH_REDIRECT_ATTEMPTS_KEY = 'arlo_auth_redirect_attempts';
+const AUTH_REDIRECT_MAX_ATTEMPTS = 3;
 
 // Buffer time before expiry to force refresh (15 seconds)
 const REFRESH_BUFFER_MS = 15 * 1000;
@@ -113,11 +115,18 @@ function validateToken(token: string): TokenValidationResult {
     return { valid: false, reason: 'Token payload could not be decoded' };
   }
 
-  if (typeof payload.exp !== 'number') {
+  const exp =
+    typeof payload.exp === 'number'
+      ? payload.exp
+      : typeof payload.exp === 'string'
+        ? Number(payload.exp)
+        : NaN;
+
+  if (!Number.isFinite(exp)) {
     return { valid: false, reason: 'Token is missing exp claim' };
   }
 
-  const expiresAt = payload.exp * 1000;
+  const expiresAt = exp * 1000;
   if (expiresAt - Date.now() <= REFRESH_BUFFER_MS) {
     return { valid: false, reason: 'Token is expired' };
   }
@@ -168,6 +177,32 @@ function clearStoredReturnTo(): void {
   sessionStorage.removeItem('arlo_auth_return_to');
 }
 
+function getAuthRedirectAttempts(): number {
+  const raw = sessionStorage.getItem(AUTH_REDIRECT_ATTEMPTS_KEY);
+  const parsed = raw ? Number(raw) : 0;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function incrementAuthRedirectAttempts(): number {
+  const next = getAuthRedirectAttempts() + 1;
+  sessionStorage.setItem(AUTH_REDIRECT_ATTEMPTS_KEY, String(next));
+  return next;
+}
+
+export function clearAuthRedirectAttempts(): void {
+  sessionStorage.removeItem(AUTH_REDIRECT_ATTEMPTS_KEY);
+}
+
+function redirectToAuthError(reason: string, returnTo?: string): void {
+  const safeReturnTo = toSafeReturnPath(
+    returnTo ?? getStoredReturnTo() ?? `${window.location.pathname}${window.location.search}${window.location.hash}`
+  );
+  const params = new URLSearchParams();
+  params.set('reason', reason);
+  params.set('return_to', safeReturnTo);
+  window.location.assign(`/auth/error?${params.toString()}`);
+}
+
 export function getAegisAuthorizeUrl(returnTo?: string): string {
   const callbackPath = getCallbackPath();
   const callbackUrl = new URL(buildAbsoluteUrl(callbackPath));
@@ -182,6 +217,12 @@ export function getAegisAuthorizeUrl(returnTo?: string): string {
 export function redirectToAegisAuth(returnTo?: string): void {
   if (returnTo) {
     sessionStorage.setItem('arlo_auth_return_to', toSafeReturnPath(returnTo));
+  }
+
+  const attempts = incrementAuthRedirectAttempts();
+  if (attempts > AUTH_REDIRECT_MAX_ATTEMPTS) {
+    redirectToAuthError('Too many authentication redirects. Please try again.', returnTo);
+    return;
   }
 
   const target = toSafeReturnPath(
@@ -203,6 +244,7 @@ export function completeAuthFromCallback(rawToken: string | null): boolean {
   }
 
   saveToken(rawToken, result.payload, result.expiresAt);
+  clearAuthRedirectAttempts();
   return true;
 }
 
