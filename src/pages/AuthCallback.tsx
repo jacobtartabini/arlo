@@ -1,27 +1,45 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
-import { completeAuthFromCallback, getPostAuthReturnPath, redirectToAegisAuth } from '@/lib/arloAuth';
+import { clearAuthRedirectAttempts, completeAuthFromCallback, getPostAuthReturnPath, redirectToAegisAuth } from '@/lib/arloAuth';
+
+function getTokenFromLocation(): { token: string | null; returnTo: string | null } {
+  const searchParams = new URLSearchParams(window.location.search);
+  const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
+  const hashParams = new URLSearchParams(hash);
+
+  const token =
+    searchParams.get('token') ??
+    searchParams.get('jwt') ??
+    searchParams.get('access_token') ??
+    hashParams.get('token') ??
+    hashParams.get('jwt') ??
+    hashParams.get('access_token');
+
+  const returnTo = searchParams.get('return_to') ?? hashParams.get('return_to');
+
+  return { token, returnTo };
+}
 
 export default function AuthCallback() {
   const navigate = useNavigate();
 
-  const params = useMemo(() => new URLSearchParams(window.location.search), []);
-
   useEffect(() => {
-    const token = params.get('token');
-    const returnTo = params.get('return_to');
+    const { token, returnTo } = getTokenFromLocation();
 
     const success = completeAuthFromCallback(token);
 
     if (!success) {
+      // If Aegis didn't provide a token, don't keep accumulating failed attempts on the callback itself.
+      // The actual redirect loop breaker lives in redirectToAegisAuth().
       redirectToAegisAuth(returnTo ?? '/');
       return;
     }
 
     const destination = getPostAuthReturnPath(returnTo);
+    clearAuthRedirectAttempts();
     navigate(destination, { replace: true });
-  }, [navigate, params]);
+  }, [navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background/95 to-background/90">
