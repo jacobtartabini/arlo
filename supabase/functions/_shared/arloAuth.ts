@@ -67,7 +67,16 @@ export function getCorsHeaders(requestOrigin?: string | null): Record<string, st
     // Return headers that block the request
     return {
       'Access-Control-Allow-Origin': ALLOWED_ORIGINS[0], // Never echo back invalid origin
-      'Access-Control-Allow-Headers': 'authorization, x-arlo-authorization, x-client-info, apikey, content-type, x-user-key',
+      // NOTE: Some intermediaries normalize header casing; include common variants explicitly.
+      'Access-Control-Allow-Headers': [
+        'authorization',
+        'x-arlo-authorization',
+        'X-Arlo-Authorization',
+        'x-client-info',
+        'apikey',
+        'content-type',
+        'x-user-key',
+      ].join(', '),
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Max-Age': '86400',
       'Vary': 'Origin',
@@ -76,7 +85,16 @@ export function getCorsHeaders(requestOrigin?: string | null): Record<string, st
   
   return {
     'Access-Control-Allow-Origin': requestOrigin,
-    'Access-Control-Allow-Headers': 'authorization, x-arlo-authorization, x-client-info, apikey, content-type, x-user-key',
+    // NOTE: Some intermediaries normalize header casing; include common variants explicitly.
+    'Access-Control-Allow-Headers': [
+      'authorization',
+      'x-arlo-authorization',
+      'X-Arlo-Authorization',
+      'x-client-info',
+      'apikey',
+      'content-type',
+      'x-user-key',
+    ].join(', '),
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Max-Age': '86400',
     'Vary': 'Origin',
