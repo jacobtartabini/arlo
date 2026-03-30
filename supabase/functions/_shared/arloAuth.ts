@@ -23,6 +23,20 @@ const ALLOWED_ORIGINS = [
   'http://localhost:5173',
 ];
 
+const DEFAULT_ALLOWED_HEADERS = [
+  // Supabase built-ins / common
+  'authorization',
+  'apikey',
+  'content-type',
+  'x-client-info',
+  // Arlo custom auth
+  'x-arlo-authorization',
+  // misc
+  'x-user-key',
+];
+
+const DEFAULT_ALLOWED_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'];
+
 // Check if origin is a Lovable URL (editor or preview)
 function isLovableOrigin(origin: string): boolean {
   return (
@@ -57,48 +71,60 @@ export function isAllowedOrigin(origin: string | null): boolean {
   return ALLOWED_ORIGINS.includes(origin) || isLovableOrigin(origin);
 }
 
+function normalizeHeaderName(headerName: string): string {
+  return headerName.trim().toLowerCase();
+}
+
+function parseRequestedHeaders(req: Request): string[] {
+  const raw = req.headers.get('access-control-request-headers');
+  if (!raw) return [];
+  return raw
+    .split(',')
+    .map((h) => h.trim())
+    .filter(Boolean);
+}
+
+function buildAccessControlAllowHeaders(requested: string[]): string {
+  const allowed = new Set(DEFAULT_ALLOWED_HEADERS.map(normalizeHeaderName));
+
+  // Always include defaults; also echo back any requested headers that are allowed.
+  const result = new Set<string>(DEFAULT_ALLOWED_HEADERS.map(normalizeHeaderName));
+  for (const header of requested) {
+    const normalized = normalizeHeaderName(header);
+    if (allowed.has(normalized)) result.add(normalized);
+  }
+
+  return Array.from(result).sort().join(', ');
+}
+
 /**
  * Get CORS headers with STRICT origin validation
  * Returns null if origin is not allowed (caller should reject request)
  */
-export function getCorsHeaders(requestOrigin?: string | null): Record<string, string> {
-  // STRICT: Only allow recognized origins (includes Lovable preview)
-  if (!requestOrigin || !isAllowedOrigin(requestOrigin)) {
-    // Return headers that block the request
-    return {
-      'Access-Control-Allow-Origin': ALLOWED_ORIGINS[0], // Never echo back invalid origin
-      // NOTE: Some intermediaries normalize header casing; include common variants explicitly.
-      'Access-Control-Allow-Headers': [
-        'authorization',
-        'x-arlo-authorization',
-        'X-Arlo-Authorization',
-        'x-client-info',
-        'apikey',
-        'content-type',
-        'x-user-key',
-      ].join(', '),
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Max-Age': '86400',
-      'Vary': 'Origin',
-    };
-  }
-  
-  return {
-    'Access-Control-Allow-Origin': requestOrigin,
-    // NOTE: Some intermediaries normalize header casing; include common variants explicitly.
-    'Access-Control-Allow-Headers': [
-      'authorization',
-      'x-arlo-authorization',
-      'X-Arlo-Authorization',
-      'x-client-info',
-      'apikey',
-      'content-type',
-      'x-user-key',
-    ].join(', '),
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+export function getCorsHeaders(requestOrigin?: string | null, req?: Request): Record<string, string> {
+  const origin = requestOrigin ?? null;
+  const allowedOrigin = origin && isAllowedOrigin(origin) ? origin : null;
+  const requestedHeaders = req ? parseRequestedHeaders(req) : [];
+  const allowHeaders = buildAccessControlAllowHeaders(requestedHeaders);
+  const requestedMethod = req?.headers.get('access-control-request-method') ?? undefined;
+
+  const varyValues = ['Origin', 'Access-Control-Request-Headers', 'Access-Control-Request-Method'];
+
+  // STRICT: If origin is not allowed, do not echo it back. This effectively blocks the browser.
+  const headers: Record<string, string> = {
+    'Access-Control-Allow-Origin': allowedOrigin ?? ALLOWED_ORIGINS[0],
+    'Access-Control-Allow-Headers': allowHeaders,
+    'Access-Control-Allow-Methods': DEFAULT_ALLOWED_METHODS.join(', '),
     'Access-Control-Max-Age': '86400',
-    'Vary': 'Origin',
+    'Vary': varyValues.join(', '),
   };
+
+  // Helpful in debugging and safe: reflect the method requested (still constrained by Allow-Methods).
+  if (requestedMethod) {
+    headers['Access-Control-Allow-Methods'] = DEFAULT_ALLOWED_METHODS.join(', ');
+  }
+
+  return headers;
 }
 
 /**
@@ -114,14 +140,14 @@ export function handleCorsOptions(req: Request): Response {
       status: 403,
       headers: {
         'Content-Type': 'text/plain',
-        'Vary': 'Origin',
+        'Vary': 'Origin, Access-Control-Request-Headers, Access-Control-Request-Method',
       }
     });
   }
   
   return new Response(null, { 
     status: 204,
-    headers: getCorsHeaders(origin) 
+    headers: getCorsHeaders(origin, req),
   });
 }
 
@@ -140,8 +166,8 @@ export function validateOrigin(req: Request): Response | null {
       { 
         status: 403, 
         headers: { 
+          ...getCorsHeaders(origin, req),
           'Content-Type': 'application/json',
-          'Vary': 'Origin',
         } 
       }
     );
@@ -286,7 +312,7 @@ export function unauthorizedResponse(req: Request, message: string = 'Unauthoriz
     { 
       status: 401, 
       headers: { 
-        ...getCorsHeaders(origin), 
+        ...getCorsHeaders(origin, req),
         'Content-Type': 'application/json' 
       } 
     }
@@ -303,7 +329,7 @@ export function forbiddenResponse(req: Request, message: string = 'Forbidden'): 
     { 
       status: 403, 
       headers: { 
-        ...getCorsHeaders(origin), 
+        ...getCorsHeaders(origin, req),
         'Content-Type': 'application/json' 
       } 
     }
@@ -320,7 +346,7 @@ export function jsonResponse(req: Request, data: unknown, status: number = 200):
     { 
       status, 
       headers: { 
-        ...getCorsHeaders(origin), 
+        ...getCorsHeaders(origin, req),
         'Content-Type': 'application/json' 
       } 
     }
@@ -337,7 +363,7 @@ export function errorResponse(req: Request, message: string, status: number = 50
     { 
       status, 
       headers: { 
-        ...getCorsHeaders(origin), 
+        ...getCorsHeaders(origin, req),
         'Content-Type': 'application/json' 
       } 
     }
