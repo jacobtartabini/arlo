@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { dataApiHelpers } from "@/lib/data-api";
+import { invokeEdgeFunction } from "@/lib/edge-functions";
 import { useAuth } from "@/providers/AuthProvider";
 import { useTasksPersistence } from "@/hooks/useTasksPersistence";
 import { isToday, parseISO, startOfDay, isThisWeek } from "date-fns";
@@ -40,10 +41,18 @@ interface DashboardData {
   // Travel
   upcomingTrips: { id: string; name: string; startDate: Date }[];
   
-  // Health (placeholder - uses static data for now)
+  // Health
+  stravaConnected: boolean;
   activityScore: number;
+  exerciseProgress: number;
+  standProgress: number;
   sleepHours: number;
-  
+
+  // Files
+  driveAccountsCount: number;
+  driveFilesCount: number;
+  driveAccounts: { email: string; name: string | null; storageUsedPct: number }[];
+
   // Security
   connectedDevices: number;
   
@@ -68,8 +77,14 @@ const DEFAULT_DATA: DashboardData = {
   savedPlacesCount: 0,
   userLocation: null,
   upcomingTrips: [],
-  activityScore: 72,
+  stravaConnected: false,
+  activityScore: 0,
+  exerciseProgress: 0,
+  standProgress: 0,
   sleepHours: 7.5,
+  driveAccountsCount: 0,
+  driveFilesCount: 0,
+  driveAccounts: [],
   connectedDevices: 0,
   isLoading: true,
 };
@@ -117,6 +132,8 @@ export function useDashboardData() {
         transactionsResult,
         placesResult,
         tripsResult,
+        stravaConnResult,
+        driveAccountsResult,
       ] = await Promise.all([
         dataApiHelpers.select<any[]>("tasks", {
           order: { column: "priority", ascending: false },
@@ -139,6 +156,10 @@ export function useDashboardData() {
         }),
         dataApiHelpers.select<any[]>("trips", {
           order: { column: "start_date", ascending: true },
+        }),
+        dataApiHelpers.select<any[]>("strava_connections", { limit: 1 }),
+        dataApiHelpers.select<any[]>("drive_accounts", {
+          filters: { enabled: true },
         }),
       ]);
 
@@ -225,6 +246,22 @@ export function useDashboardData() {
           startDate: parseISO(t.start_date),
         }));
 
+      // Process drive accounts
+      const driveAccounts = (driveAccountsResult.data || []).map((a: any) => ({
+        email: a.account_email as string,
+        name: (a.account_name as string | null) ?? null,
+        storageUsedPct:
+          a.storage_quota_total && a.storage_quota_used
+            ? Math.min(100, Math.round((a.storage_quota_used / a.storage_quota_total) * 100))
+            : 0,
+      }));
+
+      const driveFilesResult = await dataApiHelpers.count("drive_files");
+      const driveFilesCount = driveFilesResult.count || 0;
+
+      // Check if Strava is connected
+      const isStravaConnected = (stravaConnResult.data || []).length > 0;
+
       setData(prev => ({
         ...prev,
         todayTasks,
@@ -238,18 +275,56 @@ export function useDashboardData() {
         totalNotes: notes.length,
         notesThisWeek,
         monthlySpending,
-        monthlyBudget: 5000, // Could be fetched from settings
+        monthlyBudget: 5000,
         recentTransactions,
         recentPlaces,
         savedPlacesCount: places.length,
-        // Preserve geolocation result if it already resolved (avoid reverting to SF fallback)
         userLocation: prev.userLocation,
         upcomingTrips,
-        activityScore: 72,
-        sleepHours: 7.5,
-        connectedDevices: 0, // Placeholder - could fetch from tailscale-api
+        stravaConnected: isStravaConnected,
+        driveAccountsCount: driveAccounts.length,
+        driveFilesCount,
+        driveAccounts,
+        connectedDevices: 0,
         isLoading: false,
       }));
+
+      // Fetch Strava activity data in background (non-blocking)
+      if (isStravaConnected) {
+        invokeEdgeFunction<{ activities: any[] }>("strava-api", {
+          action: "activities",
+          per_page: 20,
+        }).then(stravaResult => {
+          if (!stravaResult.ok || !stravaResult.data?.activities) return;
+
+          const activities = stravaResult.data.activities;
+          const weekActivities = activities.filter((a: any) =>
+            isThisWeek(parseISO(a.start_date))
+          );
+
+          const totalMovingTimeSec = weekActivities.reduce(
+            (sum: number, a: any) => sum + (a.moving_time || 0),
+            0
+          );
+          const activeDays = new Set(
+            weekActivities.map((a: any) => parseISO(a.start_date).toDateString())
+          ).size;
+
+          // Move ring: weekly active time vs 5h (18000s) goal
+          const activityScore = Math.min(100, Math.round((totalMovingTimeSec / 18000) * 100));
+          // Exercise ring: active days vs 5-day weekly goal
+          const exerciseProgress = Math.min(100, Math.round((activeDays / 5) * 100));
+          // Stand ring: weekly minutes vs WHO 150-min guideline
+          const standProgress = Math.min(100, Math.round((totalMovingTimeSec / 9000) * 100));
+
+          setData(prev => ({
+            ...prev,
+            activityScore,
+            exerciseProgress,
+            standProgress,
+          }));
+        }).catch(() => {});
+      }
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
       setData(prev => ({ ...prev, isLoading: false }));

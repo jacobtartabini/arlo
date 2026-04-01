@@ -39,8 +39,14 @@ interface MiniContentProps {
     savedPlacesCount: number;
     userLocation?: { lat: number; lng: number } | null;
     upcomingTrips: { id: string; name: string; startDate: Date }[];
+    stravaConnected: boolean;
     activityScore: number;
+    exerciseProgress: number;
+    standProgress: number;
     sleepHours: number;
+    driveAccountsCount: number;
+    driveFilesCount: number;
+    driveAccounts: { email: string; name: string | null; storageUsedPct: number }[];
     connectedDevices: number;
   };
   onClick?: (e: React.MouseEvent) => void;
@@ -772,23 +778,60 @@ function HealthMiniContent({ data, size }: { data: MiniContentProps["data"]; siz
   const isPrimary = size === "primary";
   const isTertiary = size === "tertiary";
 
-  // Simulated health metrics
   const moveProgress = data.activityScore;
-  const exerciseProgress = 65;
-  const standProgress = 80;
+  const exerciseProgress = data.exerciseProgress;
+  const standProgress = data.standProgress;
+
+  if (!data.stravaConnected) {
+    return (
+      <div className="flex items-center gap-2.5">
+        <div
+          className="relative shrink-0"
+          style={{ width: isPrimary ? 52 : 40, height: isPrimary ? 52 : 40 }}
+        >
+          <ProgressRing
+            progress={0}
+            size={isPrimary ? 52 : 40}
+            strokeWidth={isPrimary ? 5 : 4}
+            color="destructive"
+          />
+          <div className="absolute" style={{ top: isPrimary ? 6 : 5, left: isPrimary ? 6 : 5 }}>
+            <ProgressRing
+              progress={0}
+              size={isPrimary ? 40 : 30}
+              strokeWidth={isPrimary ? 5 : 4}
+              color="emerald"
+            />
+          </div>
+          <div className="absolute" style={{ top: isPrimary ? 12 : 10, left: isPrimary ? 12 : 10 }}>
+            <ProgressRing
+              progress={0}
+              size={isPrimary ? 28 : 20}
+              strokeWidth={isPrimary ? 5 : 4}
+              color="primary"
+            />
+          </div>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[10px] font-medium text-foreground/60">Connect Strava</span>
+          <span className="text-[9px] text-muted-foreground/40">to track activity</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={cn("flex items-center", isPrimary ? "gap-4" : "gap-3")}>
       {/* Stacked rings (Apple Watch style) */}
-      <div className="relative" style={{ width: isPrimary ? 52 : 40, height: isPrimary ? 52 : 40 }}>
-        {/* Outer ring - Move */}
+      <div className="relative shrink-0" style={{ width: isPrimary ? 52 : 40, height: isPrimary ? 52 : 40 }}>
+        {/* Outer ring - Move (weekly active time) */}
         <ProgressRing 
           progress={moveProgress}
           size={isPrimary ? 52 : 40}
           strokeWidth={isPrimary ? 5 : 4}
           color="destructive"
         />
-        {/* Middle ring - Exercise */}
+        {/* Middle ring - Exercise (active days this week) */}
         <div className="absolute" style={{ 
           top: isPrimary ? 6 : 5, 
           left: isPrimary ? 6 : 5 
@@ -800,7 +843,7 @@ function HealthMiniContent({ data, size }: { data: MiniContentProps["data"]; siz
             color="emerald"
           />
         </div>
-        {/* Inner ring - Stand */}
+        {/* Inner ring - Stand (weekly minutes vs goal) */}
         <div className="absolute" style={{ 
           top: isPrimary ? 12 : 10, 
           left: isPrimary ? 12 : 10 
@@ -893,42 +936,76 @@ function SecurityMiniContent({ size, data }: { size: ModuleSize; data?: { connec
 }
 
 // Files with storage visual
-function FilesMiniContent({ size }: { size: ModuleSize }) {
+function FilesMiniContent({ data, size }: { data: MiniContentProps["data"]; size: ModuleSize }) {
   const isPrimary = size === "primary";
-  
-  // Simulated storage data
-  const drives = [
-    { name: "Drive", icon: FolderOpen, used: 45 },
-    { name: "Local", icon: FolderOpen, used: 32 },
-  ];
+
+  const accounts = data.driveAccounts || [];
+
+  if (accounts.length === 0) {
+    return (
+      <div className="flex items-center gap-2">
+        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-muted/20 border border-border/20 shrink-0">
+          <FolderOpen className="w-4 h-4 text-muted-foreground/40" />
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-[10px] font-medium text-foreground/60">Connect Drive</span>
+          <span className="text-[9px] text-muted-foreground/40">
+            {data.driveFilesCount > 0 ? `${data.driveFilesCount} files synced` : "No drives connected"}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  const displayAccounts = accounts.slice(0, isPrimary ? 2 : 1);
 
   return (
     <div className={cn("flex", isPrimary ? "gap-3" : "gap-2")}>
-      {drives.slice(0, isPrimary ? 2 : 1).map((drive, i) => (
-        <motion.div
-          key={drive.name}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: i * 0.05 }}
-          className="flex-1 p-2 rounded-lg bg-muted/20 border border-border/20"
-        >
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <drive.icon className="w-3 h-3 text-primary/60" />
-            <span className="text-[10px] font-medium text-foreground/80">{drive.name}</span>
-          </div>
-          <div className="h-1 bg-muted/30 rounded-full overflow-hidden">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${drive.used}%` }}
-              transition={{ duration: 0.6, delay: i * 0.1 }}
-              className="h-full bg-primary/60 rounded-full"
-            />
-          </div>
-          <span className="text-[8px] text-muted-foreground/50 mt-0.5 block">
-            {drive.used}% used
-          </span>
-        </motion.div>
-      ))}
+      {displayAccounts.map((account, i) => {
+        const label = account.name || account.email.split("@")[0];
+        const used = account.storageUsedPct;
+        const isHighUsage = used >= 80;
+
+        return (
+          <motion.div
+            key={account.email}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: i * 0.05 }}
+            className="flex-1 p-2 rounded-lg bg-muted/20 border border-border/20 min-w-0"
+          >
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <FolderOpen className="w-3 h-3 text-primary/60 shrink-0" />
+              <span className="text-[10px] font-medium text-foreground/80 truncate">{label}</span>
+            </div>
+            {used > 0 ? (
+              <>
+                <div className="h-1 bg-muted/30 rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${used}%` }}
+                    transition={{ duration: 0.6, delay: i * 0.1 }}
+                    className={cn(
+                      "h-full rounded-full",
+                      isHighUsage ? "bg-destructive/70" : "bg-primary/60"
+                    )}
+                  />
+                </div>
+                <span className={cn(
+                  "text-[8px] mt-0.5 block",
+                  isHighUsage ? "text-destructive/60" : "text-muted-foreground/50"
+                )}>
+                  {used}% used
+                </span>
+              </>
+            ) : (
+              <span className="text-[8px] text-muted-foreground/50">
+                {data.driveFilesCount > 0 ? `${data.driveFilesCount} files` : "Synced"}
+              </span>
+            )}
+          </motion.div>
+        );
+      })}
     </div>
   );
 }
@@ -990,7 +1067,7 @@ export function ModuleMiniContent({ moduleId, size, data, onClick, onTaskToggle,
       case "security":
         return <SecurityMiniContent size={size} data={{ connectedDevices: data.connectedDevices }} />;
       case "files":
-        return <FilesMiniContent size={size} />;
+        return <FilesMiniContent data={data} size={size} />;
       case "creation":
         return <CreationMiniContent size={size} />;
       default:
