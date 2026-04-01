@@ -307,7 +307,11 @@ Deno.serve(async (req) => {
         if (filters) {
           for (const [key, value] of Object.entries(filters)) {
             if (key !== USER_KEY_COLUMN && key !== 'user_id') { // Prevent user identity override
-              query = query.eq(key, value as string)
+              if (value === null) {
+                query = query.is(key, null)
+              } else {
+                query = query.eq(key, value as string)
+              }
             }
           }
         }
@@ -479,7 +483,11 @@ Deno.serve(async (req) => {
         if (filters) {
           for (const [key, value] of Object.entries(filters)) {
             if (key !== USER_KEY_COLUMN && key !== 'user_id') {
-              query = query.eq(key, value as string)
+              if (value === null) {
+                query = query.is(key, null)
+              } else {
+                query = query.eq(key, value as string)
+              }
             }
           }
         }
@@ -507,7 +515,11 @@ Deno.serve(async (req) => {
         
         for (const [key, value] of Object.entries(filters)) {
           if (key !== USER_KEY_COLUMN && key !== 'user_id') {
-            query = query.eq(key, value as string)
+            if (value === null) {
+              query = query.is(key, null)
+            } else {
+              query = query.eq(key, value as string)
+            }
           }
         }
         
