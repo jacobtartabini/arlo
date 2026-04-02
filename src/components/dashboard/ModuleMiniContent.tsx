@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { formatDistanceToNow, differenceInDays } from "date-fns";
 import { Input } from "@/components/ui/input";
 import type { ModuleSize } from "@/lib/app-navigation";
+import { formatFileSize } from "@/types/files";
 
 interface MiniContentProps {
   moduleId: string;
@@ -39,9 +40,15 @@ interface MiniContentProps {
     savedPlacesCount: number;
     userLocation?: { lat: number; lng: number } | null;
     upcomingTrips: { id: string; name: string; startDate: Date }[];
+    healthConnected: boolean;
     activityScore: number;
     sleepHours: number;
+    healthRecentActivities: number;
     connectedDevices: number;
+    driveAccountsConnected: number;
+    driveStorageUsedBytes: number | null;
+    driveStorageTotalBytes: number | null;
+    driveStorageUsedPercent: number | null;
   };
   onClick?: (e: React.MouseEvent) => void;
   onTaskToggle?: (taskId: string, done: boolean) => void;
@@ -773,9 +780,9 @@ function HealthMiniContent({ data, size }: { data: MiniContentProps["data"]; siz
   const isTertiary = size === "tertiary";
 
   // Simulated health metrics
-  const moveProgress = data.activityScore;
-  const exerciseProgress = 65;
-  const standProgress = 80;
+  const moveProgress = data.healthConnected ? data.activityScore : 0;
+  const exerciseProgress = data.healthConnected ? Math.min(100, Math.round((data.healthRecentActivities / 10) * 100)) : 0;
+  const standProgress = data.healthConnected ? 80 : 0;
 
   return (
     <div className={cn("flex items-center", isPrimary ? "gap-4" : "gap-3")}>
@@ -818,20 +825,28 @@ function HealthMiniContent({ data, size }: { data: MiniContentProps["data"]; siz
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-1.5">
           <div className="w-2 h-2 rounded-full bg-destructive/80" />
-          <span className="text-[10px] text-foreground/80">{moveProgress}%</span>
-          <span className="text-[9px] text-muted-foreground/50">move</span>
+            <span className="text-[10px] text-foreground/80">
+              {data.healthConnected ? `${moveProgress}%` : "—"}
+            </span>
+            <span className="text-[9px] text-muted-foreground/50">
+              {data.healthConnected ? "move" : "connect"}
+            </span>
         </div>
         {!isTertiary && (
           <>
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full bg-emerald-500/80" />
-              <span className="text-[10px] text-foreground/80">{exerciseProgress}%</span>
+                <span className="text-[10px] text-foreground/80">
+                  {data.healthConnected ? `${exerciseProgress}%` : "—"}
+                </span>
               <span className="text-[9px] text-muted-foreground/50">exercise</span>
             </div>
             <div className="flex items-center gap-1.5">
               <Moon className="w-2.5 h-2.5 text-muted-foreground/50" />
-              <span className="text-[10px] text-foreground/80">{data.sleepHours}h</span>
-              <span className="text-[9px] text-muted-foreground/50">sleep</span>
+                <span className="text-[10px] text-foreground/80">
+                  {data.sleepHours ? `${data.sleepHours}h` : "—"}
+                </span>
+                <span className="text-[9px] text-muted-foreground/50">sleep</span>
             </div>
           </>
         )}
@@ -893,42 +908,46 @@ function SecurityMiniContent({ size, data }: { size: ModuleSize; data?: { connec
 }
 
 // Files with storage visual
-function FilesMiniContent({ size }: { size: ModuleSize }) {
+function FilesMiniContent({ size, data }: { size: ModuleSize; data: MiniContentProps["data"] }) {
   const isPrimary = size === "primary";
-  
-  // Simulated storage data
-  const drives = [
-    { name: "Drive", icon: FolderOpen, used: 45 },
-    { name: "Local", icon: FolderOpen, used: 32 },
-  ];
+  const usedPercent = data.driveStorageUsedPercent;
+  const hasQuota = typeof usedPercent === "number";
+  const accounts = data.driveAccountsConnected;
 
   return (
     <div className={cn("flex", isPrimary ? "gap-3" : "gap-2")}>
-      {drives.slice(0, isPrimary ? 2 : 1).map((drive, i) => (
-        <motion.div
-          key={drive.name}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: i * 0.05 }}
-          className="flex-1 p-2 rounded-lg bg-muted/20 border border-border/20"
-        >
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <drive.icon className="w-3 h-3 text-primary/60" />
-            <span className="text-[10px] font-medium text-foreground/80">{drive.name}</span>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="flex-1 p-2 rounded-lg bg-muted/20 border border-border/20"
+      >
+        <div className="flex items-center justify-between gap-2 mb-1.5">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <FolderOpen className="w-3 h-3 text-primary/60" />
+            <span className="text-[10px] font-medium text-foreground/80 truncate">Storage</span>
           </div>
-          <div className="h-1 bg-muted/30 rounded-full overflow-hidden">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${drive.used}%` }}
-              transition={{ duration: 0.6, delay: i * 0.1 }}
-              className="h-full bg-primary/60 rounded-full"
-            />
-          </div>
-          <span className="text-[8px] text-muted-foreground/50 mt-0.5 block">
-            {drive.used}% used
+          <span className="text-[9px] text-muted-foreground/60 shrink-0">
+            {accounts > 0 ? `${accounts} acct${accounts === 1 ? "" : "s"}` : "No accounts"}
           </span>
-        </motion.div>
-      ))}
+        </div>
+
+        <div className="h-1 bg-muted/30 rounded-full overflow-hidden">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${hasQuota ? usedPercent : 0}%` }}
+            transition={{ duration: 0.6 }}
+            className="h-full bg-primary/60 rounded-full"
+          />
+        </div>
+
+        <span className="text-[8px] text-muted-foreground/50 mt-0.5 block">
+          {hasQuota
+            ? `${usedPercent}% used · ${formatFileSize(data.driveStorageUsedBytes)} / ${formatFileSize(data.driveStorageTotalBytes)}`
+            : accounts > 0
+              ? "Sync to fetch quota"
+              : "Connect Drive in Settings"}
+        </span>
+      </motion.div>
     </div>
   );
 }
@@ -990,7 +1009,7 @@ export function ModuleMiniContent({ moduleId, size, data, onClick, onTaskToggle,
       case "security":
         return <SecurityMiniContent size={size} data={{ connectedDevices: data.connectedDevices }} />;
       case "files":
-        return <FilesMiniContent size={size} />;
+        return <FilesMiniContent size={size} data={data} />;
       case "creation":
         return <CreationMiniContent size={size} />;
       default:
