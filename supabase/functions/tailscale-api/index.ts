@@ -113,7 +113,7 @@ Deno.serve(async (req) => {
       return jsonError(req, 422, 'missing_fields', 'Action is required', { requestId })
     }
 
-    const baseUrl = `https://api.tailscale.com/api/v2/tailnet/${TAILSCALE_TAILNET}`
+    const baseUrl = `https://api.tailscale.com/api/v2/tailnet/${encodeURIComponent(TAILSCALE_TAILNET)}`
     const headers = {
       'Authorization': `Bearer ${TAILSCALE_API_KEY}`,
       'Content-Type': 'application/json',
@@ -124,13 +124,12 @@ Deno.serve(async (req) => {
       const response = await fetchWithRetry(`${baseUrl}/devices`, { headers })
       
       if (!response.ok) {
-        const errorPayload = await readResponseBody(response)
-        console.error('[tailscale-api] Tailscale API error:', response.status, errorPayload)
-        return jsonError(req, 502, 'upstream_error', 'Tailscale API error', {
+        return await upstreamError(req, {
           requestId,
           action,
-          upstreamStatus: response.status,
-          upstreamBody: errorPayload,
+          response,
+          debug,
+          fallbackMessage: 'Tailscale API error',
         })
       }
 
@@ -170,22 +169,11 @@ Deno.serve(async (req) => {
       const response = await fetchWithRetry(`${baseUrl}/logs?${params.toString()}`, { headers })
       
       if (!response.ok) {
-        const errorPayload = await readResponseBody(response)
-        console.error('[tailscale-api] Tailscale audit API error:', response.status, errorPayload)
-        return jsonError(
-          req,
-          502,
-          'upstream_error',
+        const fallbackMessage =
           response.status === 403 || response.status === 404
-            ? 'Audit logs unavailable on current Tailscale plan.'
-            : 'Tailscale API error',
-          {
-            requestId,
-            action,
-            upstreamStatus: response.status,
-            upstreamBody: errorPayload,
-          }
-        )
+            ? 'Audit logs unavailable (plan/permissions may not allow access).'
+            : 'Tailscale API error'
+        return await upstreamError(req, { requestId, action, response, debug, fallbackMessage })
       }
 
       // Parse JSONL response (one JSON object per line)
@@ -228,13 +216,12 @@ Deno.serve(async (req) => {
       const response = await fetchWithRetry(`${baseUrl}/keys`, { headers })
       
       if (!response.ok) {
-        const errorPayload = await readResponseBody(response)
-        console.error('[tailscale-api] Tailscale keys API error:', response.status, errorPayload)
-        return jsonError(req, 502, 'upstream_error', 'Tailscale API error', {
+        return await upstreamError(req, {
           requestId,
           action,
-          upstreamStatus: response.status,
-          upstreamBody: errorPayload,
+          response,
+          debug,
+          fallbackMessage: 'Tailscale API error',
         })
       }
 
@@ -264,7 +251,20 @@ Deno.serve(async (req) => {
       const response = await fetchWithRetry(`${baseUrl}/acl`, { headers })
       
       if (!response.ok) {
-        return jsonResponse(req, { acl: null, message: 'Could not fetch ACL' })
+        // Preserve previous behavior but make it debuggable (and avoid surfacing as a hard failure).
+        return jsonResponse(req, {
+          acl: null,
+          message: 'Could not fetch ACL',
+          ...(debug
+            ? {
+                debug: {
+                  requestId,
+                  action,
+                  upstreamStatus: response.status,
+                },
+              }
+            : {}),
+        })
       }
 
       const data = await response.json()
@@ -340,4 +340,50 @@ async function readResponseBody(response: Response): Promise<unknown> {
     }
   }
   return await response.text()
+}
+
+type UpstreamErrorInput = {
+  requestId: string
+  action: string
+  response: Response
+  debug: boolean
+  fallbackMessage: string
+}
+
+async function upstreamError(
+  req: Request,
+  input: UpstreamErrorInput
+): Promise<Response> {
+  const { requestId, action, response, debug, fallbackMessage } = input
+  const errorPayload = await readResponseBody(response)
+
+  // Preserve actionable upstream status codes where possible:
+  // - 4xx typically indicates misconfiguration/permissions (should not be surfaced as 502).
+  // - 5xx indicates Tailscale/transient upstream, surface as 502.
+  const status = response.status >= 500 ? 502 : response.status
+
+  // Avoid leaking upstream body unless explicitly debugging.
+  const details: Record<string, unknown> = {
+    requestId,
+    action,
+    upstreamStatus: response.status,
+    ...(debug ? { upstreamBody: errorPayload } : {}),
+  }
+
+  // Provide more helpful messages for common setup problems.
+  const message =
+    response.status === 401
+      ? 'Tailscale API key rejected (check key validity/expiry).'
+      : response.status === 403
+      ? 'Tailscale API access forbidden (check key role/permissions and plan).'
+      : response.status === 404
+      ? 'Tailscale resource not found (check tailnet name and feature availability).'
+      : fallbackMessage
+
+  console.error('[tailscale-api] Upstream error:', { action, upstreamStatus: response.status, status })
+  if (debug) {
+    console.error('[tailscale-api] Upstream error body:', errorPayload)
+  }
+
+  return jsonError(req, status, 'upstream_error', message, details)
 }
