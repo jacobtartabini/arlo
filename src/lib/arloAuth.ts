@@ -16,6 +16,7 @@ const ARLO_AUTH_HEADER = 'X-Arlo-Authorization';
 export const ARLO_AUTH_INVALIDATED_EVENT = 'arlo:auth-invalidated';
 const AUTH_REDIRECT_ATTEMPTS_KEY = 'arlo_auth_redirect_attempts';
 const AUTH_REDIRECT_MAX_ATTEMPTS = 3;
+const AUTH_REDIRECT_WINDOW_MS = 60 * 1000;
 
 // Buffer time before expiry to force refresh (15 seconds)
 const REFRESH_BUFFER_MS = 15 * 1000;
@@ -179,18 +180,90 @@ function clearStoredReturnTo(): void {
 
 function getAuthRedirectAttempts(): number {
   const raw = sessionStorage.getItem(AUTH_REDIRECT_ATTEMPTS_KEY);
-  const parsed = raw ? Number(raw) : 0;
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  if (!raw) return 0;
+
+  try {
+    const parsed = JSON.parse(raw) as { count?: unknown; startedAt?: unknown; returnTo?: unknown };
+    const count = typeof parsed.count === 'number' ? parsed.count : Number(parsed.count);
+    const startedAt = typeof parsed.startedAt === 'number' ? parsed.startedAt : Number(parsed.startedAt);
+    const returnTo = typeof parsed.returnTo === 'string' ? parsed.returnTo : null;
+
+    if (!Number.isFinite(count) || count <= 0) return 0;
+    if (!Number.isFinite(startedAt) || startedAt <= 0) return 0;
+    if (!returnTo) return 0;
+
+    if (Date.now() - startedAt > AUTH_REDIRECT_WINDOW_MS) return 0;
+    return count;
+  } catch {
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  }
 }
 
-function incrementAuthRedirectAttempts(): number {
-  const next = getAuthRedirectAttempts() + 1;
-  sessionStorage.setItem(AUTH_REDIRECT_ATTEMPTS_KEY, String(next));
+function incrementAuthRedirectAttempts(returnTo: string): number {
+  const safeReturnTo = toSafeReturnPath(returnTo);
+  const raw = sessionStorage.getItem(AUTH_REDIRECT_ATTEMPTS_KEY);
+  const now = Date.now();
+
+  let count = 0;
+  let startedAt = now;
+  let storedReturnTo: string | null = null;
+
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as { count?: unknown; startedAt?: unknown; returnTo?: unknown };
+      const parsedCount = typeof parsed.count === 'number' ? parsed.count : Number(parsed.count);
+      const parsedStartedAt = typeof parsed.startedAt === 'number' ? parsed.startedAt : Number(parsed.startedAt);
+      const parsedReturnTo = typeof parsed.returnTo === 'string' ? parsed.returnTo : null;
+
+      if (Number.isFinite(parsedCount) && parsedCount > 0) count = parsedCount;
+      if (Number.isFinite(parsedStartedAt) && parsedStartedAt > 0) startedAt = parsedStartedAt;
+      storedReturnTo = parsedReturnTo;
+    } catch {
+      const parsedCount = Number(raw);
+      if (Number.isFinite(parsedCount) && parsedCount > 0) count = parsedCount;
+    }
+  }
+
+  const isExpired = now - startedAt > AUTH_REDIRECT_WINDOW_MS;
+  const isDifferentTarget = storedReturnTo !== safeReturnTo;
+
+  if (isExpired || isDifferentTarget) {
+    count = 0;
+    startedAt = now;
+    storedReturnTo = safeReturnTo;
+  }
+
+  const next = count + 1;
+  sessionStorage.setItem(
+    AUTH_REDIRECT_ATTEMPTS_KEY,
+    JSON.stringify({ count: next, startedAt, returnTo: storedReturnTo })
+  );
   return next;
 }
 
 export function clearAuthRedirectAttempts(): void {
   sessionStorage.removeItem(AUTH_REDIRECT_ATTEMPTS_KEY);
+}
+
+type NavigateImpl = (url: string) => void;
+
+let navigateImpl: NavigateImpl = (url) => {
+  window.location.assign(url);
+};
+
+export function navigateTo(url: string): void {
+  navigateImpl(url);
+}
+
+// Test-only hook to avoid JSDOM navigation errors.
+export function __setNavigateImplForTests(impl: NavigateImpl | null): void {
+  if (import.meta.env.MODE !== 'test') return;
+  navigateImpl =
+    impl ??
+    ((url) => {
+      window.location.assign(url);
+    });
 }
 
 function redirectToAuthError(reason: string, returnTo?: string): void {
@@ -200,7 +273,7 @@ function redirectToAuthError(reason: string, returnTo?: string): void {
   const params = new URLSearchParams();
   params.set('reason', reason);
   params.set('return_to', safeReturnTo);
-  window.location.assign(`/auth/error?${params.toString()}`);
+  navigateTo(`/auth/error?${params.toString()}`);
 }
 
 export function getAegisAuthorizeUrl(returnTo?: string): string {
@@ -219,16 +292,17 @@ export function redirectToAegisAuth(returnTo?: string): void {
     sessionStorage.setItem('arlo_auth_return_to', toSafeReturnPath(returnTo));
   }
 
-  const attempts = incrementAuthRedirectAttempts();
+  const target = toSafeReturnPath(
+    returnTo ?? getStoredReturnTo() ?? `${window.location.pathname}${window.location.search}${window.location.hash}`
+  );
+
+  const attempts = incrementAuthRedirectAttempts(target);
   if (attempts > AUTH_REDIRECT_MAX_ATTEMPTS) {
     redirectToAuthError('Too many authentication redirects. Please try again.', returnTo);
     return;
   }
 
-  const target = toSafeReturnPath(
-    returnTo ?? getStoredReturnTo() ?? `${window.location.pathname}${window.location.search}${window.location.hash}`
-  );
-  window.location.assign(getAegisAuthorizeUrl(target));
+  navigateTo(getAegisAuthorizeUrl(target));
 }
 
 export function completeAuthFromCallback(rawToken: string | null): boolean {

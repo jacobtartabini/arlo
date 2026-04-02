@@ -6,6 +6,7 @@ import {
   isAuthenticated as checkIsAuthenticated,
   getIdentity,
   redirectToAegisAuth,
+  clearAuthRedirectAttempts,
   shouldBypassAuthRedirect,
   ARLO_AUTH_INVALIDATED_EVENT,
 } from '@/lib/arloAuth';
@@ -69,6 +70,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             userKey,
           });
           setLegacyAuthFlags(userKey);
+          clearAuthRedirectAttempts();
           return;
         }
 
