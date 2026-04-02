@@ -107,11 +107,6 @@ export default function Settings() {
   const { settings, isLoading, isAuthenticated, updateSettings } = useUserSettings();
   const navigate = useNavigate();
 
-  // Mobile view
-  if (isMobile) {
-    return <MobileSettingsView />;
-  }
-
   // SEO
   useEffect(() => {
     document.title = "Settings – Arlo";
@@ -124,6 +119,11 @@ export default function Settings() {
     }
     if (meta) meta.content = desc;
   }, []);
+
+  // Mobile view
+  if (isMobile) {
+    return <MobileSettingsView />;
+  }
 
   const handleSettingToggle = async (key: keyof typeof settings, value: boolean) => {
     if (!isAuthenticated) {
