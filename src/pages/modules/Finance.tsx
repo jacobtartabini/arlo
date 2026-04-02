@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { MobileFinanceView } from "@/components/mobile/views/MobileFinanceView";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,12 +18,13 @@ import {
 import { 
   Building2, CreditCard, PiggyBank, TrendingUp, RefreshCw, 
   Plus, Wallet, Gift, BarChart3, ArrowUpRight, ArrowDownRight,
-  Calendar, AlertCircle, ChevronRight
+  Calendar, AlertCircle, ChevronRight, ArrowLeft
 } from "lucide-react";
 import { toast } from "sonner";
 import { format, startOfMonth, endOfMonth } from "date-fns";
 
 export default function Finance() {
+  const navigate = useNavigate();
   const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState("overview");
   const [accounts, setAccounts] = useState<any[]>([]);
@@ -116,6 +118,15 @@ export default function Finance() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
+            <div className="mb-3 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+              <button
+                type="button"
+                onClick={() => navigate("/dashboard")}
+                className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/50 px-3 py-1 text-xs font-medium transition hover:border-border hover:bg-background/80"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" /> Back to dashboard
+              </button>
+            </div>
             <h1 className="text-3xl font-bold tracking-tight">Finance</h1>
             <p className="text-muted-foreground">Your complete financial picture</p>
           </div>
