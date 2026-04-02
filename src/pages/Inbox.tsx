@@ -39,11 +39,6 @@ export default function Inbox() {
   const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(new Set());
   const [isMobileReading, setIsMobileReading] = useState(false);
 
-  // Mobile view
-  if (isMobile) {
-    return <MobileInboxView />;
-  }
-  
   // Compose state
   const [composeOpen, setComposeOpen] = useState(false);
   const [composeMode, setComposeMode] = useState<ComposeMode>('new');
@@ -289,6 +284,11 @@ export default function Inbox() {
     // Would need delete implementation
     toast.info('Delete not yet implemented');
   };
+
+  // Mobile view (after all hooks to keep hook order stable)
+  if (isMobile) {
+    return <MobileInboxView />;
+  }
 
   const hasNoAccounts = !accountsLoading && accounts.length === 0;
   const allLabels = Array.from(new Set(threads.flatMap(t => t.labels))).filter(Boolean);

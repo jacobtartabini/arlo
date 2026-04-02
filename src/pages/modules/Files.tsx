@@ -40,11 +40,6 @@ export default function Files() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-
-  // Mobile view
-  if (isMobile) {
-    return <MobileFilesView />;
-  }
   
   const {
     isLoading: filesLoading,
@@ -283,6 +278,11 @@ export default function Files() {
   // Count folders and files
   const folderCount = files.filter(f => f.is_folder).length;
   const fileCount = files.filter(f => !f.is_folder).length;
+
+  // Mobile view (must come after all hooks)
+  if (isMobile) {
+    return <MobileFilesView />;
+  }
 
   return (
     <div className="min-h-screen bg-background">
