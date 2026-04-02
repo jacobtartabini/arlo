@@ -26,6 +26,8 @@ interface MapSidebarProps {
   onDirections: (place: Place) => void;
   onSavePlace: (place: Place) => void;
   pins: MapPinType[];
+  pinsUnavailable?: boolean;
+  pinsUnavailableReason?: string | null;
   selectedPinId: string | null;
   onPinSelect: (pin: MapPinType) => void;
   onPinEdit: (pin: MapPinType) => void;
@@ -49,6 +51,8 @@ export function MapSidebar({
   onDirections,
   onSavePlace,
   pins,
+  pinsUnavailable,
+  pinsUnavailableReason,
   selectedPinId,
   onPinSelect,
   onPinEdit,
@@ -137,7 +141,12 @@ export function MapSidebar({
               <span className="text-xs text-muted-foreground">{pins.length}</span>
             </div>
             <ScrollArea className="h-48 pr-3">
-              {pins.length === 0 ? (
+              {pinsUnavailable ? (
+                <div className="rounded-xl border border-dashed border-border/70 bg-muted/40 p-4 text-sm text-muted-foreground">
+                  Saved pins are unavailable.
+                  {pinsUnavailableReason ? <div className="mt-2 text-xs">{pinsUnavailableReason}</div> : null}
+                </div>
+              ) : pins.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-border/70 bg-muted/40 p-4 text-sm text-muted-foreground">
                   No saved pins yet. Drop a pin to get started.
                 </div>

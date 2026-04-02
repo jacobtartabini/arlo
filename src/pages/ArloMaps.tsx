@@ -33,7 +33,7 @@ export default function ArloMaps() {
   const isMobile = useIsMobile();
   const geolocation = useGeolocation({ enableHighAccuracy: true });
   const mapsPersistence = useMapsPersistence();
-  const { pins, createPin, updatePin, deletePin } = useMapPins();
+  const { pins, createPin, updatePin, deletePin, isAvailable: arePinsAvailable, error: pinsError } = useMapPins();
   const mapRef = useRef<google.maps.Map | null>(null);
   const sessionTokenRef = useRef(crypto.randomUUID());
 
@@ -318,6 +318,8 @@ export default function ArloMaps() {
           onDirections={handleDirections}
           onSavePlace={handleSavePlace}
           pins={pins}
+          pinsUnavailable={!arePinsAvailable}
+          pinsUnavailableReason={pinsError}
           selectedPinId={selectedPin?.id ?? null}
           onPinSelect={handlePinSelect}
           onPinEdit={handleEditPin}
@@ -334,7 +336,7 @@ export default function ArloMaps() {
             userLocation={geolocation.position}
             dropPinMode={dropPinMode}
             places={searchResults}
-            pins={pins}
+            pins={arePinsAvailable ? pins : []}
             selectedPlaceId={selectedPlace?.placeId ?? null}
             selectedPinId={selectedPin?.id ?? null}
             onMapLoad={(map) => {
@@ -387,6 +389,17 @@ export default function ArloMaps() {
               isMobile && 'bottom-28'
             )}>
               Location permission denied. Search still works without it.
+            </div>
+          )}
+
+          {!arePinsAvailable && (
+            <div
+              className={cn(
+                'absolute left-4 bottom-20 z-30 rounded-2xl border border-border bg-background/90 px-4 py-3 text-xs text-muted-foreground shadow-lg backdrop-blur',
+                isMobile && 'bottom-40'
+              )}
+            >
+              Saved pins are unavailable in this environment. {pinsError ? `(${pinsError})` : null}
             </div>
           )}
         </div>

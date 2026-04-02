@@ -33,6 +33,7 @@ export function useMapPins() {
   const [pins, setPins] = useState<MapPin[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isAvailable, setIsAvailable] = useState(true);
 
   const fetchPins = useCallback(async () => {
     if (!isAuthenticated || !userKey) {
@@ -52,11 +53,29 @@ export function useMapPins() {
       .setHeader('x-user-key', userKey) as any);
 
     if (fetchError) {
+      // If the table isn't deployed in this Supabase project yet, treat pins as unavailable
+      // (avoids noisy 404s and lets the UI communicate what's wrong).
+      const message = fetchError.message || '';
+      const status = (fetchError as { status?: number })?.status;
+      const code = (fetchError as { code?: string })?.code;
+      const isMissingTable =
+        status === 404 ||
+        code === '42P01' ||
+        /map_pins/i.test(message) && (/does not exist/i.test(message) || /not found/i.test(message));
+
+      if (isMissingTable) {
+        setIsAvailable(false);
+        setPins([]);
+        setError('Pins are not available (missing database table).');
+        setIsLoading(false);
+        return;
+      }
       setError(fetchError.message);
       setIsLoading(false);
       return;
     }
 
+    setIsAvailable(true);
     setPins(
       ((data ?? []) as MapPinRow[]).map((pin) => ({
         id: pin.id,
@@ -178,6 +197,7 @@ export function useMapPins() {
     pins,
     isLoading,
     error,
+    isAvailable,
     refresh: fetchPins,
     createPin,
     updatePin,

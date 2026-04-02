@@ -40,7 +40,6 @@ export function MapSearchInput({
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
-              event.preventDefault();
               onSubmit();
             }
           }}

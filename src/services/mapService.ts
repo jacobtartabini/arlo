@@ -1,4 +1,4 @@
-import { supabase } from '@/integrations/supabase/client';
+import { invokeEdgeFunction } from '@/lib/edge-functions';
 import type { LatLng, Place } from '@/types/maps';
 
 export interface PlaceSearchResult extends Place {
@@ -26,39 +26,35 @@ export async function searchPlaces(query: string, center?: LatLng, radiusMeters 
     body.radius = radiusMeters;
   }
 
-  const { data, error } = await supabase.functions.invoke<PlacesSearchResponse>('maps-api/text-search', {
-    body,
-  });
-
-  if (error) {
-    throw new Error(error.message);
+  const result = await invokeEdgeFunction<PlacesSearchResponse>('maps-api/text-search', body, { requireAuth: true });
+  if (!result.ok) {
+    throw new Error(result.message || 'Search failed');
   }
-
-  return data?.places ?? [];
+  return result.data?.places ?? [];
 }
 
 export async function getPlaceDetails(placeId: string) {
   if (!placeId) return null;
 
-  const { data, error } = await supabase.functions.invoke<PlaceDetailsResponse>('maps-api/place-details', {
-    body: { placeId },
-  });
-
-  if (error) {
-    throw new Error(error.message);
+  const result = await invokeEdgeFunction<PlaceDetailsResponse>(
+    'maps-api/place-details',
+    { placeId },
+    { requireAuth: true }
+  );
+  if (!result.ok) {
+    throw new Error(result.message || 'Place lookup failed');
   }
-
-  return data?.place ?? null;
+  return result.data?.place ?? null;
 }
 
 export async function reverseGeocode(location: LatLng) {
-  const { data, error } = await supabase.functions.invoke<ReverseGeocodeResponse>('maps-api/reverse-geocode', {
-    body: { location: `${location.lat},${location.lng}` },
-  });
-
-  if (error) {
-    throw new Error(error.message);
+  const result = await invokeEdgeFunction<ReverseGeocodeResponse>(
+    'maps-api/reverse-geocode',
+    { location: `${location.lat},${location.lng}` },
+    { requireAuth: true }
+  );
+  if (!result.ok) {
+    throw new Error(result.message || 'Reverse geocode failed');
   }
-
-  return data?.address ?? null;
+  return result.data?.address ?? null;
 }
