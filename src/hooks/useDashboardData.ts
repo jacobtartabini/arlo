@@ -3,13 +3,14 @@
  * Provides real-time data for mini-interactions on module tiles
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { dataApiHelpers } from "@/lib/data-api";
 import { useAuth } from "@/providers/AuthProvider";
 import { useTasksPersistence } from "@/hooks/useTasksPersistence";
 import { isToday, parseISO, startOfDay, isThisWeek } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import { invokeEdgeFunction } from "@/lib/edge-functions";
+import { supabase } from "@/integrations/supabase/client";
 
 interface DashboardData {
   // Productivity/Today
@@ -103,6 +104,7 @@ export function useDashboardData() {
   const [data, setData] = useState<DashboardData>(DEFAULT_DATA);
   const { isAuthenticated } = useAuth();
   const { createTask, toggleTask } = useTasksPersistence();
+  const refreshInFlightRef = useRef(false);
 
   // Get user location on mount
   useEffect(() => {
@@ -130,6 +132,9 @@ export function useDashboardData() {
       setData(prev => ({ ...prev, isLoading: false }));
       return;
     }
+
+    if (refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
 
     try {
       // Fetch all data in parallel
@@ -319,12 +324,34 @@ export function useDashboardData() {
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
       setData(prev => ({ ...prev, isLoading: false }));
+    } finally {
+      refreshInFlightRef.current = false;
     }
   }, [isAuthenticated]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Keep Files mini stats in sync with Drive account connect/disconnect updates.
+  // Without this, the dashboard only fetches once on mount and won't reflect
+  // newly connected storage accounts until a reload.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const channel = supabase
+      .channel("dashboard-drive-accounts")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "drive_accounts" },
+        () => fetchData()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isAuthenticated, fetchData]);
 
   // Handler for toggling a task from the dashboard
   const handleTaskToggle = useCallback(async (taskId: string, done: boolean) => {
