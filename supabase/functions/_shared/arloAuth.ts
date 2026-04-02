@@ -18,6 +18,8 @@ import { verify } from "https://deno.land/x/djwt@v2.9.1/mod.ts";
 // Allowed origins for CORS - STRICT enforcement
 const ALLOWED_ORIGINS = [
   'https://arlo.jacobtartabini.com',
+  'https://jacobtartabini.com',
+  'https://www.jacobtartabini.com',
   'http://localhost:8000',
   'http://localhost:8080',
   'http://localhost:5173',
@@ -45,6 +47,13 @@ function isLovableOrigin(origin: string): boolean {
   );
 }
 
+function isJacobtartabiniOrigin(origin: string): boolean {
+  // Allow only HTTPS origins under your apex domain.
+  // This keeps strict origin enforcement while avoiding breakage when the app moves
+  // between subdomains (e.g. arlo., www., app.).
+  return /^https:\/\/([a-z0-9-]+\.)?jacobtartabini\.com$/.test(origin);
+}
+
 export interface ArloJWTClaims {
   sub: string;      // User identity (Tailscale login/email) - THIS IS THE SOLE SOURCE OF IDENTITY
   iss: string;      // Issuer
@@ -68,7 +77,7 @@ export interface ArloAuthResult {
  */
 export function isAllowedOrigin(origin: string | null): boolean {
   if (!origin) return false;
-  return ALLOWED_ORIGINS.includes(origin) || isLovableOrigin(origin);
+  return ALLOWED_ORIGINS.includes(origin) || isJacobtartabiniOrigin(origin) || isLovableOrigin(origin);
 }
 
 function normalizeHeaderName(headerName: string): string {
