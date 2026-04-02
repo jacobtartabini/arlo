@@ -46,10 +46,22 @@ export default function DriveIntegrations({ embedded = false }: DriveIntegration
     syncFiles,
   } = useFilesPersistence();
 
+  type OAuthState = { provider?: string };
+
   const [accounts, setAccounts] = useState<DriveAccount[]>([]);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSyncing, setIsSyncing] = useState<Record<string, boolean>>({});
   const [isDisconnecting, setIsDisconnecting] = useState<Record<string, boolean>>({});
+
+  const decodeOAuthState = (raw: string): OAuthState | null => {
+    try {
+      const normalized = raw.replace(/ /g, '+').replace(/-/g, '+').replace(/_/g, '/');
+      const pad = '='.repeat((4 - (normalized.length % 4)) % 4);
+      return JSON.parse(atob(normalized + pad)) as OAuthState;
+    } catch {
+      return null;
+    }
+  };
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
@@ -62,14 +74,10 @@ export default function DriveIntegrations({ embedded = false }: DriveIntegration
     const state = params.get('state');
 
     if (code && state) {
-      try {
-        const decoded = JSON.parse(atob(state));
-        if (decoded.provider === 'google_drive') {
+      const decoded = decodeOAuthState(state);
+      if (decoded?.provider === 'google_drive') {
           handleDriveCallback(code, state);
           window.history.replaceState({}, '', window.location.pathname);
-        }
-      } catch {
-        // Not a drive callback or invalid state, ignore
       }
     }
   }, [authLoading, isAuthenticated]);
@@ -95,8 +103,9 @@ export default function DriveIntegrations({ embedded = false }: DriveIntegration
 
       toast.success(`Connected ${data.email || 'Google Drive'}`);
       loadAccounts();
-    } catch (error: any) {
-      toast.error('Failed to connect Google Drive: ' + error.message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error('Failed to connect Google Drive: ' + message);
     } finally {
       setIsConnecting(false);
     }
@@ -116,8 +125,9 @@ export default function DriveIntegrations({ embedded = false }: DriveIntegration
       } else {
         setIsConnecting(false);
       }
-    } catch (error: any) {
-      toast.error('Failed to start connection: ' + error.message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error('Failed to start connection: ' + message);
       setIsConnecting(false);
     }
   };
@@ -141,8 +151,9 @@ export default function DriveIntegrations({ embedded = false }: DriveIntegration
       const count = await syncFiles(accountId);
       toast.success(`Synced ${count} files`);
       loadAccounts();
-    } catch (error: any) {
-      toast.error('Sync failed: ' + error.message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error('Sync failed: ' + message);
     } finally {
       setIsSyncing(prev => ({ ...prev, [accountId]: false }));
     }
