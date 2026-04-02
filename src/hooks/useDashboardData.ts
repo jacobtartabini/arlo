@@ -9,6 +9,7 @@ import { useAuth } from "@/providers/AuthProvider";
 import { useTasksPersistence } from "@/hooks/useTasksPersistence";
 import { isToday, parseISO, startOfDay, isThisWeek } from "date-fns";
 import { toast } from "@/hooks/use-toast";
+import { invokeEdgeFunction } from "@/lib/edge-functions";
 
 interface DashboardData {
   // Productivity/Today
@@ -40,12 +41,20 @@ interface DashboardData {
   // Travel
   upcomingTrips: { id: string; name: string; startDate: Date }[];
   
-  // Health (placeholder - uses static data for now)
-  activityScore: number;
-  sleepHours: number;
+  // Health (Strava summary; fall back to placeholders)
+  healthConnected: boolean;
+  activityScore: number; // 0-100 (derived)
+  sleepHours: number; // placeholder until sleep integration exists
+  healthRecentActivities: number;
   
   // Security
   connectedDevices: number;
+
+  // Files (Drive summary)
+  driveAccountsConnected: number;
+  driveStorageUsedBytes: number | null;
+  driveStorageTotalBytes: number | null;
+  driveStorageUsedPercent: number | null;
   
   isLoading: boolean;
 }
@@ -68,10 +77,26 @@ const DEFAULT_DATA: DashboardData = {
   savedPlacesCount: 0,
   userLocation: null,
   upcomingTrips: [],
+  healthConnected: false,
   activityScore: 72,
   sleepHours: 7.5,
+  healthRecentActivities: 0,
   connectedDevices: 0,
+  driveAccountsConnected: 0,
+  driveStorageUsedBytes: null,
+  driveStorageTotalBytes: null,
+  driveStorageUsedPercent: null,
   isLoading: true,
+};
+
+type StravaStatusPayload = { connected: boolean };
+type StravaStatsTotals = { count?: number };
+type StravaStatsPayload = {
+  stats?: {
+    recent_runs?: StravaStatsTotals;
+    recent_rides?: StravaStatsTotals;
+    recent_swims?: StravaStatsTotals;
+  };
 };
 
 export function useDashboardData() {
@@ -117,6 +142,9 @@ export function useDashboardData() {
         transactionsResult,
         placesResult,
         tripsResult,
+        driveAccountsResult,
+        stravaStatusResult,
+        stravaStatsResult,
       ] = await Promise.all([
         dataApiHelpers.select<any[]>("tasks", {
           order: { column: "priority", ascending: false },
@@ -140,6 +168,9 @@ export function useDashboardData() {
         dataApiHelpers.select<any[]>("trips", {
           order: { column: "start_date", ascending: true },
         }),
+        dataApiHelpers.select<any[]>("drive_accounts_safe", {}),
+        invokeEdgeFunction<StravaStatusPayload>("strava-api", { action: "status" }, { requireAuth: true }),
+        invokeEdgeFunction<StravaStatsPayload>("strava-api", { action: "stats" }, { requireAuth: true }),
       ]);
 
       const today = startOfDay(new Date());
@@ -225,6 +256,35 @@ export function useDashboardData() {
           startDate: parseISO(t.start_date),
         }));
 
+      // Process Drive accounts (Files module)
+      const driveAccounts = (driveAccountsResult.data || []) as Array<{
+        enabled?: boolean;
+        storage_quota_used?: number | null;
+        storage_quota_total?: number | null;
+      }>;
+      const enabledDriveAccounts = driveAccounts.filter((a) => a.enabled !== false);
+      const driveAccountsConnected = enabledDriveAccounts.length;
+      const driveStorageUsedBytes = enabledDriveAccounts.some((a) => typeof a.storage_quota_used === "number")
+        ? enabledDriveAccounts.reduce((sum, a) => sum + (a.storage_quota_used || 0), 0)
+        : null;
+      const driveStorageTotalBytes = enabledDriveAccounts.some((a) => typeof a.storage_quota_total === "number")
+        ? enabledDriveAccounts.reduce((sum, a) => sum + (a.storage_quota_total || 0), 0)
+        : null;
+      const driveStorageUsedPercent =
+        driveStorageUsedBytes !== null && driveStorageTotalBytes !== null && driveStorageTotalBytes > 0
+          ? Math.round((driveStorageUsedBytes / driveStorageTotalBytes) * 100)
+          : null;
+
+      // Process Health (Strava summary)
+      const healthConnected = Boolean(stravaStatusResult.ok && stravaStatusResult.data?.connected);
+      const recentRuns = stravaStatsResult.ok ? (stravaStatsResult.data?.stats?.recent_runs?.count ?? 0) : 0;
+      const recentRides = stravaStatsResult.ok ? (stravaStatsResult.data?.stats?.recent_rides?.count ?? 0) : 0;
+      const recentSwims = stravaStatsResult.ok ? (stravaStatsResult.data?.stats?.recent_swims?.count ?? 0) : 0;
+      const healthRecentActivities = healthConnected ? recentRuns + recentRides + recentSwims : 0;
+      // Simple derived "activity score": 0..100 based on last ~4 weeks activity count.
+      // This avoids hardcoding and still updates as Strava updates.
+      const activityScore = healthConnected ? Math.min(100, Math.round((healthRecentActivities / 12) * 100)) : 0;
+
       setData(prev => ({
         ...prev,
         todayTasks,
@@ -245,9 +305,15 @@ export function useDashboardData() {
         // Preserve geolocation result if it already resolved (avoid reverting to SF fallback)
         userLocation: prev.userLocation,
         upcomingTrips,
-        activityScore: 72,
-        sleepHours: 7.5,
+        healthConnected,
+        healthRecentActivities,
+        activityScore,
+        sleepHours: prev.sleepHours,
         connectedDevices: 0, // Placeholder - could fetch from tailscale-api
+        driveAccountsConnected,
+        driveStorageUsedBytes,
+        driveStorageTotalBytes,
+        driveStorageUsedPercent,
         isLoading: false,
       }));
     } catch (error) {
