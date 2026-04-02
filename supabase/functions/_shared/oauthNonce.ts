@@ -138,7 +138,12 @@ export async function cleanupExpiredNonces(): Promise<number> {
  * Encode OAuth state with nonce
  */
 export function encodeOAuthState(nonce: string, provider: string): string {
-  return btoa(JSON.stringify({ nonce, provider }));
+  // Use base64url to keep `state` URL-safe (avoids `+` turning into spaces in query params).
+  // Strip padding for compactness.
+  return btoa(JSON.stringify({ nonce, provider }))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
 }
 
 /**
@@ -146,7 +151,13 @@ export function encodeOAuthState(nonce: string, provider: string): string {
  */
 export function decodeOAuthState(state: string): { nonce?: string; provider?: string } {
   try {
-    const decoded = JSON.parse(atob(state));
+    // Accept both legacy base64 and base64url, and tolerate `+` becoming spaces.
+    const normalized = state
+      .replace(/ /g, '+')
+      .replace(/-/g, '+')
+      .replace(/_/g, '/');
+    const pad = '='.repeat((4 - (normalized.length % 4)) % 4);
+    const decoded = JSON.parse(atob(normalized + pad));
     return { nonce: decoded.nonce, provider: decoded.provider };
   } catch {
     return {};
