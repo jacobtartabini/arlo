@@ -92,6 +92,20 @@ To enable the web maps experience and Supabase edge functions, configure the fol
 
 > If you only set `VITE_GOOGLE_MAPS_API_KEY`, the edge functions will fall back to it, but a dedicated server-side key is preferred for Places search.
 
+### 🔐 Environment Variables (Tailscale)
+
+The `tailscale-api` Supabase Edge Function calls the Tailscale API. Configure these **Supabase function secrets**:
+
+| Variable | Purpose |
+| --- | --- |
+| `TAILSCALE_API_KEY` | Tailscale API access token (from the Tailscale admin console). |
+| `TAILSCALE_TAILNET` | Your tailnet name (the part after `tailnet/` in Tailscale API URLs). |
+
+Notes:
+
+- The function will return **401/403/404** when the key/tailnet/permissions are wrong, and only uses **502** for true upstream 5xx/transient failures.
+- You can add `?debug=1` to the Security page URL to include upstream response bodies in debug output (no secrets), which helps diagnose API/plan issues.
+
 ---
 
 ## 👤 Created by
