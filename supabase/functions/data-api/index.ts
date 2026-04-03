@@ -35,7 +35,7 @@ const ALLOWED_TABLES = [
   'calendar_events', 'booking_slots', 'notifications',
   'conversations', 'conversation_messages', 'chat_folders', 'user_settings',
   'routines', 'user_progress', 'rewards', 'reward_redemptions', 'xp_events',
-  'creation_projects', 'creation_assets', 'creation_scene_state',
+  'creation_projects', 'creation_assets', 'creation_scene_state', 'lab_items',
   'calendar_integrations', 'calendar_integrations_safe', 'google_calendar_selections',
   'inbox_accounts', 'inbox_accounts_safe', 'inbox_threads', 'inbox_messages', 
   'inbox_drafts', 'inbox_sync_state',
@@ -178,6 +178,35 @@ const logRequest = (requestId: string, message: string, details?: Record<string,
   console.log(`[data-api] ${message}`, payload)
 }
 
+/** creation_* / lab_items use user_id (Tailscale identity text) and project_id scoping — not user_key */
+const CREATION_PROJECT_SCOPED_TABLES = new Set([
+  'creation_assets',
+  'creation_scene_state',
+  'lab_items',
+])
+
+async function getCreationProjectIdsForUser(userKey: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('creation_projects')
+    .select('id')
+    .eq('user_id', userKey)
+  if (error) {
+    console.error('[data-api] getCreationProjectIdsForUser:', error)
+    return []
+  }
+  return (data ?? []).map((r: { id: string }) => r.id)
+}
+
+async function userOwnsCreationProject(userKey: string, projectId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from('creation_projects')
+    .select('id')
+    .eq('id', projectId)
+    .eq('user_id', userKey)
+    .maybeSingle()
+  return !!data
+}
+
 Deno.serve(async (req) => {
   const requestId = crypto.randomUUID()
   const url = new URL(req.url)
@@ -280,7 +309,8 @@ Deno.serve(async (req) => {
       case 'list':
       case 'select': {
         let query = supabase.from(table).select('*')
-        
+        let scopedProjectFilter: string | undefined
+
         // Check if this table uses parent references instead of direct user_key
         const parentRef = PARENT_REF_TABLES[table]
         if (parentRef) {
@@ -298,6 +328,25 @@ Deno.serve(async (req) => {
             break
           }
           query = query.in(parentRef.foreignKey, parentIds)
+        } else if (table === 'creation_projects') {
+          query = query.eq('user_id', userKey)
+        } else if (CREATION_PROJECT_SCOPED_TABLES.has(table)) {
+          const projectIds = await getCreationProjectIdsForUser(userKey)
+          if (projectIds.length === 0) {
+            result = { data: [], error: null }
+            break
+          }
+          scopedProjectFilter =
+            filters && typeof filters.project_id === 'string' ? (filters.project_id as string) : undefined
+          if (scopedProjectFilter) {
+            if (!projectIds.includes(scopedProjectFilter)) {
+              result = { data: [], error: null }
+              break
+            }
+            query = query.eq('project_id', scopedProjectFilter)
+          } else {
+            query = query.in('project_id', projectIds)
+          }
         } else {
           // Apply user_key filter automatically (TEXT column, not UUID)
           query = query.eq(USER_KEY_COLUMN, userKey)
@@ -306,12 +355,16 @@ Deno.serve(async (req) => {
         // Apply additional filters
         if (filters) {
           for (const [key, value] of Object.entries(filters)) {
-            if (key !== USER_KEY_COLUMN && key !== 'user_id') { // Prevent user identity override
-              if (value === null) {
-                query = query.is(key, null)
-              } else {
-                query = query.eq(key, value as string)
-              }
+            if (key === USER_KEY_COLUMN || key === 'user_id') {
+              continue
+            }
+            if (CREATION_PROJECT_SCOPED_TABLES.has(table) && key === 'project_id' && scopedProjectFilter) {
+              continue
+            }
+            if (value === null) {
+              query = query.is(key, null)
+            } else {
+              query = query.eq(key, value as string)
             }
           }
         }
@@ -348,9 +401,26 @@ Deno.serve(async (req) => {
             requestId,
           })
         }
-        
-        // Inject user_key automatically (TEXT) and encrypt sensitive fields
-        const insertData = await encryptSensitiveFields(table, { ...data, [USER_KEY_COLUMN]: userKey })
+
+        let insertPayload: Record<string, unknown> = { ...data, [USER_KEY_COLUMN]: userKey }
+
+        if (table === 'creation_projects') {
+          const d = data as Record<string, unknown>
+          insertPayload = {
+            ...d,
+            user_id: typeof d.user_id === 'string' ? d.user_id : userKey,
+          }
+          delete insertPayload[USER_KEY_COLUMN]
+        } else if (CREATION_PROJECT_SCOPED_TABLES.has(table)) {
+          const projectId = (data as Record<string, unknown>).project_id as string | undefined
+          if (!projectId || !(await userOwnsCreationProject(userKey, projectId))) {
+            return jsonError(req, 403, 'forbidden', 'Invalid or inaccessible project', { requestId })
+          }
+          insertPayload = { ...data }
+          delete insertPayload[USER_KEY_COLUMN]
+        }
+
+        const insertData = await encryptSensitiveFields(table, insertPayload)
         
         const insertResult = await supabase
           .from(table)
@@ -381,14 +451,38 @@ Deno.serve(async (req) => {
         
         // Encrypt sensitive fields before update
         const updateData = await encryptSensitiveFields(table, data)
-        
-        const updateResult = await supabase
-          .from(table)
-          .update(updateData)
-          .eq('id', id)
-          .eq(USER_KEY_COLUMN, userKey) // Ensure user owns the record (using TEXT user_key)
-          .select()
-          .single()
+
+        let updateResult: {
+          data: Record<string, unknown> | null
+          error: unknown
+        }
+
+        if (table === 'creation_projects') {
+          updateResult = await supabase
+            .from(table)
+            .update(updateData)
+            .eq('id', id)
+            .eq('user_id', userKey)
+            .select()
+            .single()
+        } else if (CREATION_PROJECT_SCOPED_TABLES.has(table)) {
+          const projectIds = await getCreationProjectIdsForUser(userKey)
+          updateResult = await supabase
+            .from(table)
+            .update(updateData)
+            .eq('id', id)
+            .in('project_id', projectIds)
+            .select()
+            .single()
+        } else {
+          updateResult = await supabase
+            .from(table)
+            .update(updateData)
+            .eq('id', id)
+            .eq(USER_KEY_COLUMN, userKey)
+            .select()
+            .single()
+        }
         
         // Decrypt before returning
         result = {
@@ -407,11 +501,14 @@ Deno.serve(async (req) => {
           return jsonError(req, 422, 'missing_fields', 'ID is required for delete', { requestId })
         }
         
-        result = await supabase
-          .from(table)
-          .delete()
-          .eq('id', id)
-          .eq(USER_KEY_COLUMN, userKey) // Ensure user owns the record (using TEXT user_key)
+        if (table === 'creation_projects') {
+          result = await supabase.from(table).delete().eq('id', id).eq('user_id', userKey)
+        } else if (CREATION_PROJECT_SCOPED_TABLES.has(table)) {
+          const projectIds = await getCreationProjectIdsForUser(userKey)
+          result = await supabase.from(table).delete().eq('id', id).in('project_id', projectIds)
+        } else {
+          result = await supabase.from(table).delete().eq('id', id).eq(USER_KEY_COLUMN, userKey)
+        }
         break
       }
 
@@ -422,9 +519,25 @@ Deno.serve(async (req) => {
             requestId,
           })
         }
-        
-        // Inject user_key automatically (TEXT) and encrypt sensitive fields
-        const upsertData = await encryptSensitiveFields(table, { ...data, [USER_KEY_COLUMN]: userKey })
+
+        let upsertPayload: Record<string, unknown> = { ...data, [USER_KEY_COLUMN]: userKey }
+        if (table === 'creation_projects') {
+          const d = data as Record<string, unknown>
+          upsertPayload = {
+            ...d,
+            user_id: typeof d.user_id === 'string' ? d.user_id : userKey,
+          }
+          delete upsertPayload[USER_KEY_COLUMN]
+        } else if (CREATION_PROJECT_SCOPED_TABLES.has(table)) {
+          const projectId = (data as Record<string, unknown>).project_id as string | undefined
+          if (!projectId || !(await userOwnsCreationProject(userKey, projectId))) {
+            return jsonError(req, 403, 'forbidden', 'Invalid or inaccessible project', { requestId })
+          }
+          upsertPayload = { ...data }
+          delete upsertPayload[USER_KEY_COLUMN]
+        }
+
+        const upsertData = await encryptSensitiveFields(table, upsertPayload)
         
         const upsertResult = await supabase
           .from(table)
@@ -460,11 +573,20 @@ Deno.serve(async (req) => {
           })
         }
         
-        let query = supabase
-          .from(table)
-          .select('*')
-          .eq(USER_KEY_COLUMN, userKey) // Use TEXT user_key
-          .in(column, values)
+        let query = supabase.from(table).select('*').in(column, values)
+
+        if (table === 'creation_projects') {
+          query = query.eq('user_id', userKey)
+        } else if (CREATION_PROJECT_SCOPED_TABLES.has(table)) {
+          const projectIds = await getCreationProjectIdsForUser(userKey)
+          if (projectIds.length === 0) {
+            result = { data: [], error: null }
+            break
+          }
+          query = query.in('project_id', projectIds)
+        } else {
+          query = query.eq(USER_KEY_COLUMN, userKey)
+        }
         
         if (order) {
           query = query.order(order.column, { ascending: order.ascending ?? true })
@@ -475,19 +597,44 @@ Deno.serve(async (req) => {
       }
 
       case 'count': {
-        let query = supabase
-          .from(table)
-          .select('*', { count: 'exact', head: true })
-          .eq(USER_KEY_COLUMN, userKey) // Use TEXT user_key
+        let query = supabase.from(table).select('*', { count: 'exact', head: true })
+        let countScopedProject: string | undefined
+
+        if (table === 'creation_projects') {
+          query = query.eq('user_id', userKey)
+        } else if (CREATION_PROJECT_SCOPED_TABLES.has(table)) {
+          const projectIds = await getCreationProjectIdsForUser(userKey)
+          if (projectIds.length === 0) {
+            result = { data: { count: 0 }, error: null }
+            break
+          }
+          countScopedProject =
+            filters && typeof filters.project_id === 'string' ? (filters.project_id as string) : undefined
+          if (countScopedProject) {
+            if (!projectIds.includes(countScopedProject)) {
+              result = { data: { count: 0 }, error: null }
+              break
+            }
+            query = query.eq('project_id', countScopedProject)
+          } else {
+            query = query.in('project_id', projectIds)
+          }
+        } else {
+          query = query.eq(USER_KEY_COLUMN, userKey)
+        }
         
         if (filters) {
           for (const [key, value] of Object.entries(filters)) {
-            if (key !== USER_KEY_COLUMN && key !== 'user_id') {
-              if (value === null) {
-                query = query.is(key, null)
-              } else {
-                query = query.eq(key, value as string)
-              }
+            if (key === USER_KEY_COLUMN || key === 'user_id') {
+              continue
+            }
+            if (CREATION_PROJECT_SCOPED_TABLES.has(table) && key === 'project_id' && countScopedProject) {
+              continue
+            }
+            if (value === null) {
+              query = query.is(key, null)
+            } else {
+              query = query.eq(key, value as string)
             }
           }
         }
@@ -508,18 +655,25 @@ Deno.serve(async (req) => {
           })
         }
         
-        let query = supabase
-          .from(table)
-          .update(data)
-          .eq(USER_KEY_COLUMN, userKey) // Use TEXT user_key
+        let query = supabase.from(table).update(data)
+
+        if (table === 'creation_projects') {
+          query = query.eq('user_id', userKey)
+        } else if (CREATION_PROJECT_SCOPED_TABLES.has(table)) {
+          const projectIds = await getCreationProjectIdsForUser(userKey)
+          query = query.in('project_id', projectIds)
+        } else {
+          query = query.eq(USER_KEY_COLUMN, userKey)
+        }
         
         for (const [key, value] of Object.entries(filters)) {
-          if (key !== USER_KEY_COLUMN && key !== 'user_id') {
-            if (value === null) {
-              query = query.is(key, null)
-            } else {
-              query = query.eq(key, value as string)
-            }
+          if (key === USER_KEY_COLUMN || key === 'user_id') {
+            continue
+          }
+          if (value === null) {
+            query = query.is(key, null)
+          } else {
+            query = query.eq(key, value as string)
           }
         }
         

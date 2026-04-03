@@ -137,15 +137,15 @@ export const APP_MODULES: Module[] = [
   },
   {
     id: "creation",
-    title: "Create",
+    title: "Lab",
     icon: PenTool,
-    route: "/creation",
+    route: "/lab",
     color: "accent",
     size: "tertiary",
     priority: "outer",
-    actionLabel: "New project",
-    summary: "Design & content",
-    keywords: ["design", "drafts", "content", "studio"]
+    actionLabel: "Open workspace",
+    summary: "Projects, 3D, notes & media",
+    keywords: ["lab", "design", "3d", "projects", "studio", "mockups", "snippets"]
   },
   {
     id: "health",

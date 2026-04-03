@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
 import Settings from "./pages/Settings";
 import Unauthorized from "./pages/Unauthorized";
@@ -33,7 +33,9 @@ import TripDetail from "./pages/TripDetail";
 import Services from "./pages/modules/Services";
 import Health from "./pages/modules/Health";
 import Files from "./pages/modules/Files";
-import Creation from "./pages/modules/Creation";
+import Lab from "./pages/modules/Lab";
+import LabProject from "./pages/modules/LabProject";
+import LabModelEditor from "./pages/modules/LabModelEditor";
 import Automations from "./pages/modules/Automations";
 import Notifications from "./pages/modules/Notifications";
 import Notes from "./pages/Notes";
@@ -147,11 +149,22 @@ const App = () => (
                       <Health />
                     </ProtectedRoute>
                   } />
-                  <Route path="/creation" element={
+                  <Route path="/lab" element={
                     <ProtectedRoute>
-                      <Creation />
+                      <Lab />
                     </ProtectedRoute>
                   } />
+                  <Route path="/lab/project/:projectId" element={
+                    <ProtectedRoute>
+                      <LabProject />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/lab/project/:projectId/model" element={
+                    <ProtectedRoute>
+                      <LabModelEditor />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/creation" element={<Navigate to="/lab" replace />} />
                   <Route path="/automations" element={
                     <ProtectedRoute>
                       <Automations />

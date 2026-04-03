@@ -1,4 +1,4 @@
-// Types for the 3D Creation workspace
+// Types for Lab workspace (3D modeler + shared project model)
 
 export interface Vector3 {
   x: number;
@@ -42,10 +42,29 @@ export interface SceneState {
   cameraTarget?: Vector3;
 }
 
+export type LabProjectStatus = 'idea' | 'in_progress' | 'done';
+
+export type LabItemType = 'note' | 'design' | 'code' | 'automation' | 'media' | 'file';
+
 export interface CreationProject {
   id: string;
   user_id: string;
   name: string;
+  description: string;
+  status: LabProjectStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LabItem {
+  id: string;
+  project_id: string;
+  item_type: LabItemType;
+  title: string;
+  body: string | null;
+  file_path: string | null;
+  original_filename: string | null;
+  metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }

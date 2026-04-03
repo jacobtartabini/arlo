@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { dataApiHelpers } from '@/lib/data-api';
 import { supabase } from '@/integrations/supabase/client';
 import { useCreationHistory } from './useCreationHistory';
@@ -12,7 +12,8 @@ import type {
   SceneObject, 
   PrimitiveType,
   Vector3,
-  BooleanOperation
+  BooleanOperation,
+  LabProjectStatus,
 } from '@/types/creation';
 import { toast } from 'sonner';
 
@@ -31,8 +32,15 @@ const defaultSceneState: SceneState = {
   cameraTarget: { x: 0, y: 0, z: 0 }
 };
 
-export function useCreationProject() {
-  const [projects, setProjects] = useState<CreationProject[]>([]);
+function normalizeProject(row: CreationProject): CreationProject {
+  return {
+    ...row,
+    description: row.description ?? '',
+    status: (row.status as LabProjectStatus) || 'in_progress',
+  };
+}
+
+export function useCreationProject(projectId: string | undefined) {
   const [currentProject, setCurrentProject] = useState<CreationProject | null>(null);
   const [sceneState, setSceneState] = useState<SceneState>(defaultSceneState);
   const [assets, setAssets] = useState<CreationAsset[]>([]);
@@ -43,10 +51,18 @@ export function useCreationProject() {
   // History management
   const { pushState, undo: historyUndo, redo: historyRedo, canUndo, canRedo, reset: resetHistory } = useCreationHistory(defaultSceneState);
 
-  // Load projects on mount
   useEffect(() => {
-    loadProjects();
-  }, []);
+    if (!projectId) {
+      setIsLoading(false);
+      setCurrentProject(null);
+      setSceneState(defaultSceneState);
+      resetHistory(defaultSceneState);
+      setAssets([]);
+      setSelectedObjectIds([]);
+      return;
+    }
+    loadProject(projectId);
+  }, [projectId]);
 
   // Track scene changes for history
   const updateSceneWithHistory = useCallback((
@@ -76,24 +92,6 @@ export function useCreationProject() {
     }
   }, [historyRedo]);
 
-  const loadProjects = async () => {
-    try {
-      const response = await dataApiHelpers.select<CreationProject[]>('creation_projects', {
-        order: { column: 'updated_at', ascending: false }
-      });
-      if (response.data) {
-        setProjects(response.data);
-        if (response.data.length > 0) {
-          await loadProject(response.data[0].id);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to load projects:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const loadProject = async (projectId: string) => {
     try {
       setIsLoading(true);
@@ -103,7 +101,7 @@ export function useCreationProject() {
       });
       
       if (projectRes.data && projectRes.data.length > 0) {
-        setCurrentProject(projectRes.data[0]);
+        setCurrentProject(normalizeProject(projectRes.data[0]));
       }
 
       const assetsRes = await dataApiHelpers.select<CreationAsset[]>('creation_assets', {
@@ -134,6 +132,10 @@ export function useCreationProject() {
       }
 
       setSelectedObjectIds([]);
+
+      void dataApiHelpers.update('creation_projects', projectId, {
+        updated_at: new Date().toISOString(),
+      });
     } catch (error) {
       console.error('Failed to load project:', error);
       toast.error('Failed to load project');
@@ -142,22 +144,22 @@ export function useCreationProject() {
     }
   };
 
-  const createProject = async (name: string = 'Untitled Project') => {
+  const createProject = async (
+    name: string = 'Untitled Project',
+    opts?: { description?: string; status?: LabProjectStatus }
+  ) => {
     try {
       const response = await dataApiHelpers.insert<CreationProject>('creation_projects', {
         name,
+        description: opts?.description ?? '',
+        status: opts?.status ?? 'in_progress',
         user_id: getUserId()
       });
       
       if (response.data) {
-        setProjects(prev => [response.data as CreationProject, ...prev]);
-        setCurrentProject(response.data as CreationProject);
-        setSceneState(defaultSceneState);
-        resetHistory(defaultSceneState);
-        setAssets([]);
-        setSelectedObjectIds([]);
+        const p = normalizeProject(response.data as CreationProject);
         toast.success('Project created');
-        return response.data as CreationProject;
+        return p;
       }
     } catch (error) {
       console.error('Failed to create project:', error);
@@ -216,7 +218,6 @@ export function useCreationProject() {
     try {
       await dataApiHelpers.update('creation_projects', currentProject.id, { name });
       setCurrentProject(prev => prev ? { ...prev, name } : null);
-      setProjects(prev => prev.map(p => p.id === currentProject.id ? { ...p, name } : p));
     } catch (error) {
       console.error('Failed to update project name:', error);
     }
@@ -247,13 +248,13 @@ export function useCreationProject() {
 
   const importSTL = async (file: File) => {
     if (!currentProject) {
-      const project = await createProject('Untitled Project');
-      if (!project) return null;
+      toast.error('Open a project in Lab before importing');
+      return null;
     }
 
     try {
-      const projectId = currentProject!.id;
-      const filePath = `${getUserId()}/${projectId}/${Date.now()}_${file.name}`;
+      const activeProjectId = currentProject.id;
+      const filePath = `${getUserId()}/${activeProjectId}/${Date.now()}_${file.name}`;
 
       const { error: uploadError } = await supabase.storage
         .from('creation-assets')
@@ -262,7 +263,7 @@ export function useCreationProject() {
       if (uploadError) throw uploadError;
 
       const assetRes = await dataApiHelpers.insert<CreationAsset>('creation_assets', {
-        project_id: projectId,
+        project_id: activeProjectId,
         file_path: filePath,
         original_name: file.name
       });
@@ -570,8 +571,6 @@ export function useCreationProject() {
   const selectedObject = selectedObjects.length === 1 ? selectedObjects[0] : null;
 
   return {
-    // Project management
-    projects,
     currentProject,
     isLoading,
     isSaving,
