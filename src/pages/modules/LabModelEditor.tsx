@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams, Navigate } from "react-router-dom";
 import { useCreationProject } from "@/hooks/useCreationProject";
 import { CreationViewport } from "@/components/creation/CreationViewport";
 import { CreationToolbar } from "@/components/creation/CreationToolbar";
@@ -9,12 +9,20 @@ import { ExportDialog } from "@/components/creation/ExportDialog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Loader2, ArrowLeft } from "lucide-react";
-import type { TransformMode, ViewMode, CreationAsset, SnapSettings, MeasureTool } from "@/types/creation";
+import type {
+  TransformMode,
+  ViewMode,
+  CreationAsset,
+  SnapSettings,
+  MeasureTool,
+  Vector3,
+} from "@/types/creation";
 
-export default function Creation() {
+export default function LabModelEditor() {
   const navigate = useNavigate();
-  const [transformMode, setTransformMode] = useState<TransformMode>('translate');
-  const [viewMode, setViewMode] = useState<ViewMode>('solid');
+  const { projectId } = useParams<{ projectId: string }>();
+  const [transformMode, setTransformMode] = useState<TransformMode>("translate");
+  const [viewMode, setViewMode] = useState<ViewMode>("solid");
   const [showGrid, setShowGrid] = useState(true);
   const [showAxes, setShowAxes] = useState(true);
   const [gridSize, setGridSize] = useState<number>(1);
@@ -23,12 +31,12 @@ export default function Creation() {
     active: false,
     point1: null,
     point2: null,
-    distance: null
+    distance: null,
   });
   const [snapSettings, setSnapSettings] = useState<SnapSettings>({
     enabled: false,
     translateSnap: 1,
-    rotateSnap: 15
+    rotateSnap: 15,
   });
 
   const fitToSelectionRef = useRef<() => void>(() => {});
@@ -68,42 +76,40 @@ export default function Creation() {
     alignToOrigin,
     dropToGround,
     centerInScene,
-    performBoolean
-  } = useCreationProject();
+    performBoolean,
+  } = useCreationProject(projectId);
 
-  // Measure tool handlers
   const handleMeasurePoint = useCallback((point: { x: number; y: number; z: number }) => {
-    setMeasureTool(prev => {
+    setMeasureTool((prev) => {
       if (!prev.point1) {
         return { ...prev, point1: point, point2: null, distance: null };
-      } else if (!prev.point2) {
+      }
+      if (!prev.point2) {
         const dx = point.x - prev.point1.x;
         const dy = point.y - prev.point1.y;
         const dz = point.z - prev.point1.z;
-        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz) * 1000; // Convert to mm
+        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz) * 1000;
         return { ...prev, point2: point, distance };
-      } else {
-        // Reset and start new measurement
-        return { ...prev, point1: point, point2: null, distance: null };
       }
+      return { ...prev, point1: point, point2: null, distance: null };
     });
   }, []);
 
   const toggleMeasure = useCallback(() => {
-    setMeasureTool(prev => ({
+    setMeasureTool((prev) => ({
       active: !prev.active,
       point1: null,
       point2: null,
-      distance: null
+      distance: null,
     }));
   }, []);
 
   const clearMeasure = useCallback(() => {
-    setMeasureTool(prev => ({
+    setMeasureTool((prev) => ({
       ...prev,
       point1: null,
       point2: null,
-      distance: null
+      distance: null,
     }));
   }, []);
 
@@ -116,16 +122,14 @@ export default function Creation() {
   }, []);
 
   useEffect(() => {
-    document.title = "Arlo";
+    document.title = "Arlo · Lab 3D";
   }, []);
 
-  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      
-      // Undo/Redo
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+
+      if ((e.ctrlKey || e.metaKey) && e.key === "z") {
         e.preventDefault();
         if (e.shiftKey) {
           redo();
@@ -135,51 +139,53 @@ export default function Creation() {
         return;
       }
 
-      // Other shortcuts
       switch (e.key.toLowerCase()) {
-        case 'g':
-          setTransformMode('translate');
+        case "g":
+          setTransformMode("translate");
           break;
-        case 'r':
-          setTransformMode('rotate');
+        case "r":
+          setTransformMode("rotate");
           break;
-        case 's':
+        case "s":
           if (!e.ctrlKey && !e.metaKey) {
-            setTransformMode('scale');
+            setTransformMode("scale");
           } else if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
             saveProject();
           }
           break;
-        case 'delete':
-        case 'backspace':
+        case "delete":
+        case "backspace":
           deleteSelectedObjects();
           break;
-        case 'd':
+        case "d":
           if ((e.ctrlKey || e.metaKey) && selectedObjectIds.length === 1) {
             e.preventDefault();
             duplicateObject(selectedObjectIds[0]);
           }
           break;
-        case 'escape':
+        case "escape":
           clearSelection();
           break;
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedObjectIds, deleteSelectedObjects, duplicateObject, undo, redo, saveProject, clearSelection]);
 
-  const getAssetFilePath = useCallback((assetId: string): string | null => {
-    const asset = assets.find((a: CreationAsset) => a.id === assetId);
-    return asset?.file_path || null;
-  }, [assets]);
+  const getAssetFilePath = useCallback(
+    (assetId: string): string | null => {
+      const asset = assets.find((a: CreationAsset) => a.id === assetId);
+      return asset?.file_path || null;
+    },
+    [assets]
+  );
 
-  const handleTransformEnd = (id: string, position: any, rotation: any, scale: any) => {
-    updateObjectTransform(id, 'position', position);
-    updateObjectTransform(id, 'rotation', rotation);
-    updateObjectTransform(id, 'scale', scale);
+  const handleTransformEnd = (id: string, position: unknown, rotation: unknown, scale: unknown) => {
+    updateObjectTransform(id, "position", position as Vector3);
+    updateObjectTransform(id, "rotation", rotation as Vector3);
+    updateObjectTransform(id, "scale", scale as Vector3);
     commitTransform(id);
   };
 
@@ -191,6 +197,17 @@ export default function Creation() {
     }
   };
 
+  const handleNewProject = async () => {
+    const p = await createProject("Untitled project");
+    if (p) {
+      navigate(`/lab/project/${p.id}/model`);
+    }
+  };
+
+  if (!projectId) {
+    return <Navigate to="/lab" replace />;
+  }
+
   if (isLoading) {
     return (
       <div className="h-screen flex items-center justify-center">
@@ -199,21 +216,24 @@ export default function Creation() {
     );
   }
 
+  if (!currentProject) {
+    return <Navigate to="/lab" replace />;
+  }
+
   return (
     <div className="h-screen flex flex-col bg-background">
-      {/* Top Bar */}
       <div className="flex items-center gap-4 px-4 py-2 border-b border-border bg-background/95 backdrop-blur-sm">
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => navigate("/")}
+          onClick={() => navigate(`/lab/project/${projectId}`)}
           className="h-8 w-8 shrink-0"
-          title="Back to dashboard"
+          title="Back to project"
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <Input
-          value={currentProject?.name || 'Untitled Project'}
+          value={currentProject.name || "Untitled Project"}
           onChange={(e) => updateProjectName(e.target.value)}
           className="w-48 h-8 text-sm font-medium bg-transparent border-none focus-visible:ring-1"
         />
@@ -234,7 +254,7 @@ export default function Creation() {
           onTransformModeChange={setTransformMode}
           onViewModeChange={setViewMode}
           onSave={saveProject}
-          onNewProject={() => createProject()}
+          onNewProject={handleNewProject}
           onExport={() => setExportDialogOpen(true)}
           onUndo={undo}
           onRedo={redo}
@@ -253,9 +273,7 @@ export default function Creation() {
         />
       </div>
 
-      {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel - Object List */}
         <div className="w-64 border-r border-border bg-card/50">
           <ObjectListPanel
             objects={sceneState.objects}
@@ -270,7 +288,6 @@ export default function Creation() {
           />
         </div>
 
-        {/* Center - 3D Viewport */}
         <div className="flex-1">
           <CreationViewport
             objects={sceneState.objects}
@@ -291,27 +308,38 @@ export default function Creation() {
           />
         </div>
 
-        {/* Right Panel - Properties */}
         <div className="w-72 border-l border-border bg-card/50">
           <PropertiesPanel
             selectedObject={selectedObject}
             selectedCount={selectedObjectIds.length}
-            onUpdatePosition={(v) => selectedObjectIds.length === 1 && updateObjectTransform(selectedObjectIds[0], 'position', v)}
-            onUpdateRotation={(v) => selectedObjectIds.length === 1 && updateObjectTransform(selectedObjectIds[0], 'rotation', v)}
-            onUpdateScale={(v) => selectedObjectIds.length === 1 && updateObjectTransform(selectedObjectIds[0], 'scale', v)}
-            onUpdateColor={(c) => selectedObjectIds.length === 1 && updateObject(selectedObjectIds[0], { color: c })}
-            onCommitTransform={() => selectedObjectIds.length === 1 && commitTransform(selectedObjectIds[0])}
+            onUpdatePosition={(v) =>
+              selectedObjectIds.length === 1 &&
+              updateObjectTransform(selectedObjectIds[0], "position", v)
+            }
+            onUpdateRotation={(v) =>
+              selectedObjectIds.length === 1 &&
+              updateObjectTransform(selectedObjectIds[0], "rotation", v)
+            }
+            onUpdateScale={(v) =>
+              selectedObjectIds.length === 1 &&
+              updateObjectTransform(selectedObjectIds[0], "scale", v)
+            }
+            onUpdateColor={(c) =>
+              selectedObjectIds.length === 1 && updateObject(selectedObjectIds[0], { color: c })
+            }
+            onCommitTransform={() =>
+              selectedObjectIds.length === 1 && commitTransform(selectedObjectIds[0])
+            }
           />
         </div>
       </div>
 
-      {/* Export Dialog */}
       <ExportDialog
         open={exportDialogOpen}
         onOpenChange={setExportDialogOpen}
         objects={sceneState.objects}
         selectedObjects={selectedObjects}
-        projectName={currentProject?.name || 'export'}
+        projectName={currentProject.name || "export"}
       />
     </div>
   );

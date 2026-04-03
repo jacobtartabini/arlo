@@ -952,14 +952,14 @@ function FilesMiniContent({ size, data }: { size: ModuleSize; data: MiniContentP
   );
 }
 
-// Creation - compact design
+// Lab - compact design
 function CreationMiniContent({ size }: { size: ModuleSize }) {
   const isTertiary = size === "tertiary";
 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <span className="text-[10px] text-muted-foreground/80">3D modeling workspace</span>
+        <span className="text-[10px] text-muted-foreground/80">Projects & 3D workspace</span>
       </div>
       {!isTertiary && (
         <div className="flex gap-1.5">
