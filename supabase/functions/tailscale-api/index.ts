@@ -82,8 +82,8 @@ Deno.serve(async (req) => {
     // userId is derived from JWT.sub - no ARLO_USER_ID used
     console.log('[tailscale-api] Authenticated user (from JWT.sub):', authResult.userId)
 
-    const TAILSCALE_API_KEY = Deno.env.get('TAILSCALE_API_KEY')
-    const TAILSCALE_TAILNET = Deno.env.get('TAILSCALE_TAILNET')
+    const TAILSCALE_API_KEY = Deno.env.get('TAILSCALE_API_KEY')?.trim()
+    const TAILSCALE_TAILNET = Deno.env.get('TAILSCALE_TAILNET')?.trim()
 
     if (!TAILSCALE_API_KEY) {
       return jsonError(req, 500, 'config_missing', 'Tailscale API key not configured', {
@@ -113,7 +113,8 @@ Deno.serve(async (req) => {
       return jsonError(req, 422, 'missing_fields', 'Action is required', { requestId })
     }
 
-    const baseUrl = `https://api.tailscale.com/api/v2/tailnet/${TAILSCALE_TAILNET}`
+    // Path-encode tailnet (required for email-style names and special characters)
+    const baseUrl = `https://api.tailscale.com/api/v2/tailnet/${encodeURIComponent(TAILSCALE_TAILNET)}`
     const headers = {
       'Authorization': `Bearer ${TAILSCALE_API_KEY}`,
       'Content-Type': 'application/json',
@@ -126,12 +127,7 @@ Deno.serve(async (req) => {
       if (!response.ok) {
         const errorPayload = await readResponseBody(response)
         console.error('[tailscale-api] Tailscale API error:', response.status, errorPayload)
-        return jsonError(req, 502, 'upstream_error', 'Tailscale API error', {
-          requestId,
-          action,
-          upstreamStatus: response.status,
-          upstreamBody: errorPayload,
-        })
+        return tailscaleUpstreamJsonError(req, action, response.status, errorPayload, requestId)
       }
 
       const data = await response.json()
@@ -172,20 +168,9 @@ Deno.serve(async (req) => {
       if (!response.ok) {
         const errorPayload = await readResponseBody(response)
         console.error('[tailscale-api] Tailscale audit API error:', response.status, errorPayload)
-        return jsonError(
-          req,
-          502,
-          'upstream_error',
-          response.status === 403 || response.status === 404
-            ? 'Audit logs unavailable on current Tailscale plan.'
-            : 'Tailscale API error',
-          {
-            requestId,
-            action,
-            upstreamStatus: response.status,
-            upstreamBody: errorPayload,
-          }
-        )
+        return tailscaleUpstreamJsonError(req, action, response.status, errorPayload, requestId, {
+          auditLogs: true,
+        })
       }
 
       // Parse JSONL response (one JSON object per line)
@@ -230,12 +215,7 @@ Deno.serve(async (req) => {
       if (!response.ok) {
         const errorPayload = await readResponseBody(response)
         console.error('[tailscale-api] Tailscale keys API error:', response.status, errorPayload)
-        return jsonError(req, 502, 'upstream_error', 'Tailscale API error', {
-          requestId,
-          action,
-          upstreamStatus: response.status,
-          upstreamBody: errorPayload,
-        })
+        return tailscaleUpstreamJsonError(req, action, response.status, errorPayload, requestId)
       }
 
       const data = await response.json()
@@ -284,6 +264,57 @@ Deno.serve(async (req) => {
     })
   }
 })
+
+function tailscaleUpstreamJsonError(
+  req: Request,
+  action: string,
+  upstreamStatus: number,
+  errorPayload: unknown,
+  requestId: string,
+  options?: { auditLogs?: boolean }
+): Response {
+  const message = tailscaleUpstreamMessage(upstreamStatus, options)
+  return jsonError(req, 502, 'upstream_error', message, {
+    requestId,
+    action,
+    upstreamStatus,
+    upstreamBody: errorPayload,
+  })
+}
+
+function tailscaleUpstreamMessage(
+  upstreamStatus: number,
+  options?: { auditLogs?: boolean }
+): string {
+  if (upstreamStatus === 401) {
+    return (
+      'Tailscale API key is invalid or expired. Create a new API access token in the Tailscale admin console ' +
+      '(Settings → Keys) and set it as TAILSCALE_API_KEY for this Edge Function.'
+    )
+  }
+  if (upstreamStatus === 404) {
+    if (options?.auditLogs) {
+      return (
+        'Audit logs were not found for this tailnet, or the feature is not available. ' +
+        'Confirm TAILSCALE_TAILNET matches your tailnet and that your plan includes audit logging.'
+      )
+    }
+    return (
+      'Tailnet not found. Set TAILSCALE_TAILNET to your tailnet name as shown in the Tailscale admin console ' +
+      '(e.g. example.com or org-name.github).'
+    )
+  }
+  if (upstreamStatus === 403) {
+    if (options?.auditLogs) {
+      return 'Audit logs unavailable on current Tailscale plan.'
+    }
+    return 'Tailscale API access denied. Ensure the API key was created with access to this tailnet.'
+  }
+  if (upstreamStatus >= 500) {
+    return 'Tailscale API is temporarily unavailable. Try again in a few minutes.'
+  }
+  return `Tailscale API error (${upstreamStatus})`
+}
 
 function mapEventType(eventType: string): 'login' | 'logout' | 'failed' | 'refresh' {
   if (eventType.includes('login') || eventType.includes('auth')) return 'login'
