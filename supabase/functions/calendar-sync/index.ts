@@ -597,9 +597,9 @@ async function pushEventToGoogle(
 
     const data = await response.json();
     return { success: true, externalId: `primary::${data.id}` };
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("[calendar-sync] Push event error:", error);
-    return { success: false, error: error.message };
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
 
