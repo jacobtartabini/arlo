@@ -5,9 +5,7 @@ import {
   clearArloToken,
   isAuthenticated as checkIsAuthenticated,
   getIdentity,
-  redirectToAegisAuth,
   clearAuthRedirectAttempts,
-  shouldBypassAuthRedirect,
   ARLO_AUTH_INVALIDATED_EVENT,
 } from '@/lib/arloAuth';
 import { isPublicBookingDomain } from '@/lib/domain-utils';
