@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useRef } from 'react';
-import { GoogleMap, Marker, Polyline, TrafficLayer } from '@react-google-maps/api';
+import { GoogleMap, Polyline, TrafficLayer } from '@react-google-maps/api';
 import { useMapContext } from './MapProvider';
+import { AdvancedMapMarker } from './AdvancedMapMarker';
 import type { LatLng, Place, MapPin, RouteOption } from '@/types/maps';
 
 function decodePolyline(encoded: string): LatLng[] {
@@ -221,37 +222,41 @@ export function MapCanvas({
       )}
 
       {userLocation && (
-        <Marker
+        <AdvancedMapMarker
+          map={mapRef.current}
           position={userLocation}
-          icon={{
-            path: google.maps.SymbolPath.CIRCLE,
-            scale: 7,
-            fillColor: '#2563eb',
-            fillOpacity: 1,
-            strokeColor: '#ffffff',
-            strokeWeight: 3,
-          }}
           zIndex={100}
+          content={
+            <svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="10" cy="10" r="7" fill="#2563eb" stroke="white" strokeWidth="3" />
+            </svg>
+          }
         />
       )}
 
       {places.map((place) => {
         const isSelected = place.placeId === selectedPlaceId;
+        const size = isSelected ? 24 : 18;
         return (
-          <Marker
+          <AdvancedMapMarker
             key={place.placeId}
+            map={mapRef.current}
             position={place.location}
             onClick={() => onPlaceClick(place)}
-            icon={{
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: isSelected ? 10 : 7,
-              fillColor: isSelected ? '#ef4444' : '#38bdf8',
-              fillOpacity: 1,
-              strokeColor: '#ffffff',
-              strokeWeight: 2,
-            }}
             zIndex={isSelected ? 50 : 20}
             title={place.name}
+            content={
+              <svg width={size} height={size} viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                <circle
+                  cx="10"
+                  cy="10"
+                  r="8"
+                  fill={isSelected ? '#ef4444' : '#38bdf8'}
+                  stroke="white"
+                  strokeWidth="2"
+                />
+              </svg>
+            }
           />
         );
       })}
@@ -259,25 +264,32 @@ export function MapCanvas({
       {pins.map((pin) => {
         const isSelected = pin.id === selectedPinId;
         return (
-          <Marker
+          <AdvancedMapMarker
             key={pin.id}
+            map={mapRef.current}
             position={pin.location}
+            anchor="bottom-center"
             draggable
-            onDragEnd={(event) => {
-              if (!event.latLng || !onPinDrag) return;
-              onPinDrag(pin, { lat: event.latLng.lat(), lng: event.latLng.lng() });
-            }}
+            onDragEnd={(pos) => onPinDrag?.(pin, pos)}
             onClick={() => onPinClick(pin)}
-            icon={{
-              path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-              scale: isSelected ? 6 : 5,
-              fillColor: isSelected ? '#f59e0b' : '#f97316',
-              fillOpacity: 1,
-              strokeColor: '#ffffff',
-              strokeWeight: 2,
-            }}
             zIndex={isSelected ? 60 : 30}
             title={pin.title}
+            content={
+              <svg
+                width={isSelected ? 28 : 24}
+                height={isSelected ? 36 : 32}
+                viewBox="0 0 24 32"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M12 0C6.48 0 2 4.48 2 10c0 7.5 10 22 10 22s10-14.5 10-22C22 4.48 17.52 0 12 0z"
+                  fill={isSelected ? '#f59e0b' : '#f97316'}
+                  stroke="white"
+                  strokeWidth="1.5"
+                />
+                <circle cx="12" cy="10" r="3.5" fill="white" opacity="0.8" />
+              </svg>
+            }
           />
         );
       })}
