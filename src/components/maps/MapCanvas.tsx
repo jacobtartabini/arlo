@@ -47,6 +47,8 @@ interface MapCanvasProps {
   onMapClick?: (location: LatLng) => void;
   onPinDrag?: (pin: MapPin, location: LatLng) => void;
   activeRoute?: RouteOption | null;
+  isNavigating?: boolean;
+  onUserPan?: () => void;
 }
 
 const containerStyle = {
@@ -123,6 +125,8 @@ export function MapCanvas({
   onMapClick,
   onPinDrag,
   activeRoute,
+  isNavigating,
+  onUserPan,
 }: MapCanvasProps) {
   const { isLoaded, loadError } = useMapContext();
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -138,7 +142,8 @@ export function MapCanvas({
     mapTypeId: mapType,
     styles: mapStyle === 'dark' ? darkMapStyles : lightMapStyles,
     draggableCursor: dropPinMode ? 'crosshair' : undefined,
-  }), [mapType, mapStyle, dropPinMode]);
+    tilt: isNavigating ? 45 : 0,
+  }), [mapType, mapStyle, dropPinMode, isNavigating]);
 
   const handleLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
@@ -195,6 +200,7 @@ export function MapCanvas({
       onLoad={handleLoad}
       onIdle={handleIdle}
       onClick={handleMapClick}
+      onDragEnd={() => onUserPan?.()}
     >
       {showTraffic && <TrafficLayer />}
 
