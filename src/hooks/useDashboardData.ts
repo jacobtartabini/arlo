@@ -327,8 +327,6 @@ export function useDashboardData() {
         : 0;
 
       // Read localStorage health data (mirrors Health page)
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const yesterdayStr = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
       const safeLocalStorage = <T>(key: string, fallback: T): T => {
         try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
       };
