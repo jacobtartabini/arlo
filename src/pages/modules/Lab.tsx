@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, FlaskConical, Plus } from "lucide-react";
+import { ArrowLeft, FlaskConical, Loader2, Plus } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -64,6 +65,7 @@ export default function Lab() {
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newStatus, setNewStatus] = useState<LabProjectStatus>("in_progress");
+  const [submitting, setSubmitting] = useState(false);
 
   const [itemProjectId, setItemProjectId] = useState<string>("");
   const [itemType, setItemType] = useState<LabItemType>("note");
@@ -93,13 +95,24 @@ export default function Lab() {
   };
 
   const submitNewProject = async () => {
-    const p = await createProject(newName, {
-      description: newDescription,
-      status: newStatus,
-    });
-    if (p) {
-      setStartOpen(false);
-      navigate(`/lab/project/${p.id}`);
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      const p = await createProject(newName, {
+        description: newDescription,
+        status: newStatus,
+      });
+      if (p) {
+        setStartOpen(false);
+        navigate(`/lab/project/${p.id}`);
+      } else {
+        toast.error("Failed to create project. Please try again.");
+      }
+    } catch (err) {
+      console.error("Failed to create project:", err);
+      toast.error("Failed to create project. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -122,32 +135,41 @@ export default function Lab() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border px-4 py-3 flex items-center gap-3">
-        <Button variant="ghost" size="icon" className="shrink-0" onClick={() => navigate("/")}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex items-center gap-2 min-w-0">
-          <FlaskConical className="h-5 w-5 text-primary shrink-0" />
-          <div className="min-w-0">
-            <h1 className="text-lg font-semibold leading-tight">Lab</h1>
-            <p className="text-xs text-muted-foreground truncate">
-              Lightweight workspace for models, design, notes, code, and media
-            </p>
+      <div className="container mx-auto px-4 py-8 max-w-7xl space-y-8">
+        {/* Header */}
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-4">
+            <button
+              type="button"
+              onClick={() => navigate("/")}
+              className="inline-flex items-center gap-1.5 mt-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <div>
+              <div className="flex items-center gap-2">
+                <FlaskConical className="h-5 w-5 text-primary" />
+                <h1 className="text-2xl font-semibold text-foreground tracking-tight">Lab</h1>
+              </div>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Lightweight workspace for models, design, notes, code, and media
+              </p>
+            </div>
           </div>
-        </div>
-        <div className="ml-auto">
-          <Button size="sm" onClick={openStart}>
+          <Button size="sm" onClick={openStart} className="sm:mt-0 self-start sm:self-auto">
             <Plus className="h-4 w-4 mr-1.5" />
             Start something new
           </Button>
-        </div>
-      </header>
+        </header>
 
-      <main className="max-w-3xl mx-auto px-4 py-8 space-y-10">
+        {/* Content */}
         {loading ? (
-          <p className="text-sm text-muted-foreground">Loading projects…</p>
+          <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading projects…
+          </div>
         ) : (
-          <>
+          <div className="space-y-10">
             <section className="space-y-3">
               <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
                 Active projects
@@ -155,7 +177,7 @@ export default function Lab() {
               {activeProjects.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No projects in progress.</p>
               ) : (
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {activeProjects.map((p) => (
                     <ProjectCard
                       key={p.id}
@@ -174,7 +196,7 @@ export default function Lab() {
               {recentProjects.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Nothing here yet — start a project.</p>
               ) : (
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {recentProjects.map((p) => (
                     <ProjectCard
                       key={p.id}
@@ -193,7 +215,7 @@ export default function Lab() {
               {ideaProjects.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No ideas on the shelf.</p>
               ) : (
-                <div className="grid gap-2 sm:grid-cols-2">
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {ideaProjects.map((p) => (
                     <ProjectCard
                       key={p.id}
@@ -204,9 +226,9 @@ export default function Lab() {
                 </div>
               )}
             </section>
-          </>
+          </div>
         )}
-      </main>
+      </div>
 
       <Dialog open={startOpen} onOpenChange={setStartOpen}>
         <DialogContent className="sm:max-w-md">
@@ -295,7 +317,8 @@ export default function Lab() {
 
           <DialogFooter className="gap-2 sm:gap-0">
             {mode === "project" ? (
-              <Button type="button" onClick={submitNewProject} disabled={!newName.trim()}>
+              <Button type="button" onClick={submitNewProject} disabled={!newName.trim() || submitting}>
+                {submitting && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
                 Create project
               </Button>
             ) : itemType === "media" || itemType === "file" ? null : (
