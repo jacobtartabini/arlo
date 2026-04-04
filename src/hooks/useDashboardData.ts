@@ -11,6 +11,7 @@ import { isToday, parseISO, startOfDay, isThisWeek } from "date-fns";
 import { toast } from "@/hooks/use-toast";
 import { invokeEdgeFunction } from "@/lib/edge-functions";
 import { supabase } from "@/integrations/supabase/client";
+import { getCachedDriveAccounts } from "@/hooks/useFilesPersistence";
 
 interface DashboardData {
   // Productivity/Today
@@ -131,7 +132,29 @@ function computeDashboardHealthScore(p: {
 }
 
 export function useDashboardData() {
-  const [data, setData] = useState<DashboardData>(DEFAULT_DATA);
+  const [data, setData] = useState<DashboardData>(() => {
+    // Pre-populate Drive stats from localStorage cache so the Files module
+    // tile shows the correct account count before the DB query resolves.
+    const cached = getCachedDriveAccounts();
+    const enabled = cached.filter((a) => a.enabled !== false);
+    const usedBytes = enabled.some((a) => typeof a.storage_quota_used === "number")
+      ? enabled.reduce((s, a) => s + (a.storage_quota_used || 0), 0)
+      : null;
+    const totalBytes = enabled.some((a) => typeof a.storage_quota_total === "number")
+      ? enabled.reduce((s, a) => s + (a.storage_quota_total || 0), 0)
+      : null;
+    const usedPercent =
+      usedBytes !== null && totalBytes !== null && totalBytes > 0
+        ? Math.round((usedBytes / totalBytes) * 100)
+        : null;
+    return {
+      ...DEFAULT_DATA,
+      driveAccountsConnected: enabled.length,
+      driveStorageUsedBytes: usedBytes,
+      driveStorageTotalBytes: totalBytes,
+      driveStorageUsedPercent: usedPercent,
+    };
+  });
   const { isAuthenticated } = useAuth();
   const { createTask, toggleTask } = useTasksPersistence();
   const refreshInFlightRef = useRef(false);
