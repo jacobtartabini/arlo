@@ -87,10 +87,13 @@ export interface RouteStep {
 export interface RouteOption {
   id: string;
   summary: string;
-  distance: string;
-  duration: string;
-  durationInTraffic?: string;
-  polyline: string;
+  distance: number;           // meters
+  distanceText: string;
+  duration: number;           // seconds
+  durationText: string;
+  durationInTraffic?: number; // seconds
+  durationInTrafficText?: string;
+  polyline: string;           // encoded polyline string
   steps: RouteStep[];
   warnings?: string[];
   viaWaypoints?: LatLng[];

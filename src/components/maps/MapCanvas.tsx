@@ -1,7 +1,30 @@
 import React, { useCallback, useMemo, useRef } from 'react';
-import { GoogleMap, Marker, TrafficLayer } from '@react-google-maps/api';
+import { GoogleMap, Marker, Polyline, TrafficLayer } from '@react-google-maps/api';
 import { useMapContext } from './MapProvider';
-import type { LatLng, Place, MapPin } from '@/types/maps';
+import type { LatLng, Place, MapPin, RouteOption } from '@/types/maps';
+
+function decodePolyline(encoded: string): LatLng[] {
+  const points: LatLng[] = [];
+  let index = 0, lat = 0, lng = 0;
+  while (index < encoded.length) {
+    let shift = 0, result = 0, byte: number;
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+    lat += result & 1 ? ~(result >> 1) : result >> 1;
+    shift = 0; result = 0;
+    do {
+      byte = encoded.charCodeAt(index++) - 63;
+      result |= (byte & 0x1f) << shift;
+      shift += 5;
+    } while (byte >= 0x20);
+    lng += result & 1 ? ~(result >> 1) : result >> 1;
+    points.push({ lat: lat / 1e5, lng: lng / 1e5 });
+  }
+  return points;
+}
 
 interface MapCanvasProps {
   center: LatLng;
@@ -22,6 +45,7 @@ interface MapCanvasProps {
   onPinClick: (pin: MapPin) => void;
   onMapClick?: (location: LatLng) => void;
   onPinDrag?: (pin: MapPin, location: LatLng) => void;
+  activeRoute?: RouteOption | null;
 }
 
 const containerStyle = {
@@ -97,6 +121,7 @@ export function MapCanvas({
   onPinClick,
   onMapClick,
   onPinDrag,
+  activeRoute,
 }: MapCanvasProps) {
   const { isLoaded, loadError } = useMapContext();
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -171,6 +196,29 @@ export function MapCanvas({
       onClick={handleMapClick}
     >
       {showTraffic && <TrafficLayer />}
+
+      {activeRoute && (
+        <>
+          <Polyline
+            path={decodePolyline(activeRoute.polyline)}
+            options={{
+              strokeColor: '#1a73e8',
+              strokeOpacity: 0.9,
+              strokeWeight: 6,
+              zIndex: 10,
+            }}
+          />
+          <Polyline
+            path={decodePolyline(activeRoute.polyline)}
+            options={{
+              strokeColor: '#ffffff',
+              strokeOpacity: 0.4,
+              strokeWeight: 10,
+              zIndex: 9,
+            }}
+          />
+        </>
+      )}
 
       {userLocation && (
         <Marker
