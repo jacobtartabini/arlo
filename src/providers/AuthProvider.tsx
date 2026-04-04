@@ -6,6 +6,7 @@ import {
   isAuthenticated as checkIsAuthenticated,
   getIdentity,
   clearAuthRedirectAttempts,
+  shouldBypassAuthRedirect,
   ARLO_AUTH_INVALIDATED_EVENT,
 } from '@/lib/arloAuth';
 import { isPublicBookingDomain } from '@/lib/domain-utils';
