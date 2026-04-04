@@ -1,5 +1,5 @@
 import { invokeEdgeFunction } from '@/lib/edge-functions';
-import type { LatLng, Place } from '@/types/maps';
+import type { LatLng, Place, RouteOption } from '@/types/maps';
 
 export interface PlaceSearchResult extends Place {
   distanceMeters?: number;
@@ -15,6 +15,10 @@ interface PlaceDetailsResponse {
 
 interface ReverseGeocodeResponse {
   address: string | null;
+}
+
+interface DirectionsResponse {
+  routes: RouteOption[];
 }
 
 export async function searchPlaces(query: string, center?: LatLng, radiusMeters = 24000) {
@@ -57,4 +61,25 @@ export async function reverseGeocode(location: LatLng) {
     throw new Error(result.message || 'Reverse geocode failed');
   }
   return result.data?.address ?? null;
+}
+
+export async function getDirections(
+  origin: LatLng | string,
+  destination: LatLng | string,
+  options: {
+    travelMode?: 'DRIVING' | 'WALKING' | 'BICYCLING' | 'TRANSIT';
+    avoidHighways?: boolean;
+    avoidTolls?: boolean;
+    alternatives?: boolean;
+  } = {}
+): Promise<RouteOption[]> {
+  const result = await invokeEdgeFunction<DirectionsResponse>(
+    'maps-api/directions',
+    { origin, destination, alternatives: true, ...options },
+    { requireAuth: true }
+  );
+  if (!result.ok) {
+    throw new Error(result.message || 'Could not get directions');
+  }
+  return result.data?.routes ?? [];
 }

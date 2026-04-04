@@ -22,12 +22,14 @@ import { useGeolocation } from '@/hooks/useGeolocation';
 import { useMapsPersistence } from '@/hooks/useMapsPersistence';
 import { useMapPins } from '@/hooks/useMapPins';
 import { cn } from '@/lib/utils';
-import type { LatLng, MapPin, Place, PlacePrediction } from '@/types/maps';
-import { getPlaceDetails, reverseGeocode, searchPlaces } from '@/services/mapService';
+import type { LatLng, MapPin, Place, PlacePrediction, RouteOption } from '@/types/maps';
+import { getDirections, getPlaceDetails, reverseGeocode, searchPlaces } from '@/services/mapService';
 import { supabase } from '@/integrations/supabase/client';
 
 const DEFAULT_CENTER: LatLng = { lat: 37.7749, lng: -122.4194 };
 const DEFAULT_ZOOM = 13;
+
+type TravelMode = 'DRIVING' | 'WALKING' | 'BICYCLING' | 'TRANSIT';
 
 export default function ArloMaps() {
   const isMobile = useIsMobile();
@@ -36,6 +38,7 @@ export default function ArloMaps() {
   const { pins, createPin, updatePin, deletePin, isAvailable: arePinsAvailable, error: pinsError } = useMapPins();
   const mapRef = useRef<google.maps.Map | null>(null);
   const sessionTokenRef = useRef(crypto.randomUUID());
+  const locationStartedRef = useRef(false);
 
   const [center, setCenter] = useState<LatLng>(DEFAULT_CENTER);
   const [zoom, setZoom] = useState(DEFAULT_ZOOM);
@@ -56,6 +59,21 @@ export default function ArloMaps() {
   const [pinDialogOpen, setPinDialogOpen] = useState(false);
   const [pinDraft, setPinDraft] = useState({ title: '', note: '', location: null as LatLng | null, id: null as string | null });
   const [isPinSaving, setIsPinSaving] = useState(false);
+
+  // Directions state
+  const [directionsMode, setDirectionsMode] = useState(false);
+  const [directionsRoutes, setDirectionsRoutes] = useState<RouteOption[]>([]);
+  const [activeRoute, setActiveRoute] = useState<RouteOption | null>(null);
+  const [isGettingDirections, setIsGettingDirections] = useState(false);
+
+  // Auto-start geolocation on mount
+  useEffect(() => {
+    if (!locationStartedRef.current) {
+      locationStartedRef.current = true;
+      geolocation.getCurrentPosition();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (mapsPersistence.settings.defaultMapType) {
@@ -201,7 +219,7 @@ export default function ArloMaps() {
         setPinDraft((prev) => ({ ...prev, note: address }));
       }
     } catch {
-      // Optional address lookup failure is non-blocking.
+      // Non-blocking
     }
   }, [dropPinMode]);
 
@@ -281,9 +299,54 @@ export default function ArloMaps() {
     [createPin, pins]
   );
 
-  const handleDirections = useCallback((place: Place) => {
-    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place.address || place.name)}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
+  const handleGetDirections = useCallback(
+    async (origin: string | LatLng, destination: string | LatLng, travelMode: TravelMode) => {
+      setDirectionsMode(true);
+      setDirectionsRoutes([]);
+      setActiveRoute(null);
+      setIsGettingDirections(true);
+      try {
+        const routes = await getDirections(origin, destination, { travelMode, alternatives: true });
+        setDirectionsRoutes(routes);
+        if (routes.length > 0) {
+          setActiveRoute(routes[0]);
+          // Fit map to route bounds
+          if (mapRef.current && routes[0].steps.length > 0) {
+            const bounds = new google.maps.LatLngBounds();
+            routes[0].steps.forEach((step) => {
+              bounds.extend(step.startLocation);
+              bounds.extend(step.endLocation);
+            });
+            mapRef.current.fitBounds(bounds, 80);
+          }
+        } else {
+          toast('No routes found', { description: 'Try a different destination or travel mode.' });
+        }
+      } catch (error) {
+        toast('Directions failed', { description: error instanceof Error ? error.message : 'Please try again.' });
+      } finally {
+        setIsGettingDirections(false);
+      }
+    },
+    []
+  );
+
+  const handleSelectRoute = useCallback((route: RouteOption) => {
+    setActiveRoute(route);
+    if (mapRef.current && route.steps.length > 0) {
+      const bounds = new google.maps.LatLngBounds();
+      route.steps.forEach((step) => {
+        bounds.extend(step.startLocation);
+        bounds.extend(step.endLocation);
+      });
+      mapRef.current.fitBounds(bounds, 80);
+    }
+  }, []);
+
+  const handleCancelDirections = useCallback(() => {
+    setDirectionsMode(false);
+    setDirectionsRoutes([]);
+    setActiveRoute(null);
   }, []);
 
   const handlePinDrag = useCallback(
@@ -294,9 +357,14 @@ export default function ArloMaps() {
     [updatePin]
   );
 
+  const handleToggleTraffic = useCallback(() => {
+    mapsPersistence.updateSettings({ showTraffic: !mapsPersistence.settings.showTraffic });
+  }, [mapsPersistence]);
+
   return (
     <MapProvider>
-      <div className="fixed inset-0 top-16 flex h-[calc(100vh-4rem)] overflow-hidden bg-background">
+      {/* Full-screen map layout — extends behind the navbar */}
+      <div className="fixed inset-0 flex overflow-hidden">
         <MapSidebar
           collapsed={sidebarCollapsed}
           onToggle={() => setSidebarCollapsed((prev) => !prev)}
@@ -315,7 +383,6 @@ export default function ArloMaps() {
           selectedPlaceId={selectedPlace?.placeId ?? null}
           onPlaceSelect={handlePlaceSelect}
           selectedPlace={selectedPlace}
-          onDirections={handleDirections}
           onSavePlace={handleSavePlace}
           pins={pins}
           pinsUnavailable={!arePinsAvailable}
@@ -324,6 +391,15 @@ export default function ArloMaps() {
           onPinSelect={handlePinSelect}
           onPinEdit={handleEditPin}
           onPinDelete={handleDeletePin}
+          showTraffic={mapsPersistence.settings.showTraffic}
+          onToggleTraffic={handleToggleTraffic}
+          directionsRoutes={directionsRoutes}
+          activeRoute={activeRoute}
+          isGettingDirections={isGettingDirections}
+          onGetDirections={handleGetDirections}
+          onSelectRoute={handleSelectRoute}
+          onCancelDirections={handleCancelDirections}
+          userLocation={geolocation.position}
         />
 
         <div className="relative flex-1">
@@ -339,6 +415,7 @@ export default function ArloMaps() {
             pins={arePinsAvailable ? pins : []}
             selectedPlaceId={selectedPlace?.placeId ?? null}
             selectedPinId={selectedPin?.id ?? null}
+            activeRoute={activeRoute}
             onMapLoad={(map) => {
               mapRef.current = map;
             }}
@@ -350,7 +427,7 @@ export default function ArloMaps() {
             onPinDrag={handlePinDrag}
           />
 
-          <div className="absolute right-4 top-4 z-30">
+          <div className="absolute right-4 top-20 z-30">
             <MapTools
               dropPinMode={dropPinMode}
               onToggleDropPin={() => setDropPinMode((prev) => !prev)}
@@ -364,7 +441,7 @@ export default function ArloMaps() {
           </div>
 
           {isMobile && (
-            <div className="absolute left-4 right-4 top-4 z-40">
+            <div className="absolute left-4 right-16 top-20 z-40">
               <MapSearchInput
                 value={searchQuery}
                 onChange={setSearchQuery}
@@ -414,7 +491,11 @@ export default function ArloMaps() {
             onPlaceSelect={handlePlaceSelect}
             onPinSelect={handlePinSelect}
             selectedPlace={selectedPlace}
-            onDirections={handleDirections}
+            onDirections={(place) => handleGetDirections(
+              geolocation.position ?? 'My Location',
+              place.location,
+              'DRIVING'
+            )}
             onSavePlace={handleSavePlace}
           />
         )}
