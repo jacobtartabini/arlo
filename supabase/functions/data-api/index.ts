@@ -35,6 +35,7 @@ const ALLOWED_TABLES = [
   'calendar_events', 'booking_slots', 'notifications',
   'conversations', 'conversation_messages', 'chat_folders', 'user_settings',
   'routines', 'user_progress', 'rewards', 'reward_redemptions', 'xp_events',
+  'notification_preferences',
   'creation_projects', 'creation_assets', 'creation_scene_state', 'lab_items',
   'calendar_integrations', 'calendar_integrations_safe', 'google_calendar_selections',
   'inbox_accounts', 'inbox_accounts_safe', 'inbox_threads', 'inbox_messages', 
