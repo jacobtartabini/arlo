@@ -311,7 +311,7 @@ async function syncOutlookIcal(integration: CalendarIntegration, supabase: any):
       .eq("user_key", integration.user_key)
       .eq("source", "outlook_ics");
 
-    const existingIds = new Set((existingEvents || []).map((e: any) => e.external_id));
+    const existingIds = new Set<string>((existingEvents || []).map((e: any) => e.external_id));
     const currentIds = new Set<string>();
 
     for (const event of events) {
