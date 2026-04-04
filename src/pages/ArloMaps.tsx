@@ -63,8 +63,23 @@ export default function ArloMaps() {
   // Directions state
   const [directionsMode, setDirectionsMode] = useState(false);
   const [directionsRoutes, setDirectionsRoutes] = useState<RouteOption[]>([]);
+  const [directionsRoutesByMode, setDirectionsRoutesByMode] = useState<Partial<Record<TravelMode, RouteOption[]>>>({});
   const [activeRoute, setActiveRoute] = useState<RouteOption | null>(null);
   const [isGettingDirections, setIsGettingDirections] = useState(false);
+  const lastDirectionsArgs = useRef<{ origin: string | LatLng; destination: string | LatLng } | null>(null);
+
+  // Destination autocomplete state
+  const [destPredictions, setDestPredictions] = useState<PlacePrediction[]>([]);
+  const destSessionTokenRef = useRef(crypto.randomUUID());
+  const destDebounceRef = useRef<number | null>(null);
+
+  // Navigation state
+  const [isNavigating, setIsNavigating] = useState(false);
+  const [navStepIndex, setNavStepIndex] = useState(0);
+  const [navETA, setNavETA] = useState<string | null>(null);
+  const [navRemainingDist, setNavRemainingDist] = useState<string | null>(null);
+  const [navRemainingTime, setNavRemainingTime] = useState<string | null>(null);
+  const [followMode, setFollowMode] = useState(false);
 
   // Auto-start geolocation on mount
   useEffect(() => {
@@ -82,10 +97,65 @@ export default function ArloMaps() {
   }, [mapsPersistence.settings.defaultMapType]);
 
   useEffect(() => {
-    if (geolocation.position && !geolocation.error) {
+    if (geolocation.position && !geolocation.error && !isNavigating) {
       setCenter(geolocation.position);
     }
-  }, [geolocation.position, geolocation.error]);
+  }, [geolocation.position, geolocation.error, isNavigating]);
+
+  // Follow-mode: keep map centered on user while navigating
+  useEffect(() => {
+    if (!isNavigating || !followMode || !geolocation.position) return;
+    setCenter(geolocation.position);
+    mapRef.current?.panTo(geolocation.position);
+  }, [isNavigating, followMode, geolocation.position]);
+
+  // Step advancement during navigation
+  useEffect(() => {
+    if (!isNavigating || !activeRoute || !geolocation.position) return;
+
+    const pos = geolocation.position;
+    const steps = activeRoute.steps;
+    if (navStepIndex >= steps.length) return;
+
+    const currentEnd = steps[navStepIndex].endLocation;
+    const dLat = pos.lat - currentEnd.lat;
+    const dLng = pos.lng - currentEnd.lng;
+    const distMeters = Math.sqrt(dLat * dLat + dLng * dLng) * 111_320;
+
+    if (distMeters < 30 && navStepIndex < steps.length - 1) {
+      const nextIdx = navStepIndex + 1;
+      setNavStepIndex(nextIdx);
+
+      let remainingSeconds = 0;
+      let remainingMeters = 0;
+      for (let i = nextIdx; i < steps.length; i++) {
+        const durMatch = steps[i].duration.match(/(\d+)/);
+        const distMatch = steps[i].distance.match(/([\d.]+)/);
+        if (durMatch) remainingSeconds += parseInt(durMatch[1], 10) * 60;
+        if (distMatch) remainingMeters += parseFloat(distMatch[1]) * 1609.34;
+      }
+
+      const miles = remainingMeters / 1609.34;
+      setNavRemainingDist(miles < 0.1 ? `${Math.round(remainingMeters)} m` : `${miles.toFixed(1)} mi`);
+
+      const mins = Math.round(remainingSeconds / 60);
+      if (mins < 60) {
+        setNavRemainingTime(`${mins} min`);
+      } else {
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        setNavRemainingTime(m > 0 ? `${h} hr ${m} min` : `${h} hr`);
+      }
+
+      const arrivalMs = Date.now() + remainingSeconds * 1000;
+      setNavETA(new Date(arrivalMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }));
+    }
+
+    if (distMeters < 30 && navStepIndex === steps.length - 1) {
+      toast('You have arrived!');
+      handleEndNavigation();
+    }
+  }, [isNavigating, activeRoute, geolocation.position, navStepIndex, handleEndNavigation]);
 
   const searchCenter = useMemo(() => geolocation.position ?? center, [geolocation.position, center]);
 
@@ -120,6 +190,51 @@ export default function ArloMaps() {
 
     return () => window.clearTimeout(handle);
   }, [searchQuery, searchCenter]);
+
+  // Destination autocomplete handler
+  const handleDestinationQueryChange = useCallback((query: string) => {
+    if (destDebounceRef.current !== null) {
+      window.clearTimeout(destDebounceRef.current);
+    }
+    if (query.trim().length < 2) {
+      setDestPredictions([]);
+      return;
+    }
+    destDebounceRef.current = window.setTimeout(async () => {
+      destDebounceRef.current = null;
+      try {
+        const { data, error } = await supabase.functions.invoke('places-autocomplete', {
+          body: {
+            query,
+            sessionToken: destSessionTokenRef.current,
+            location: `${searchCenter.lat},${searchCenter.lng}`,
+            radius: 40000,
+          },
+        });
+        if (!error && data?.predictions) {
+          setDestPredictions(data.predictions);
+        } else {
+          setDestPredictions([]);
+        }
+      } catch {
+        setDestPredictions([]);
+      }
+    }, 300);
+  }, [searchCenter]);
+
+  const handleDestPredictionSelect = useCallback(async (prediction: PlacePrediction): Promise<LatLng | null> => {
+    setDestPredictions([]);
+    destSessionTokenRef.current = crypto.randomUUID();
+    try {
+      const details = await getPlaceDetails(prediction.placeId);
+      if (details) {
+        return details.location;
+      }
+    } catch {
+      // fall through
+    }
+    return null;
+  }, []);
 
   const handleSearchSubmit = useCallback(async () => {
     if (!searchQuery.trim()) return;
@@ -299,37 +414,73 @@ export default function ArloMaps() {
     [createPin, pins]
   );
 
+  const resolveToCoordinates = useCallback(async (loc: string | LatLng): Promise<LatLng | string> => {
+    if (typeof loc !== 'string') return loc;
+    try {
+      const results = await searchPlaces(loc, searchCenter, 40000);
+      if (results.length > 0) return results[0].location;
+    } catch {
+      // fall through to string
+    }
+    return loc;
+  }, [searchCenter]);
+
+  const fitRouteBounds = useCallback((route: RouteOption) => {
+    if (mapRef.current && route.steps.length > 0) {
+      const bounds = new google.maps.LatLngBounds();
+      route.steps.forEach((step) => {
+        bounds.extend(step.startLocation);
+        bounds.extend(step.endLocation);
+      });
+      mapRef.current.fitBounds(bounds, 80);
+    }
+  }, []);
+
   const handleGetDirections = useCallback(
     async (origin: string | LatLng, destination: string | LatLng, travelMode: TravelMode) => {
       setDirectionsMode(true);
       setDirectionsRoutes([]);
+      setDirectionsRoutesByMode({});
       setActiveRoute(null);
       setIsGettingDirections(true);
       try {
-        const routes = await getDirections(origin, destination, { travelMode, alternatives: true });
+        const resolvedDest = await resolveToCoordinates(destination);
+        const resolvedOrigin = await resolveToCoordinates(origin);
+        lastDirectionsArgs.current = { origin: resolvedOrigin, destination: resolvedDest };
+
+        const routes = await getDirections(resolvedOrigin, resolvedDest, { travelMode, alternatives: true });
         setDirectionsRoutes(routes);
+        setDirectionsRoutesByMode((prev) => ({ ...prev, [travelMode]: routes }));
         if (routes.length > 0) {
           setActiveRoute(routes[0]);
-          // Fit map to route bounds
-          if (mapRef.current && routes[0].steps.length > 0) {
-            const bounds = new google.maps.LatLngBounds();
-            routes[0].steps.forEach((step) => {
-              bounds.extend(step.startLocation);
-              bounds.extend(step.endLocation);
-            });
-            mapRef.current.fitBounds(bounds, 80);
-          }
+          fitRouteBounds(routes[0]);
         } else {
           toast('No routes found', { description: 'Try a different destination or travel mode.' });
         }
+
+        // Fetch the alternate mode in the background (driving <-> walking)
+        const altMode: TravelMode = travelMode === 'DRIVING' ? 'WALKING' : 'DRIVING';
+        getDirections(resolvedOrigin, resolvedDest, { travelMode: altMode, alternatives: false })
+          .then((altRoutes) => {
+            setDirectionsRoutesByMode((prev) => ({ ...prev, [altMode]: altRoutes }));
+          })
+          .catch(() => { /* non-blocking */ });
       } catch (error) {
         toast('Directions failed', { description: error instanceof Error ? error.message : 'Please try again.' });
       } finally {
         setIsGettingDirections(false);
       }
     },
-    []
+    [resolveToCoordinates, fitRouteBounds]
   );
+
+  const handleSwitchTravelMode = useCallback((_mode: TravelMode, cachedRoutes: RouteOption[]) => {
+    setDirectionsRoutes(cachedRoutes);
+    if (cachedRoutes.length > 0) {
+      setActiveRoute(cachedRoutes[0]);
+      fitRouteBounds(cachedRoutes[0]);
+    }
+  }, [fitRouteBounds]);
 
   const handleSelectRoute = useCallback((route: RouteOption) => {
     setActiveRoute(route);
@@ -346,8 +497,49 @@ export default function ArloMaps() {
   const handleCancelDirections = useCallback(() => {
     setDirectionsMode(false);
     setDirectionsRoutes([]);
+    setDirectionsRoutesByMode({});
     setActiveRoute(null);
+    setIsNavigating(false);
+    setFollowMode(false);
   }, []);
+
+  const handleStartNavigation = useCallback(() => {
+    if (!activeRoute) return;
+    setIsNavigating(true);
+    setFollowMode(true);
+    setNavStepIndex(0);
+
+    const totalDist = activeRoute.distanceText;
+    const totalTime = activeRoute.durationText;
+    const arrivalMs = Date.now() + activeRoute.duration * 1000;
+    const arrival = new Date(arrivalMs);
+    const arrivalStr = arrival.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+    setNavRemainingDist(totalDist);
+    setNavRemainingTime(totalTime);
+    setNavETA(arrivalStr);
+
+    if (geolocation.position) {
+      setCenter(geolocation.position);
+      setZoom(18);
+      mapRef.current?.panTo(geolocation.position);
+      mapRef.current?.setZoom(18);
+    }
+
+    geolocation.startWatching();
+  }, [activeRoute, geolocation]);
+
+  const handleEndNavigation = useCallback(() => {
+    setIsNavigating(false);
+    setFollowMode(false);
+    setNavStepIndex(0);
+    setNavETA(null);
+    setNavRemainingDist(null);
+    setNavRemainingTime(null);
+    if (activeRoute) {
+      fitRouteBounds(activeRoute);
+    }
+  }, [activeRoute, fitRouteBounds]);
 
   const handlePinDrag = useCallback(
     async (pin: MapPin, location: LatLng) => {
@@ -378,6 +570,7 @@ export default function ArloMaps() {
           }}
           predictions={predictions}
           onPredictionSelect={handlePredictionSelect}
+          onDismissPredictions={() => setPredictions([])}
           searchResults={searchResults}
           isSearching={isSearching || isAutocompleteLoading}
           selectedPlaceId={selectedPlace?.placeId ?? null}
@@ -394,12 +587,27 @@ export default function ArloMaps() {
           showTraffic={mapsPersistence.settings.showTraffic}
           onToggleTraffic={handleToggleTraffic}
           directionsRoutes={directionsRoutes}
+          directionsRoutesByMode={directionsRoutesByMode}
           activeRoute={activeRoute}
           isGettingDirections={isGettingDirections}
           onGetDirections={handleGetDirections}
           onSelectRoute={handleSelectRoute}
           onCancelDirections={handleCancelDirections}
+          onStartNavigation={handleStartNavigation}
+          onSwitchTravelMode={handleSwitchTravelMode}
           userLocation={geolocation.position}
+          destinationPredictions={destPredictions}
+          onDestinationQueryChange={handleDestinationQueryChange}
+          onDestinationPredictionSelect={handleDestPredictionSelect}
+          onDismissDestinationPredictions={() => setDestPredictions([])}
+          isNavigating={isNavigating}
+          navigationState={isNavigating ? {
+            currentStepIndex: navStepIndex,
+            estimatedArrival: navETA,
+            remainingDistance: navRemainingDist,
+            remainingDuration: navRemainingTime,
+          } : null}
+          onEndNavigation={handleEndNavigation}
         />
 
         <div className="relative flex-1">
@@ -416,6 +624,7 @@ export default function ArloMaps() {
             selectedPlaceId={selectedPlace?.placeId ?? null}
             selectedPinId={selectedPin?.id ?? null}
             activeRoute={activeRoute}
+            isNavigating={isNavigating}
             onMapLoad={(map) => {
               mapRef.current = map;
             }}
@@ -425,7 +634,23 @@ export default function ArloMaps() {
             onPinClick={handlePinSelect}
             onMapClick={handleMapClick}
             onPinDrag={handlePinDrag}
+            onUserPan={() => { if (isNavigating) setFollowMode(false); }}
           />
+
+          {isNavigating && !followMode && (
+            <button
+              onClick={() => {
+                setFollowMode(true);
+                if (geolocation.position) {
+                  mapRef.current?.panTo(geolocation.position);
+                  mapRef.current?.setZoom(18);
+                }
+              }}
+              className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-lg"
+            >
+              Re-center
+            </button>
+          )}
 
           <div className="absolute right-4 top-20 z-30">
             <MapTools
@@ -454,6 +679,7 @@ export default function ArloMaps() {
                 isLoading={isSearching || isAutocompleteLoading}
                 predictions={predictions}
                 onPredictionSelect={handlePredictionSelect}
+                onDismissPredictions={() => setPredictions([])}
                 placeholder="Search nearby places"
                 variant="floating"
               />
@@ -497,6 +723,15 @@ export default function ArloMaps() {
               'DRIVING'
             )}
             onSavePlace={handleSavePlace}
+            isNavigating={isNavigating}
+            activeRoute={activeRoute}
+            navigationState={isNavigating ? {
+              currentStepIndex: navStepIndex,
+              estimatedArrival: navETA,
+              remainingDistance: navRemainingDist,
+              remainingDuration: navRemainingTime,
+            } : null}
+            onEndNavigation={handleEndNavigation}
           />
         )}
       </div>

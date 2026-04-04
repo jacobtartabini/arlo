@@ -42,6 +42,7 @@ interface MapSidebarProps {
   onSearchClear: () => void;
   predictions: PlacePrediction[];
   onPredictionSelect: (prediction: PlacePrediction) => void;
+  onDismissPredictions: () => void;
   searchResults: PlaceSearchResult[];
   isSearching: boolean;
   selectedPlaceId: string | null;
@@ -58,12 +59,27 @@ interface MapSidebarProps {
   showTraffic: boolean;
   onToggleTraffic: () => void;
   directionsRoutes: RouteOption[];
+  directionsRoutesByMode: Partial<Record<TravelMode, RouteOption[]>>;
   activeRoute: RouteOption | null;
   isGettingDirections: boolean;
   onGetDirections: (origin: string | LatLng, destination: string | LatLng, mode: TravelMode) => Promise<void>;
   onSelectRoute: (route: RouteOption) => void;
   onCancelDirections: () => void;
+  onStartNavigation: () => void;
+  onSwitchTravelMode: (mode: TravelMode, cachedRoutes: RouteOption[]) => void;
   userLocation: LatLng | null;
+  destinationPredictions: PlacePrediction[];
+  onDestinationQueryChange: (query: string) => void;
+  onDestinationPredictionSelect: (prediction: PlacePrediction) => Promise<LatLng | null>;
+  onDismissDestinationPredictions: () => void;
+  isNavigating: boolean;
+  navigationState: {
+    currentStepIndex: number;
+    estimatedArrival: string | null;
+    remainingDistance: string | null;
+    remainingDuration: string | null;
+  } | null;
+  onEndNavigation: () => void;
 }
 
 const TRAVEL_MODES: { mode: TravelMode; icon: React.ElementType; label: string }[] = [
@@ -122,6 +138,7 @@ export function MapSidebar({
   onSearchClear,
   predictions,
   onPredictionSelect,
+  onDismissPredictions,
   searchResults,
   isSearching,
   selectedPlaceId,
@@ -138,18 +155,30 @@ export function MapSidebar({
   showTraffic,
   onToggleTraffic,
   directionsRoutes,
+  directionsRoutesByMode,
   activeRoute,
   isGettingDirections,
   onGetDirections,
   onSelectRoute,
   onCancelDirections,
+  onStartNavigation,
+  onSwitchTravelMode,
   userLocation,
+  destinationPredictions,
+  onDestinationQueryChange,
+  onDestinationPredictionSelect,
+  onDismissDestinationPredictions,
+  isNavigating,
+  navigationState,
+  onEndNavigation,
 }: MapSidebarProps) {
   const [view, setView] = useState<SidebarView>('explore');
   const [travelMode, setTravelMode] = useState<TravelMode>('DRIVING');
   const [directionsOrigin, setDirectionsOrigin] = useState('Your location');
   const [directionsDestination, setDirectionsDestination] = useState('');
   const [directionsDestinationLocation, setDirectionsDestinationLocation] = useState<LatLng | null>(null);
+  const [showDestDropdown, setShowDestDropdown] = useState(false);
+  const destDropdownRef = useRef<HTMLDivElement>(null);
   const hasInitiatedDirections = useRef(false);
 
   // Sync view based on parent state
@@ -177,6 +206,17 @@ export function MapSidebar({
     }
   }, [searchResults.length, isSearching, selectedPlace]);
 
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (destDropdownRef.current && !destDropdownRef.current.contains(e.target as Node)) {
+        setShowDestDropdown(false);
+        onDismissDestinationPredictions();
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onDismissDestinationPredictions]);
+
   const handleDirectionsClick = (place: Place) => {
     setDirectionsDestination(place.name);
     setDirectionsDestinationLocation(place.location);
@@ -185,12 +225,28 @@ export function MapSidebar({
     setView('directions');
   };
 
+  const handleDestinationChange = (value: string) => {
+    setDirectionsDestination(value);
+    setDirectionsDestinationLocation(null);
+    setShowDestDropdown(true);
+    onDestinationQueryChange(value);
+  };
+
+  const handleDestPredictionSelect = async (prediction: PlacePrediction) => {
+    setDirectionsDestination(prediction.description);
+    setShowDestDropdown(false);
+    onDismissDestinationPredictions();
+    const loc = await onDestinationPredictionSelect(prediction);
+    if (loc) {
+      setDirectionsDestinationLocation(loc);
+    }
+  };
+
   const handleGetDirections = async () => {
     if (!directionsDestination) return;
     const origin: string | LatLng = directionsOrigin === 'Your location' && userLocation
       ? userLocation
       : directionsOrigin;
-    // Use stored coordinates when coming from a place selection; fall back to the string
     const destination: string | LatLng = directionsDestinationLocation ?? directionsDestination;
     await onGetDirections(origin, destination, travelMode);
     hasInitiatedDirections.current = true;
@@ -245,6 +301,7 @@ export function MapSidebar({
               isLoading={isSearching}
               predictions={predictions}
               onPredictionSelect={(p) => { onPredictionSelect(p); }}
+              onDismissPredictions={onDismissPredictions}
               placeholder="Search for coffee, Target, parks…"
             />
           </div>
@@ -539,7 +596,7 @@ export function MapSidebar({
             )}
 
             {/* ── DIRECTIONS VIEW ── */}
-            {view === 'directions' && (
+            {view === 'directions' && !isNavigating && (
               <div className="space-y-4">
                 {/* Header */}
                 <div className="flex items-center justify-between">
@@ -556,24 +613,89 @@ export function MapSidebar({
                   </button>
                 </div>
 
-                {/* Travel mode selector */}
-                <div className="flex gap-1 rounded-xl bg-muted/50 p-1">
-                  {TRAVEL_MODES.map(({ mode, icon: Icon, label }) => (
-                    <button
-                      key={mode}
-                      onClick={() => setTravelMode(mode)}
-                      className={cn(
-                        'flex flex-1 flex-col items-center gap-0.5 rounded-lg py-1.5 px-1 text-[10px] font-medium transition-all',
-                        travelMode === mode
-                          ? 'bg-background text-foreground shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground'
-                      )}
-                    >
-                      <Icon className="h-4 w-4" />
-                      {label}
-                    </button>
-                  ))}
-                </div>
+                {/* Dual travel mode summary bar */}
+                {directionsRoutes.length > 0 ? (
+                  <div className="space-y-2">
+                    <div className="flex gap-1.5 rounded-xl bg-muted/50 p-1">
+                      {(['DRIVING', 'WALKING'] as TravelMode[]).map((mode) => {
+                        const isActive = travelMode === mode;
+                        const modeRoutes = directionsRoutesByMode[mode];
+                        const bestRoute = modeRoutes?.[0];
+                        const dur = bestRoute ? formatDuration(bestRoute.durationInTraffic ?? bestRoute.duration) : '—';
+                        const ModeIcon = mode === 'DRIVING' ? Car : () => <span className="text-xs font-bold">🚶</span>;
+                        return (
+                          <button
+                            key={mode}
+                            onClick={() => {
+                              setTravelMode(mode);
+                              if (modeRoutes && modeRoutes.length > 0) {
+                                onSwitchTravelMode(mode, modeRoutes);
+                              } else {
+                                handleGetDirections();
+                              }
+                            }}
+                            className={cn(
+                              'flex flex-1 items-center justify-center gap-2 rounded-lg py-2 px-2 text-xs font-medium transition-all',
+                              isActive
+                                ? 'bg-background text-foreground shadow-sm'
+                                : 'text-muted-foreground/50 hover:text-muted-foreground'
+                            )}
+                          >
+                            <ModeIcon className="h-4 w-4" />
+                            <span>{dur}</span>
+                          </button>
+                        );
+                      })}
+                      {(['BICYCLING', 'TRANSIT'] as TravelMode[]).map((mode) => {
+                        const isActive = travelMode === mode;
+                        const ModeIcon = mode === 'BICYCLING' ? Bike : Bus;
+                        const modeRoutes = directionsRoutesByMode[mode];
+                        const bestRoute = modeRoutes?.[0];
+                        const dur = bestRoute ? formatDuration(bestRoute.durationInTraffic ?? bestRoute.duration) : null;
+                        return (
+                          <button
+                            key={mode}
+                            onClick={() => {
+                              setTravelMode(mode);
+                              if (modeRoutes && modeRoutes.length > 0) {
+                                onSwitchTravelMode(mode, modeRoutes);
+                              } else {
+                                handleGetDirections();
+                              }
+                            }}
+                            className={cn(
+                              'flex flex-col items-center gap-0.5 rounded-lg py-2 px-2 text-[10px] font-medium transition-all',
+                              isActive
+                                ? 'bg-background text-foreground shadow-sm'
+                                : 'text-muted-foreground/50 hover:text-muted-foreground'
+                            )}
+                          >
+                            <ModeIcon className="h-3.5 w-3.5" />
+                            {dur && <span className="text-[10px]">{dur}</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-1 rounded-xl bg-muted/50 p-1">
+                    {TRAVEL_MODES.map(({ mode, icon: Icon, label }) => (
+                      <button
+                        key={mode}
+                        onClick={() => setTravelMode(mode)}
+                        className={cn(
+                          'flex flex-1 flex-col items-center gap-0.5 rounded-lg py-1.5 px-1 text-[10px] font-medium transition-all',
+                          travelMode === mode
+                            ? 'bg-background text-foreground shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground'
+                        )}
+                      >
+                        <Icon className="h-4 w-4" />
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 {/* Origin / Destination inputs */}
                 <div className="space-y-2 relative">
@@ -589,19 +711,34 @@ export function MapSidebar({
                     />
                   </div>
                   <div className="absolute left-3 top-6 bottom-6 w-px bg-border/60" />
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 relative" ref={destDropdownRef}>
                     <div className="flex h-6 w-6 shrink-0 items-center justify-center">
                       <MapPin className="h-4 w-4 text-rose-500" />
                     </div>
-                    <Input
-                      value={directionsDestination}
-                      onChange={(e) => {
-                        setDirectionsDestination(e.target.value);
-                        setDirectionsDestinationLocation(null);
-                      }}
-                      placeholder="Destination"
-                      className="h-9 text-sm"
-                    />
+                    <div className="relative flex-1">
+                      <Input
+                        value={directionsDestination}
+                        onChange={(e) => handleDestinationChange(e.target.value)}
+                        onFocus={() => setShowDestDropdown(true)}
+                        placeholder="Destination"
+                        className="h-9 text-sm"
+                      />
+                      {showDestDropdown && destinationPredictions.length > 0 && (
+                        <div className="absolute z-30 mt-1 w-full rounded-xl border bg-background/95 shadow-lg backdrop-blur max-h-48 overflow-y-auto">
+                          {destinationPredictions.map((prediction) => (
+                            <button
+                              key={prediction.placeId}
+                              type="button"
+                              onClick={() => handleDestPredictionSelect(prediction)}
+                              className="flex w-full flex-col gap-0.5 px-3 py-2 text-left hover:bg-muted"
+                            >
+                              <span className="text-xs font-medium text-foreground">{prediction.mainText}</span>
+                              <span className="text-[10px] text-muted-foreground">{prediction.secondaryText}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -675,6 +812,17 @@ export function MapSidebar({
                         </Card>
                       );
                     })}
+
+                    {/* Start navigation button */}
+                    {activeRoute && (
+                      <Button
+                        className="w-full h-10 mt-2 text-sm font-semibold"
+                        onClick={onStartNavigation}
+                      >
+                        <Navigation2 className="h-4 w-4 mr-2" />
+                        Start
+                      </Button>
+                    )}
                   </div>
                 )}
 
@@ -701,6 +849,69 @@ export function MapSidebar({
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* ── NAVIGATION VIEW ── */}
+            {view === 'directions' && isNavigating && activeRoute && navigationState && (
+              <div className="space-y-4">
+                {/* Current step */}
+                <div className="bg-gradient-to-br from-primary to-primary/90 text-primary-foreground rounded-2xl p-5">
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center">
+                      <Navigation2 className="w-7 h-7" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-3xl font-bold">
+                        {activeRoute.steps[navigationState.currentStepIndex]?.distance || '--'}
+                      </p>
+                      <p className="text-base opacity-90 truncate">
+                        {activeRoute.steps[navigationState.currentStepIndex]?.instruction || 'Continue on route'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Next step preview */}
+                {activeRoute.steps[navigationState.currentStepIndex + 1] && (
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-muted/50">
+                    <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-xs font-medium text-muted-foreground">
+                      Then
+                    </div>
+                    <p className="text-sm truncate flex-1 text-muted-foreground">
+                      {activeRoute.steps[navigationState.currentStepIndex + 1].instruction}
+                    </p>
+                  </div>
+                )}
+
+                {/* Stats grid */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="text-center p-3 rounded-xl bg-secondary/50">
+                    <Clock className="w-4 h-4 mx-auto text-muted-foreground mb-1" />
+                    <p className="text-lg font-bold">{navigationState.estimatedArrival || '--'}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Arrival</p>
+                  </div>
+                  <div className="text-center p-3 rounded-xl bg-secondary/50">
+                    <Navigation2 className="w-4 h-4 mx-auto text-muted-foreground mb-1" />
+                    <p className="text-lg font-bold">{navigationState.remainingDistance || '--'}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Left</p>
+                  </div>
+                  <div className="text-center p-3 rounded-xl bg-secondary/50">
+                    <MapPin className="w-4 h-4 mx-auto text-muted-foreground mb-1" />
+                    <p className="text-lg font-bold">{navigationState.remainingDuration || '--'}</p>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Time</p>
+                  </div>
+                </div>
+
+                {/* End Navigation */}
+                <Button
+                  variant="outline"
+                  className="w-full gap-2 h-11 rounded-xl text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                  onClick={onEndNavigation}
+                >
+                  <X className="w-4 h-4" />
+                  End Navigation
+                </Button>
               </div>
             )}
           </ScrollArea>

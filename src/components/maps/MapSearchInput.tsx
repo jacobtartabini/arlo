@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Loader2, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { PlacePrediction } from '@/types/maps';
@@ -11,6 +11,7 @@ interface MapSearchInputProps {
   isLoading?: boolean;
   predictions: PlacePrediction[];
   onPredictionSelect: (prediction: PlacePrediction) => void;
+  onDismissPredictions?: () => void;
   placeholder?: string;
   variant?: 'default' | 'floating';
 }
@@ -23,11 +24,26 @@ export function MapSearchInput({
   isLoading,
   predictions,
   onPredictionSelect,
+  onDismissPredictions,
   placeholder = 'Search places',
   variant = 'default',
 }: MapSearchInputProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (predictions.length === 0 || !onDismissPredictions) return;
+
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        onDismissPredictions();
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [predictions.length, onDismissPredictions]);
+
   return (
-    <div className={cn('relative', variant === 'floating' && 'w-full max-w-md')}> 
+    <div ref={containerRef} className={cn('relative', variant === 'floating' && 'w-full max-w-md')}> 
       <div
         className={cn(
           'flex items-center gap-2 rounded-2xl border bg-background px-4 py-3 shadow-sm',

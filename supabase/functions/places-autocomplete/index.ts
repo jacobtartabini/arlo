@@ -22,7 +22,7 @@ Deno.serve(async (req) => {
       return errorResponse(req, "Places API not configured", 500);
     }
 
-    const { query, sessionToken } = await req.json();
+    const { query, sessionToken, location, radius } = await req.json();
     
     if (!query || typeof query !== "string" || query.length < 2) {
       return jsonResponse(req, { predictions: [] });
@@ -30,7 +30,6 @@ Deno.serve(async (req) => {
 
     console.log("[places-autocomplete] Searching for:", query);
 
-    // Use Google Places Autocomplete API
     const url = new URL("https://maps.googleapis.com/maps/api/place/autocomplete/json");
     url.searchParams.set("input", query);
     url.searchParams.set("key", GOOGLE_PLACES_API_KEY);
@@ -38,6 +37,11 @@ Deno.serve(async (req) => {
     
     if (sessionToken) {
       url.searchParams.set("sessiontoken", sessionToken);
+    }
+
+    if (location && typeof location === "string") {
+      url.searchParams.set("location", location);
+      url.searchParams.set("radius", String(radius || 40000));
     }
 
     const response = await fetch(url.toString());
