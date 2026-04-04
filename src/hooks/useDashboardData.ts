@@ -42,11 +42,13 @@ interface DashboardData {
   // Travel
   upcomingTrips: { id: string; name: string; startDate: Date }[];
   
-  // Health (Strava summary; fall back to placeholders)
+  // Health (Strava + localStorage)
   healthConnected: boolean;
-  activityScore: number; // 0-100 (derived)
-  sleepHours: number; // placeholder until sleep integration exists
+  activityScore: number; // 0-100 (derived from recent activity count)
+  sleepHours: number; // from localStorage arlo_sleep
   healthRecentActivities: number;
+  healthScore: number; // 0-100 computed composite score (mirrors Health page)
+  weeklyActiveMinutes: number; // active minutes from Strava recent stats / 4
   
   // Security
   connectedDevices: number;
@@ -79,9 +81,11 @@ const DEFAULT_DATA: DashboardData = {
   userLocation: null,
   upcomingTrips: [],
   healthConnected: false,
-  activityScore: 72,
-  sleepHours: 7.5,
+  activityScore: 0,
+  sleepHours: 0,
   healthRecentActivities: 0,
+  healthScore: 0,
+  weeklyActiveMinutes: 0,
   connectedDevices: 0,
   driveAccountsConnected: 0,
   driveStorageUsedBytes: null,
@@ -91,7 +95,7 @@ const DEFAULT_DATA: DashboardData = {
 };
 
 type StravaStatusPayload = { connected: boolean };
-type StravaStatsTotals = { count?: number };
+type StravaStatsTotals = { count?: number; moving_time?: number };
 type StravaStatsPayload = {
   stats?: {
     recent_runs?: StravaStatsTotals;
@@ -99,6 +103,32 @@ type StravaStatsPayload = {
     recent_swims?: StravaStatsTotals;
   };
 };
+
+function computeDashboardHealthScore(p: {
+  activitiesToday: number;
+  activitiesYesterday: number;
+  sleepHours: number;
+  sleepQuality: number;
+  waterGlasses: number;
+  caloriesLogged: boolean;
+  wellnessEnergy: number;
+  wellnessMood: number;
+  wellnessStress: number;
+}): number {
+  let score = 0;
+  if (p.activitiesToday > 0) score += 25;
+  else if (p.activitiesYesterday > 0) score += 15;
+  if (p.sleepHours > 0) {
+    score += Math.min(p.sleepHours / 8, 1) * 20;
+    score += (p.sleepQuality / 5) * 5;
+  }
+  score += Math.min(p.waterGlasses / 8, 1) * 15;
+  if (p.caloriesLogged) score += 10;
+  if (p.wellnessEnergy > 0 && p.wellnessMood > 0 && p.wellnessStress > 0) {
+    score += ((p.wellnessEnergy + p.wellnessMood + (6 - p.wellnessStress)) / 3 / 5) * 25;
+  }
+  return Math.min(100, Math.round(score));
+}
 
 export function useDashboardData() {
   const [data, setData] = useState<DashboardData>(DEFAULT_DATA);
@@ -280,15 +310,53 @@ export function useDashboardData() {
           ? Math.round((driveStorageUsedBytes / driveStorageTotalBytes) * 100)
           : null;
 
-      // Process Health (Strava summary)
+      // Process Health (Strava + localStorage)
       const healthConnected = Boolean(stravaStatusResult.ok && stravaStatusResult.data?.connected);
       const recentRuns = stravaStatsResult.ok ? (stravaStatsResult.data?.stats?.recent_runs?.count ?? 0) : 0;
       const recentRides = stravaStatsResult.ok ? (stravaStatsResult.data?.stats?.recent_rides?.count ?? 0) : 0;
       const recentSwims = stravaStatsResult.ok ? (stravaStatsResult.data?.stats?.recent_swims?.count ?? 0) : 0;
       const healthRecentActivities = healthConnected ? recentRuns + recentRides + recentSwims : 0;
-      // Simple derived "activity score": 0..100 based on last ~4 weeks activity count.
-      // This avoids hardcoding and still updates as Strava updates.
       const activityScore = healthConnected ? Math.min(100, Math.round((healthRecentActivities / 12) * 100)) : 0;
+
+      // Weekly active minutes (Strava recent_* covers ~4 weeks, divide for weekly avg)
+      const recentRunTime = stravaStatsResult.ok ? (stravaStatsResult.data?.stats?.recent_runs?.moving_time ?? 0) : 0;
+      const recentRideTime = stravaStatsResult.ok ? (stravaStatsResult.data?.stats?.recent_rides?.moving_time ?? 0) : 0;
+      const recentSwimTime = stravaStatsResult.ok ? (stravaStatsResult.data?.stats?.recent_swims?.moving_time ?? 0) : 0;
+      const weeklyActiveMinutes = healthConnected
+        ? Math.round((recentRunTime + recentRideTime + recentSwimTime) / 60 / 4)
+        : 0;
+
+      // Read localStorage health data (mirrors Health page)
+      const safeLocalStorage = <T>(key: string, fallback: T): T => {
+        try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; }
+      };
+      type SleepLog = { date: string; hoursSlept: number; quality: number };
+      type WellnessLog = { date: string; energy: number; mood: number; stress: number };
+      type Meal = { calories: number };
+      const sleepLogs = safeLocalStorage<SleepLog[]>("arlo_sleep", []);
+      const wellnessLogs = safeLocalStorage<WellnessLog[]>("arlo_wellness", []);
+      const todayMeals = safeLocalStorage<Meal[]>(`arlo_meals_${todayStr}`, []);
+      const waterGlasses = safeLocalStorage<number>(`arlo_water_${todayStr}`, 0);
+      const lastSleep = sleepLogs.find((s) => s.date === todayStr) || sleepLogs[0] || null;
+      const sleepHours = lastSleep?.hoursSlept ?? 0;
+      const todayWellness = wellnessLogs.find((w) => w.date === todayStr) || null;
+      const caloriesConsumed = todayMeals.reduce((s, m) => s + (m.calories || 0), 0);
+
+      // Strava activities today/yesterday (from localStorage cache not available here, use count heuristic)
+      const activitiesToday = 0; // no per-day Strava data in dashboard fetch; health page has this
+      const activitiesYesterday = 0;
+
+      const healthScore = computeDashboardHealthScore({
+        activitiesToday,
+        activitiesYesterday,
+        sleepHours,
+        sleepQuality: lastSleep?.quality ?? 0,
+        waterGlasses,
+        caloriesLogged: caloriesConsumed > 0,
+        wellnessEnergy: todayWellness?.energy ?? 0,
+        wellnessMood: todayWellness?.mood ?? 0,
+        wellnessStress: todayWellness?.stress ?? 0,
+      });
 
       setData(prev => ({
         ...prev,
@@ -313,7 +381,9 @@ export function useDashboardData() {
         healthConnected,
         healthRecentActivities,
         activityScore,
-        sleepHours: prev.sleepHours,
+        sleepHours,
+        healthScore,
+        weeklyActiveMinutes,
         connectedDevices: 0, // Placeholder - could fetch from tailscale-api
         driveAccountsConnected,
         driveStorageUsedBytes,

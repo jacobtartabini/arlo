@@ -779,23 +779,29 @@ function HealthMiniContent({ data, size }: { data: MiniContentProps["data"]; siz
   const isPrimary = size === "primary";
   const isTertiary = size === "tertiary";
 
-  // Simulated health metrics
-  const moveProgress = data.healthConnected ? data.activityScore : 0;
-  const exerciseProgress = data.healthConnected ? Math.min(100, Math.round((data.healthRecentActivities / 10) * 100)) : 0;
-  const standProgress = data.healthConnected ? 80 : 0;
+  // Real health metrics from Health page data
+  // Outer ring: composite health score (sleep + activity + hydration + wellness)
+  const scoreProgress = data.healthScore ?? 0;
+  // Middle ring: weekly active minutes vs 150-min WHO recommendation
+  const weeklyMins = data.weeklyActiveMinutes ?? 0;
+  const exerciseProgress = data.healthConnected ? Math.min(100, Math.round((weeklyMins / 150) * 100)) : 0;
+  // Inner ring: sleep progress toward 8-hour goal
+  const sleepProgress = data.sleepHours > 0 ? Math.min(100, Math.round((data.sleepHours / 8) * 100)) : 0;
+
+  const scoreLabel = scoreProgress >= 80 ? "Great" : scoreProgress >= 60 ? "Good" : scoreProgress >= 40 ? "Fair" : "Low";
 
   return (
     <div className={cn("flex items-center", isPrimary ? "gap-4" : "gap-3")}>
       {/* Stacked rings (Apple Watch style) */}
       <div className="relative" style={{ width: isPrimary ? 52 : 40, height: isPrimary ? 52 : 40 }}>
-        {/* Outer ring - Move */}
+        {/* Outer ring - Health score */}
         <ProgressRing 
-          progress={moveProgress}
+          progress={scoreProgress}
           size={isPrimary ? 52 : 40}
           strokeWidth={isPrimary ? 5 : 4}
           color="destructive"
         />
-        {/* Middle ring - Exercise */}
+        {/* Middle ring - Weekly active minutes */}
         <div className="absolute" style={{ 
           top: isPrimary ? 6 : 5, 
           left: isPrimary ? 6 : 5 
@@ -807,13 +813,13 @@ function HealthMiniContent({ data, size }: { data: MiniContentProps["data"]; siz
             color="emerald"
           />
         </div>
-        {/* Inner ring - Stand */}
+        {/* Inner ring - Sleep */}
         <div className="absolute" style={{ 
           top: isPrimary ? 12 : 10, 
           left: isPrimary ? 12 : 10 
         }}>
           <ProgressRing 
-            progress={standProgress}
+            progress={sleepProgress}
             size={isPrimary ? 28 : 20}
             strokeWidth={isPrimary ? 5 : 4}
             color="primary"
@@ -825,28 +831,30 @@ function HealthMiniContent({ data, size }: { data: MiniContentProps["data"]; siz
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-1.5">
           <div className="w-2 h-2 rounded-full bg-destructive/80" />
-            <span className="text-[10px] text-foreground/80">
-              {data.healthConnected ? `${moveProgress}%` : "—"}
-            </span>
-            <span className="text-[9px] text-muted-foreground/50">
-              {data.healthConnected ? "move" : "connect"}
-            </span>
+          <span className="text-[10px] text-foreground/80">
+            {scoreProgress > 0 ? `${scoreProgress}` : "—"}
+          </span>
+          <span className="text-[9px] text-muted-foreground/50">
+            {scoreProgress > 0 ? scoreLabel : "no data"}
+          </span>
         </div>
         {!isTertiary && (
           <>
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full bg-emerald-500/80" />
-                <span className="text-[10px] text-foreground/80">
-                  {data.healthConnected ? `${exerciseProgress}%` : "—"}
-                </span>
-              <span className="text-[9px] text-muted-foreground/50">exercise</span>
+              <span className="text-[10px] text-foreground/80">
+                {data.healthConnected && weeklyMins > 0 ? `${weeklyMins}m` : "—"}
+              </span>
+              <span className="text-[9px] text-muted-foreground/50">
+                {data.healthConnected ? "wk active" : "connect"}
+              </span>
             </div>
             <div className="flex items-center gap-1.5">
               <Moon className="w-2.5 h-2.5 text-muted-foreground/50" />
-                <span className="text-[10px] text-foreground/80">
-                  {data.sleepHours ? `${data.sleepHours}h` : "—"}
-                </span>
-                <span className="text-[9px] text-muted-foreground/50">sleep</span>
+              <span className="text-[10px] text-foreground/80">
+                {data.sleepHours > 0 ? `${data.sleepHours}h` : "—"}
+              </span>
+              <span className="text-[9px] text-muted-foreground/50">sleep</span>
             </div>
           </>
         )}
