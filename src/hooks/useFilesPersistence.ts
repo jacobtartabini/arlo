@@ -4,6 +4,46 @@ import type { DriveAccount, DriveFile, DriveFileLink, FileTypeFilter, DriveSecti
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
+// ─── Drive accounts localStorage cache ───────────────────────────────────────
+// Persists connected account metadata (never tokens) so the Files page and
+// dashboard can render connected state immediately on the next visit without
+// waiting for the edge-function round-trip.
+
+const DRIVE_ACCOUNTS_CACHE_KEY = 'arlo_drive_accounts_cache';
+
+interface DriveAccountsCache {
+  accounts: DriveAccount[];
+  cachedAt: string;
+}
+
+export function getCachedDriveAccounts(): DriveAccount[] {
+  try {
+    const raw = localStorage.getItem(DRIVE_ACCOUNTS_CACHE_KEY);
+    if (!raw) return [];
+    const parsed: DriveAccountsCache = JSON.parse(raw);
+    return Array.isArray(parsed.accounts) ? parsed.accounts : [];
+  } catch {
+    return [];
+  }
+}
+
+function setCachedDriveAccounts(accounts: DriveAccount[]): void {
+  try {
+    const cache: DriveAccountsCache = { accounts, cachedAt: new Date().toISOString() };
+    localStorage.setItem(DRIVE_ACCOUNTS_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // ignore quota / SSR errors
+  }
+}
+
+export function clearCachedDriveAccounts(): void {
+  try {
+    localStorage.removeItem(DRIVE_ACCOUNTS_CACHE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export function useFilesPersistence() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,10 +93,13 @@ export function useFilesPersistence() {
     setError(null);
     try {
       const data = await callEdgeFunction('drive-auth', { action: 'list_accounts' });
-      return data.accounts || [];
+      const accounts: DriveAccount[] = data.accounts || [];
+      setCachedDriveAccounts(accounts);
+      return accounts;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to list accounts');
-      return [];
+      // Return the last-known accounts from cache so the UI stays functional
+      return getCachedDriveAccounts();
     } finally {
       setIsLoading(false);
     }
@@ -68,6 +111,9 @@ export function useFilesPersistence() {
     setError(null);
     try {
       await callEdgeFunction('drive-auth', { action: 'disconnect', accountId });
+      // Evict disconnected account from cache immediately
+      const remaining = getCachedDriveAccounts().filter(a => a.id !== accountId);
+      setCachedDriveAccounts(remaining);
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to disconnect');

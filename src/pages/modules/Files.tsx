@@ -24,7 +24,7 @@ import {
   Building2,
 } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
-import { useFilesPersistence } from "@/hooks/useFilesPersistence";
+import { useFilesPersistence, getCachedDriveAccounts } from "@/hooks/useFilesPersistence";
 import { useFilePreferences } from "@/hooks/useFilePreferences";
 import type { DriveAccount, DriveFile, BreadcrumbItem, DriveSection, SharedDrive } from "@/types/files";
 import { FILE_TYPE_LABELS, sortFilesWithFoldersFirst, canPreviewInApp } from "@/types/files";
@@ -59,13 +59,15 @@ export default function Files() {
     sortOption,
   } = useFilePreferences();
 
-  // State
-  const [accounts, setAccounts] = useState<DriveAccount[]>([]);
+  // State — seed from cache so accounts are available immediately on revisit
+  const [accounts, setAccounts] = useState<DriveAccount[]>(() => getCachedDriveAccounts());
   const [files, setFiles] = useState<DriveFile[]>([]);
   const [fileLinks, setFileLinks] = useState<Map<string, Array<{ link_type: string; linked_entity_id: string }>>>(new Map());
   const [selectedFile, setSelectedFile] = useState<DriveFile | null>(null);
   const [viewingFile, setViewingFile] = useState<DriveFile | null>(null);
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(
+    () => getCachedDriveAccounts()[0]?.id ?? null
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
