@@ -387,16 +387,17 @@ async function syncOutlookIcal(integration: CalendarIntegration, supabase: any):
 
     console.log(`[calendar-sync] Synced ${syncedCount} Outlook iCal events (${errorCount} errors) for user_key ${integration.user_key}`);
     return { success: true, synced: syncedCount };
-  } catch (error) {
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : String(error);
     console.error("[calendar-sync] iCal sync error:", error);
     await supabase
       .from("calendar_integrations")
       .update({
         last_sync_status: "error",
-        last_sync_error: error.message,
+        last_sync_error: errMsg,
       })
       .eq("id", integration.id);
-    return { success: false, error: error.message };
+    return { success: false, error: errMsg };
   }
 }
 
