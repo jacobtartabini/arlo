@@ -149,6 +149,7 @@ export function MapSidebar({
   const [travelMode, setTravelMode] = useState<TravelMode>('DRIVING');
   const [directionsOrigin, setDirectionsOrigin] = useState('Your location');
   const [directionsDestination, setDirectionsDestination] = useState('');
+  const [directionsDestinationLocation, setDirectionsDestinationLocation] = useState<LatLng | null>(null);
   const hasInitiatedDirections = useRef(false);
 
   // Sync view based on parent state
@@ -178,6 +179,7 @@ export function MapSidebar({
 
   const handleDirectionsClick = (place: Place) => {
     setDirectionsDestination(place.name);
+    setDirectionsDestinationLocation(place.location);
     setDirectionsOrigin(userLocation ? 'Your location' : '');
     hasInitiatedDirections.current = false;
     setView('directions');
@@ -188,7 +190,9 @@ export function MapSidebar({
     const origin: string | LatLng = directionsOrigin === 'Your location' && userLocation
       ? userLocation
       : directionsOrigin;
-    await onGetDirections(origin, directionsDestination, travelMode);
+    // Use stored coordinates when coming from a place selection; fall back to the string
+    const destination: string | LatLng = directionsDestinationLocation ?? directionsDestination;
+    await onGetDirections(origin, destination, travelMode);
     hasInitiatedDirections.current = true;
   };
 
@@ -591,7 +595,10 @@ export function MapSidebar({
                     </div>
                     <Input
                       value={directionsDestination}
-                      onChange={(e) => setDirectionsDestination(e.target.value)}
+                      onChange={(e) => {
+                        setDirectionsDestination(e.target.value);
+                        setDirectionsDestinationLocation(null);
+                      }}
                       placeholder="Destination"
                       className="h-9 text-sm"
                     />

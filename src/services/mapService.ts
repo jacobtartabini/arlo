@@ -19,6 +19,7 @@ interface ReverseGeocodeResponse {
 
 interface DirectionsResponse {
   routes: RouteOption[];
+  error?: string;
 }
 
 export async function searchPlaces(query: string, center?: LatLng, radiusMeters = 24000) {
@@ -80,6 +81,14 @@ export async function getDirections(
   );
   if (!result.ok) {
     throw new Error(result.message || 'Could not get directions');
+  }
+  // Surface Google's actual status code so the caller can show a meaningful message
+  if (result.data?.error) {
+    const googleStatus = result.data.error;
+    if (googleStatus === 'ZERO_RESULTS') {
+      return [];
+    }
+    throw new Error(`Directions unavailable (${googleStatus}). Check that the Directions API is enabled for your Google Maps key.`);
   }
   return result.data?.routes ?? [];
 }
