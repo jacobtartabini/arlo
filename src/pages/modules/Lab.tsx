@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -234,6 +235,9 @@ export default function Lab() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Start something new</DialogTitle>
+            <DialogDescription>
+              Create a new project or add an item to an existing one.
+            </DialogDescription>
           </DialogHeader>
 
           <div className="flex gap-2 py-1">

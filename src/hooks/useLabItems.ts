@@ -1,16 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { dataApiHelpers } from '@/lib/data-api';
+import { getUserKey } from '@/lib/arloAuth';
 import { supabase } from '@/integrations/supabase/client';
 import type { LabItem, LabItemType } from '@/types/creation';
 import { toast } from 'sonner';
-
-const getUserId = (): string => {
-  const userId = sessionStorage.getItem('arlo_user_id');
-  if (!userId) {
-    throw new Error('User not authenticated');
-  }
-  return userId;
-};
 
 function normalizeItem(row: LabItem): LabItem {
   const meta = row.metadata;
@@ -75,7 +68,12 @@ export function useLabItems(projectId: string | undefined) {
   const addFileItem = useCallback(
     async (itemType: 'media' | 'file', file: File, title?: string) => {
       if (!projectId) return null;
-      const filePath = `${getUserId()}/${projectId}/lab/${Date.now()}_${file.name}`;
+      const userKey = getUserKey();
+      if (!userKey) {
+        toast.error('Not authenticated');
+        return null;
+      }
+      const filePath = `${userKey}/${projectId}/lab/${Date.now()}_${file.name}`;
       const { error: upErr } = await supabase.storage.from('creation-assets').upload(filePath, file);
       if (upErr) {
         toast.error('Upload failed');

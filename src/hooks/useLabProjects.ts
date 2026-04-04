@@ -2,14 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { dataApiHelpers } from '@/lib/data-api';
 import type { CreationProject, LabProjectStatus } from '@/types/creation';
 
-const getUserId = (): string => {
-  const userId = sessionStorage.getItem('arlo_user_id');
-  if (!userId) {
-    throw new Error('User not authenticated');
-  }
-  return userId;
-};
-
 function normalizeProject(row: CreationProject): CreationProject {
   return {
     ...row,
@@ -46,7 +38,6 @@ export function useLabProjects() {
         name: name.trim() || 'Untitled project',
         description: opts?.description?.trim() ?? '',
         status: opts?.status ?? 'in_progress',
-        user_id: getUserId(),
       });
       if (res.data) {
         await refresh();
