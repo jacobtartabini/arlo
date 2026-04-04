@@ -193,9 +193,15 @@ Deno.serve(async (req) => {
           directionsUrl.searchParams.set('waypoints', waypointStr);
         }
 
-        directionsUrl.searchParams.set('mode', (travelMode || 'DRIVING').toLowerCase());
-        directionsUrl.searchParams.set('departure_time', departureTime === 'now' || !departureTime ? 'now' : String(Math.floor(new Date(departureTime).getTime() / 1000)));
-        directionsUrl.searchParams.set('traffic_model', 'best_guess');
+        const mode = (travelMode || 'DRIVING').toLowerCase();
+        directionsUrl.searchParams.set('mode', mode);
+
+        // departure_time and traffic_model are only valid for driving mode;
+        // setting them for walking/bicycling/transit causes INVALID_REQUEST
+        if (mode === 'driving') {
+          directionsUrl.searchParams.set('departure_time', departureTime === 'now' || !departureTime ? 'now' : String(Math.floor(new Date(departureTime).getTime() / 1000)));
+          directionsUrl.searchParams.set('traffic_model', 'best_guess');
+        }
         
         if (alternatives !== false) {
           directionsUrl.searchParams.set('alternatives', 'true');
