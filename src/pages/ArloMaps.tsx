@@ -102,6 +102,31 @@ export default function ArloMaps() {
     }
   }, [geolocation.position, geolocation.error, isNavigating]);
 
+  const searchCenter = useMemo(() => geolocation.position ?? center, [geolocation.position, center]);
+
+  const fitRouteBounds = useCallback((route: RouteOption) => {
+    if (mapRef.current && route.steps.length > 0) {
+      const bounds = new google.maps.LatLngBounds();
+      route.steps.forEach((step) => {
+        bounds.extend(step.startLocation);
+        bounds.extend(step.endLocation);
+      });
+      mapRef.current.fitBounds(bounds, 80);
+    }
+  }, []);
+
+  const handleEndNavigation = useCallback(() => {
+    setIsNavigating(false);
+    setFollowMode(false);
+    setNavStepIndex(0);
+    setNavETA(null);
+    setNavRemainingDist(null);
+    setNavRemainingTime(null);
+    if (activeRoute) {
+      fitRouteBounds(activeRoute);
+    }
+  }, [activeRoute, fitRouteBounds]);
+
   // Follow-mode: keep map centered on user while navigating
   useEffect(() => {
     if (!isNavigating || !followMode || !geolocation.position) return;
@@ -156,8 +181,6 @@ export default function ArloMaps() {
       handleEndNavigation();
     }
   }, [isNavigating, activeRoute, geolocation.position, navStepIndex, handleEndNavigation]);
-
-  const searchCenter = useMemo(() => geolocation.position ?? center, [geolocation.position, center]);
 
   useEffect(() => {
     if (searchQuery.trim().length < 2) {
@@ -425,17 +448,6 @@ export default function ArloMaps() {
     return loc;
   }, [searchCenter]);
 
-  const fitRouteBounds = useCallback((route: RouteOption) => {
-    if (mapRef.current && route.steps.length > 0) {
-      const bounds = new google.maps.LatLngBounds();
-      route.steps.forEach((step) => {
-        bounds.extend(step.startLocation);
-        bounds.extend(step.endLocation);
-      });
-      mapRef.current.fitBounds(bounds, 80);
-    }
-  }, []);
-
   const handleGetDirections = useCallback(
     async (origin: string | LatLng, destination: string | LatLng, travelMode: TravelMode) => {
       setDirectionsMode(true);
@@ -528,18 +540,6 @@ export default function ArloMaps() {
 
     geolocation.startWatching();
   }, [activeRoute, geolocation]);
-
-  const handleEndNavigation = useCallback(() => {
-    setIsNavigating(false);
-    setFollowMode(false);
-    setNavStepIndex(0);
-    setNavETA(null);
-    setNavRemainingDist(null);
-    setNavRemainingTime(null);
-    if (activeRoute) {
-      fitRouteBounds(activeRoute);
-    }
-  }, [activeRoute, fitRouteBounds]);
 
   const handlePinDrag = useCallback(
     async (pin: MapPin, location: LatLng) => {
