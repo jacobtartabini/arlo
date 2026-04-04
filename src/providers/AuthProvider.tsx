@@ -155,11 +155,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         identity: null,
         userKey: null,
       });
-
-      if (!shouldBypassAuthRedirect()) {
-        const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-        redirectToAegisAuth(currentPath);
-      }
+      // Don't redirect here — let ProtectedRoute handle it.
       return false;
     } catch (error) {
       console.error('Auth verification failed:', error);
@@ -171,11 +167,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         identity: null,
         userKey: null,
       });
-
-      if (!shouldBypassAuthRedirect()) {
-        const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-        redirectToAegisAuth(currentPath);
-      }
+      // Don't redirect here — let ProtectedRoute handle it.
       return false;
     }
   }, []);
