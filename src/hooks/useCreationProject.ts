@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { dataApiHelpers } from '@/lib/data-api';
+import { storageUpload, storageGetSignedUrl } from '@/lib/storage-proxy';
 import { supabase } from '@/integrations/supabase/client';
 import { useCreationHistory } from './useCreationHistory';
 import { performBooleanOperation } from '@/utils/csg-operations';
@@ -256,11 +257,8 @@ export function useCreationProject(projectId: string | undefined) {
       const activeProjectId = currentProject.id;
       const filePath = `${getUserId()}/${activeProjectId}/${Date.now()}_${file.name}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('creation-assets')
-        .upload(filePath, file);
-
-      if (uploadError) throw uploadError;
+      const uploadResult = await storageUpload('creation-assets', filePath, file);
+      if (!uploadResult) throw new Error('Upload failed');
 
       const assetRes = await dataApiHelpers.insert<CreationAsset>('creation_assets', {
         project_id: activeProjectId,
