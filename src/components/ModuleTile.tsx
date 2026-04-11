@@ -26,8 +26,10 @@ interface DashboardData {
   healthConnected: boolean;
   activityScore: number;
   sleepHours: number;
-  healthRecentActivities: number;
-  connectedDevices: number;
+    healthRecentActivities: number;
+    healthScore: number;
+    weeklyActiveMinutes: number;
+    connectedDevices: number;
   driveAccountsConnected: number;
   driveStorageUsedBytes: number | null;
   driveStorageTotalBytes: number | null;
