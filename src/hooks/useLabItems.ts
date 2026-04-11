@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { dataApiHelpers } from '@/lib/data-api';
 import { getUserKey } from '@/lib/arloAuth';
-import { supabase } from '@/integrations/supabase/client';
+import { storageUpload, storageGetSignedUrl, storageDelete } from '@/lib/storage-proxy';
 import type { LabItem, LabItemType } from '@/types/creation';
 import { toast } from 'sonner';
 
@@ -74,8 +74,8 @@ export function useLabItems(projectId: string | undefined) {
         return null;
       }
       const filePath = `${userKey}/${projectId}/lab/${Date.now()}_${file.name}`;
-      const { error: upErr } = await supabase.storage.from('creation-assets').upload(filePath, file);
-      if (upErr) {
+      const uploadResult = await storageUpload('creation-assets', filePath, file);
+      if (!uploadResult) {
         toast.error('Upload failed');
         return null;
       }
@@ -109,7 +109,7 @@ export function useLabItems(projectId: string | undefined) {
     async (id: string) => {
       const row = items.find((i) => i.id === id);
       if (row?.file_path) {
-        await supabase.storage.from('creation-assets').remove([row.file_path]);
+        await storageDelete('creation-assets', [row.file_path]);
       }
       await dataApiHelpers.delete('lab_items', id);
       await refresh();
@@ -117,9 +117,8 @@ export function useLabItems(projectId: string | undefined) {
     [items, refresh]
   );
 
-  const getFilePublicUrl = useCallback((filePath: string) => {
-    const { data } = supabase.storage.from('creation-assets').getPublicUrl(filePath);
-    return data.publicUrl;
+  const getFileUrl = useCallback(async (filePath: string): Promise<string | null> => {
+    return storageGetSignedUrl('creation-assets', filePath);
   }, []);
 
   return {
