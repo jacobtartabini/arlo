@@ -129,6 +129,6 @@ export function useLabItems(projectId: string | undefined) {
     addFileItem,
     updateItem,
     deleteItem,
-    getFilePublicUrl,
+    getFileUrl,
   };
 }
