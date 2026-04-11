@@ -392,3 +392,16 @@ function AddItemMenu({
     </>
   );
 }
+
+function FileLink({ filePath, getFileUrl }: { filePath: string; getFileUrl: (p: string) => Promise<string | null> }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    getFileUrl(filePath).then(setUrl);
+  }, [filePath, getFileUrl]);
+  if (!url) return <span className="text-sm text-muted-foreground mt-1 inline-block">Loading…</span>;
+  return (
+    <a href={url} target="_blank" rel="noreferrer" className="text-sm text-primary mt-1 inline-block">
+      Open file
+    </a>
+  );
+}
