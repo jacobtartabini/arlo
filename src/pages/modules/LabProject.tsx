@@ -255,14 +255,7 @@ export default function LabProject() {
                       <p className="text-sm text-muted-foreground line-clamp-2 mt-0.5">{item.body}</p>
                     ) : null}
                     {item.file_path ? (
-                      <a
-                        href={getFilePublicUrl(item.file_path)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-sm text-primary mt-1 inline-block"
-                      >
-                        Open file
-                      </a>
+                      <FileLink filePath={item.file_path} getFileUrl={getFileUrl} />
                     ) : null}
                   </div>
                   <DropdownMenu>
