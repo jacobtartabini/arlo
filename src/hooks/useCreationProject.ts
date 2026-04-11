@@ -536,15 +536,11 @@ export function useCreationProject(projectId: string | undefined) {
     }
   };
 
-  const getAssetUrl = useCallback((assetId: string) => {
+  const getAssetUrl = useCallback(async (assetId: string): Promise<string | null> => {
     const asset = assets.find(a => a.id === assetId);
     if (!asset) return null;
 
-    const { data } = supabase.storage
-      .from('creation-assets')
-      .getPublicUrl(asset.file_path);
-
-    return data.publicUrl;
+    return storageGetSignedUrl('creation-assets', asset.file_path);
   }, [assets]);
 
   // Multi-select support
