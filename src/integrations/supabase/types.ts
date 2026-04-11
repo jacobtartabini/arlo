@@ -1669,6 +1669,39 @@ export type Database = {
         }
         Relationships: []
       }
+      map_pins: {
+        Row: {
+          created_at: string
+          id: string
+          latitude: number
+          longitude: number
+          note: string | null
+          title: string
+          updated_at: string
+          user_key: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          latitude: number
+          longitude: number
+          note?: string | null
+          title: string
+          updated_at?: string
+          user_key: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          latitude?: number
+          longitude?: number
+          note?: string | null
+          title?: string
+          updated_at?: string
+          user_key?: string
+        }
+        Relationships: []
+      }
       map_recent_searches: {
         Row: {
           id: string
