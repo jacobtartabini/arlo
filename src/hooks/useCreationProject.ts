@@ -465,13 +465,12 @@ export function useCreationProject(projectId: string | undefined) {
     const asset = assets.find(a => a.id === assetId);
     if (!asset) return null;
 
-    const { data } = supabase.storage
-      .from('creation-assets')
-      .getPublicUrl(asset.file_path);
+    const signedUrl = await storageGetSignedUrl('creation-assets', asset.file_path);
+    if (!signedUrl) return null;
 
     return new Promise((resolve) => {
       const loader = new STLLoader();
-      loader.load(data.publicUrl, (geometry) => {
+      loader.load(signedUrl, (geometry) => {
         geometry.computeVertexNormals();
         resolve(geometry);
       }, undefined, () => resolve(null));
