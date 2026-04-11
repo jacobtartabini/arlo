@@ -84,7 +84,7 @@ export default function LabProject() {
     addFileItem,
     updateItem,
     deleteItem,
-    getFilePublicUrl,
+    getFileUrl,
   } = useLabItems(projectId);
 
   const project = useMemo(
