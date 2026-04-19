@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { useChatHistory } from './ChatHistoryProvider';
 import { ChatMessageStatus } from '@/types/chat';
 import { notifyChat, showToast } from '@/lib/notifications/notify';
+import { invokeEdgeFunction } from '@/lib/edge-functions';
 
 export interface ArloConfig {
   apiEndpoint: string;
@@ -124,6 +125,7 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
     appendMessage,
     ensureActiveConversation,
     updateMessageStatus,
+    getConversationById,
   } = useChatHistory();
 
   const socketRef = useRef<WebSocket | null>(null);
@@ -410,48 +412,118 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Sending messages — unchanged (WS first, fallback to HTTP)
-  const sendMessage = async (content: string) => {
-    const trimmed = content.trim();
-    if (!trimmed) return;
+  // WS first; HTTP fallback calls Claude via Supabase `arlo-ai` edge function
+  const sendMessage = useCallback(
+    async (content: string) => {
+      const trimmed = content.trim();
+      if (!trimmed) return;
 
-    const conversationId = ensureActiveConversation();
-    const userMessage = appendMessage({
-      conversationId,
-      text: trimmed,
-      sender: 'user',
-      status: 'pending',
-    });
+      const conversationId = ensureActiveConversation();
+      const priorMessages = getConversationById(conversationId)?.messages ?? [];
 
-    pendingMessagesRef.current.add(userMessage.id);
-    updateLoadingState();
+      const userMessage = appendMessage({
+        conversationId,
+        text: trimmed,
+        sender: 'user',
+        status: 'pending',
+      });
 
-    const socket = socketRef.current;
-    const socketReady = socket && socket.readyState === WebSocket.OPEN;
+      pendingMessagesRef.current.add(userMessage.id);
+      updateLoadingState();
 
-    if (socketReady) {
-      try {
-        const payload = {
-          type: 'chat_prompt',
-          id: userMessage.id,
-          message: trimmed,
-          text: trimmed,
-          conversationId,
-        };
-        socket.send(JSON.stringify(payload));
-        outboundMessageMapRef.current.set(userMessage.id, {
-          conversationId,
-          messageId: userMessage.id,
-        });
-        return;
-      } catch (err) {
-        console.error('WS send failed, falling back to HTTP', err);
+      const socket = socketRef.current;
+      const socketReady = socket && socket.readyState === WebSocket.OPEN;
+
+      if (socketReady) {
+        try {
+          const payload = {
+            type: 'chat_prompt',
+            id: userMessage.id,
+            message: trimmed,
+            text: trimmed,
+            conversationId,
+          };
+          socket.send(JSON.stringify(payload));
+          outboundMessageMapRef.current.set(userMessage.id, {
+            conversationId,
+            messageId: userMessage.id,
+          });
+          return;
+        } catch (err) {
+          console.error('WS send failed, falling back to HTTP', err);
+        }
       }
-    }
 
-    updateMessageStatus(conversationId, userMessage.id, 'error');
-    completePendingMessage(userMessage.id);
-  };
+      const chronological = [...priorMessages, userMessage].sort(
+        (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+      );
+
+      const apiMessages = chronological
+        .filter((m) => m.text.trim().length > 0)
+        .map((m) => ({
+          role: m.sender === 'user' ? ('user' as const) : ('assistant' as const),
+          content: m.text,
+        }));
+
+      try {
+        const result = await invokeEdgeFunction<{ text?: string; error?: string; configured?: boolean }>(
+          'arlo-ai',
+          { messages: apiMessages },
+          { requireAuth: true },
+        );
+
+        if (!result.ok) {
+          throw new Error(result.message || 'Request failed');
+        }
+
+        const reply =
+          typeof result.data === 'object' && result.data && 'text' in result.data
+            ? String((result.data as { text?: string }).text ?? '')
+            : '';
+
+        if (!reply) {
+          throw new Error('Empty AI response');
+        }
+
+        updateMessageStatus(conversationId, userMessage.id, 'sent');
+        appendMessage({
+          conversationId,
+          text: reply,
+          sender: 'arlo',
+          status: 'sent',
+        });
+
+        const preview = reply.length > 100 ? `${reply.slice(0, 100)}...` : reply;
+        showToast('chat', 'Arlo responded', preview);
+
+        try {
+          const userId = sessionStorage.getItem('arlo_user_id');
+          if (userId) {
+            await notifyChat(userId, 'Arlo responded', preview, {
+              conversationId,
+              source: 'chat',
+            });
+          }
+        } catch (e) {
+          console.error('Failed to send chat notification:', e);
+        }
+      } catch (err) {
+        console.error('HTTP fallback send failed', err);
+        toast.error(err instanceof Error ? err.message : 'Failed to send a request to the Edge Function');
+        updateMessageStatus(conversationId, userMessage.id, 'error');
+      } finally {
+        completePendingMessage(userMessage.id);
+      }
+    },
+    [
+      appendMessage,
+      completePendingMessage,
+      ensureActiveConversation,
+      getConversationById,
+      updateLoadingState,
+      updateMessageStatus,
+    ],
+  );
 
   const sendVoiceMessage = async () => {
     // unchanged

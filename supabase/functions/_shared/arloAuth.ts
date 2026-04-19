@@ -35,6 +35,9 @@ const DEFAULT_ALLOWED_HEADERS = [
   'x-arlo-authorization',
   // misc
   'x-user-key',
+  // Tracing (optional fetch wrappers)
+  'sentry-trace',
+  'baggage',
 ];
 
 const DEFAULT_ALLOWED_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'];
