@@ -127,11 +127,11 @@ Deno.serve(async (req) => {
   try {
     // Verify JWT
     const authResult = await verifyArloJWT(req);
-    if (!authResult.authenticated || !authResult.userKey) {
+    if (!authResult.authenticated || !authResult.userId) {
       return unauthorizedResponse(req, 'Authentication required');
     }
 
-    const userKey = authResult.userKey;
+    const userKey = authResult.userId;
     const { account_id, thread_id, content, subject, recipients }: SendRequest = await req.json();
 
     if (!account_id || !thread_id || !content) {

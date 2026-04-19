@@ -484,7 +484,7 @@ Deno.serve(async (req) => {
 // Helper function to sync transactions for an item
 // Maps each transaction to the correct linked_account row by plaid_account_id
 async function syncTransactions(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   userKey: string,
   itemId: string,
   encryptedToken: string,

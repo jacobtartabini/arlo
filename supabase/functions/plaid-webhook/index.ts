@@ -131,7 +131,7 @@ async function verifyPlaidWebhook(
     const key = await importKey(jwk);
 
     const signedData = new TextEncoder().encode(`${headerB64}.${payloadB64}`);
-    const signature = base64UrlDecode(signatureB64);
+    const signature = base64UrlDecode(signatureB64) as unknown as ArrayBuffer;
 
     const isValid = await crypto.subtle.verify(
       { name: 'ECDSA', hash: 'SHA-256' },

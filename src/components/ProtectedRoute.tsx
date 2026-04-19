@@ -1,7 +1,8 @@
 import React, { ReactNode, useEffect, useState } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { Loader2 } from 'lucide-react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
+import { redirectToAegisAuth, shouldBypassAuthRedirect } from '@/lib/arloAuth';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -35,8 +36,12 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   }
 
   if (!isAuthenticated) {
-    const returnTo = `${location.pathname}${location.search}${location.hash}`;
-    return <Navigate to={`/login?return_to=${encodeURIComponent(returnTo)}`} replace />;
+    // Single point of redirect — avoids double-counting with AuthProvider
+    if (!shouldBypassAuthRedirect()) {
+      const returnTo = `${location.pathname}${location.search}${location.hash}`;
+      redirectToAegisAuth(returnTo);
+    }
+    return null;
   }
 
   return <>{children}</>;

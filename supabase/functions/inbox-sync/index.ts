@@ -55,7 +55,7 @@ async function syncGmailMessages(
   syncCursor: string | null,
   accountId: string,
   userKey: string,
-  supabase: ReturnType<typeof createClient>
+  supabase: any
 ): Promise<{ cursor: string; threadsSynced: number; messagesSynced: number }> {
   const baseUrl = 'https://gmail.googleapis.com/gmail/v1/users/me';
   let threadsSynced = 0;
@@ -190,7 +190,7 @@ async function syncOutlookMessages(
   syncCursor: string | null,
   accountId: string,
   userKey: string,
-  supabase: ReturnType<typeof createClient>
+  supabase: any
 ): Promise<{ cursor: string; threadsSynced: number; messagesSynced: number }> {
   const baseUrl = 'https://graph.microsoft.com/v1.0/me';
   let threadsSynced = 0;

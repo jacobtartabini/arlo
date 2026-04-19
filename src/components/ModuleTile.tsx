@@ -23,9 +23,17 @@ interface DashboardData {
   savedPlacesCount: number;
   userLocation?: { lat: number; lng: number } | null;
   upcomingTrips: { id: string; name: string; startDate: Date }[];
+  healthConnected: boolean;
   activityScore: number;
   sleepHours: number;
-  connectedDevices: number;
+    healthRecentActivities: number;
+    healthScore: number;
+    weeklyActiveMinutes: number;
+    connectedDevices: number;
+  driveAccountsConnected: number;
+  driveStorageUsedBytes: number | null;
+  driveStorageTotalBytes: number | null;
+  driveStorageUsedPercent: number | null;
   isLoading: boolean;
   onTaskToggle?: (taskId: string, done: boolean) => void;
   onTaskCreate?: (title: string) => Promise<boolean>;

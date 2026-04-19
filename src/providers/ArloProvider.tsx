@@ -63,6 +63,8 @@ const DEFAULT_CONFIG: ArloConfig = {
 
 // IMPORTANT — your backend route is `/ws/chat`
 const WS_PATH = '/ws/chat';
+const MESSAGE_RATE_LIMIT_WINDOW_MS = 60_000;
+const MESSAGE_RATE_LIMIT_MAX_MESSAGES = 20;
 
 type SocketMessage = Record<string, unknown>;
 
@@ -137,6 +139,7 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
   const streamingReplyMapRef = useRef(new Map<string, { conversationId: string; messageId: string }>());
   const streamingBufferRef = useRef(new Map<string, string>());
   const isUnmountingRef = useRef(false);
+  const messageTimestampsRef = useRef<number[]>([]);
 
   const messages = useMemo<ChatMessage[]>(
     () =>
