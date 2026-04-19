@@ -9,7 +9,8 @@ import { useState, useCallback, useEffect, memo } from "react";
 import { 
   Check, Plus, FileText, MapPin, Plane, Flame, Moon,
   Sparkles, Clock, FolderOpen, Navigation, Calendar,
-  Zap, Upload, PenLine, Shield, Monitor, Palette, Loader2, Send, Circle
+  Zap, Upload, PenLine, Shield, Monitor, Palette, Loader2, Send, Circle,
+  Orbit, Bell, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { GoogleMap } from "@react-google-maps/api";
 import { useMapContext } from "@/components/maps/MapProvider";
@@ -49,6 +50,11 @@ interface MiniContentProps {
     driveStorageUsedBytes: number | null;
     driveStorageTotalBytes: number | null;
     driveStorageUsedPercent: number | null;
+
+    circlesTotalContacts: number;
+    circlesCountsByLayer: { inner: number; middle: number; outer: number };
+    circlesOpenReminders: { id: string; title: string; dueAt: Date }[];
+    circlesNudgesPreview: { contactId: string; displayName: string; circle: string; message: string }[];
   };
   onClick?: (e: React.MouseEvent) => void;
   onTaskToggle?: (taskId: string, done: boolean) => void;
@@ -960,6 +966,185 @@ function FilesMiniContent({ size, data }: { size: ModuleSize; data: MiniContentP
   );
 }
 
+// Circles — orbit summary + swipeable reminders / follow-up nudges
+function CirclesMiniContent({ data, size }: { data: MiniContentProps["data"]; size: ModuleSize }) {
+  const isPrimary = size === "primary";
+  const isTertiary = size === "tertiary";
+  const counts = data.circlesCountsByLayer;
+  const total = data.circlesTotalContacts;
+
+  type Slide =
+    | { kind: "reminder"; id: string; headline: string; detail: string }
+    | { kind: "nudge"; id: string; headline: string; detail: string };
+
+  const slides = (() => {
+    const s: Slide[] = [];
+    for (const r of data.circlesOpenReminders) {
+      s.push({
+        kind: "reminder",
+        id: r.id,
+        headline: r.title,
+        detail: formatDistanceToNow(r.dueAt, { addSuffix: true }),
+      });
+    }
+    for (const n of data.circlesNudgesPreview) {
+      s.push({
+        kind: "nudge",
+        id: n.contactId,
+        headline: n.displayName,
+        detail: n.message,
+      });
+    }
+    return s;
+  })();
+
+  const [slideIdx, setSlideIdx] = useState(0);
+  const slideKey = slides.map((x) => x.id).join("|");
+  useEffect(() => {
+    setSlideIdx(0);
+  }, [slideKey]);
+
+  const hasSlides = slides.length > 0;
+  const safeIdx = hasSlides ? slideIdx % slides.length : 0;
+  const slide = hasSlides ? slides[safeIdx] : null;
+
+  const orbitSize = isPrimary ? 56 : isTertiary ? 40 : 48;
+
+  const go = (dir: -1 | 1) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!hasSlides) return;
+    setSlideIdx((i) => (i + dir + slides.length) % slides.length);
+  };
+
+  return (
+    <div className={cn("flex gap-3", isPrimary ? "items-stretch" : "items-center")}>
+      <div className="flex flex-col items-center shrink-0 gap-1">
+        <div className="relative" style={{ width: orbitSize, height: orbitSize }}>
+          <svg
+            viewBox="0 0 56 56"
+            className="absolute inset-0 w-full h-full text-primary/25"
+            aria-hidden
+          >
+            <circle cx="28" cy="28" r="24" fill="none" stroke="currentColor" strokeWidth="1.25" />
+            <circle cx="28" cy="28" r="17" fill="none" stroke="currentColor" strokeWidth="1.25" className="text-primary/40" />
+            <circle cx="28" cy="28" r="10" fill="none" stroke="currentColor" strokeWidth="1.25" className="text-primary/55" />
+          </svg>
+          <motion.div
+            className="absolute inset-0 flex items-center justify-center pointer-events-none"
+            initial={{ scale: 0.92, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 320, damping: 22 }}
+          >
+            <Orbit className={cn("text-primary/70", isTertiary ? "w-4 h-4" : "w-5 h-5")} />
+          </motion.div>
+        </div>
+        <div className="flex gap-1 justify-center w-full whitespace-nowrap">
+          <span className="text-[8px] font-medium tabular-nums text-emerald-600/90 dark:text-emerald-400/90">
+            {counts.inner}
+          </span>
+          <span className="text-[8px] text-muted-foreground/40">·</span>
+          <span className="text-[8px] font-medium tabular-nums text-amber-600/90 dark:text-amber-400/90">
+            {counts.middle}
+          </span>
+          <span className="text-[8px] text-muted-foreground/40">·</span>
+          <span className="text-[8px] font-medium tabular-nums text-sky-600/90 dark:text-sky-400/90">
+            {counts.outer}
+          </span>
+        </div>
+        {!isTertiary && (
+          <span className="text-[9px] text-muted-foreground/60">
+            {total} contact{total === 1 ? "" : "s"}
+          </span>
+        )}
+      </div>
+
+      <div className="flex-1 min-w-0 flex flex-col justify-center gap-1.5">
+        {!hasSlides && total === 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="rounded-lg border border-dashed border-border/50 bg-muted/15 px-2.5 py-2"
+          >
+            <p className="text-[10px] font-medium text-foreground/85">Your circles are empty</p>
+            <p className="text-[9px] text-muted-foreground/70 leading-snug mt-0.5">
+              Import or add people to see follow-up rhythm here.
+            </p>
+          </motion.div>
+        )}
+
+        {!hasSlides && total > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex items-start gap-2 rounded-lg bg-emerald-500/8 border border-emerald-500/15 px-2.5 py-2"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-emerald-600/80 dark:text-emerald-400/80 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-[10px] font-medium text-foreground/90">Caught up</p>
+              <p className="text-[9px] text-muted-foreground/70 leading-snug">
+                No open reminders or overdue touchpoint nudges.
+              </p>
+            </div>
+          </motion.div>
+        )}
+
+        {slide && (
+          <motion.div
+            key={slide.id}
+            initial={{ opacity: 0, x: 6 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="rounded-lg bg-muted/20 border border-border/30 px-2 py-1.5 min-h-[52px] flex flex-col justify-center"
+          >
+            <div className="flex items-start gap-2">
+              {slide.kind === "reminder" ? (
+                <Bell className="w-3.5 h-3.5 text-amber-500/90 shrink-0 mt-0.5" />
+              ) : (
+                <Clock className="w-3.5 h-3.5 text-primary/70 shrink-0 mt-0.5" />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-semibold text-foreground truncate">{slide.headline}</p>
+                {!isTertiary && (
+                  <p className="text-[9px] text-muted-foreground/75 line-clamp-2 leading-snug mt-0.5">
+                    {slide.detail}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {hasSlides && slides.length > 1 && !isTertiary && (
+              <div className="flex items-center justify-end gap-0.5 mt-1">
+                <button
+                  type="button"
+                  aria-label="Previous"
+                  className="p-0.5 rounded-md hover:bg-background/80 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={go(-1)}
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-[8px] text-muted-foreground/50 tabular-nums px-1">
+                  {safeIdx + 1}/{slides.length}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Next"
+                  className="p-0.5 rounded-md hover:bg-background/80 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={go(1)}
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {isTertiary && total > 0 && (
+          <span className="text-[8px] text-muted-foreground/60 truncate">{total} in network</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Lab - compact design
 function CreationMiniContent({ size }: { size: ModuleSize }) {
   const isTertiary = size === "tertiary";
@@ -1018,6 +1203,8 @@ export function ModuleMiniContent({ moduleId, size, data, onClick, onTaskToggle,
         return <SecurityMiniContent size={size} data={{ connectedDevices: data.connectedDevices }} />;
       case "files":
         return <FilesMiniContent size={size} data={data} />;
+      case "contacts":
+        return <CirclesMiniContent data={data} size={size} />;
       case "creation":
         return <CreationMiniContent size={size} />;
       default:

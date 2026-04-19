@@ -26,6 +26,10 @@ interface DashboardData {
   activityScore: number;
   sleepHours: number;
   connectedDevices: number;
+  circlesTotalContacts: number;
+  circlesCountsByLayer: { inner: number; middle: number; outer: number };
+  circlesOpenReminders: { id: string; title: string; dueAt: Date }[];
+  circlesNudgesPreview: { contactId: string; displayName: string; circle: string; message: string }[];
   isLoading: boolean;
   onTaskToggle?: (taskId: string, done: boolean) => void;
   onTaskCreate?: (title: string) => Promise<boolean>;
