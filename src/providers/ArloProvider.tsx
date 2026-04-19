@@ -62,6 +62,8 @@ const DEFAULT_CONFIG: ArloConfig = {
 
 // IMPORTANT — your backend route is `/ws/chat`
 const WS_PATH = '/ws/chat';
+const MESSAGE_RATE_LIMIT_WINDOW_MS = 60_000;
+const MESSAGE_RATE_LIMIT_MAX_MESSAGES = 20;
 
 type SocketMessage = Record<string, unknown>;
 
@@ -135,6 +137,7 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
   const streamingReplyMapRef = useRef(new Map<string, { conversationId: string; messageId: string }>());
   const streamingBufferRef = useRef(new Map<string, string>());
   const isUnmountingRef = useRef(false);
+  const messageTimestampsRef = useRef<number[]>([]);
 
   const messages = useMemo<ChatMessage[]>(
     () =>
@@ -414,6 +417,23 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
   const sendMessage = async (content: string) => {
     const trimmed = content.trim();
     if (!trimmed) return;
+
+    const now = Date.now();
+    messageTimestampsRef.current = messageTimestampsRef.current.filter(
+      (timestamp) => now - timestamp < MESSAGE_RATE_LIMIT_WINDOW_MS,
+    );
+
+    if (messageTimestampsRef.current.length >= MESSAGE_RATE_LIMIT_MAX_MESSAGES) {
+      const oldestTimestamp = messageTimestampsRef.current[0];
+      const waitMs = Math.max(0, MESSAGE_RATE_LIMIT_WINDOW_MS - (now - oldestTimestamp));
+      const waitSeconds = Math.ceil(waitMs / 1000);
+      toast.error(
+        `Rate limit reached. Please wait ${waitSeconds}s before sending another message.`,
+      );
+      return;
+    }
+
+    messageTimestampsRef.current.push(now);
 
     const conversationId = ensureActiveConversation();
     const userMessage = appendMessage({
