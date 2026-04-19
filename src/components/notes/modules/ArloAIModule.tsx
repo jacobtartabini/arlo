@@ -16,6 +16,8 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { getArloToken } from "@/lib/arloAuth";
 
 interface ArloAIModuleProps {
   id: string;
@@ -51,30 +53,52 @@ export function ArloAIModule({ id, onClose, noteContent, onInsertText }: ArloAIM
     setMessages(prev => [...prev, { role: "user", content: userMessage }]);
     setIsLoading(true);
 
-    // Simulate AI response (in production, this would call Arlo's API)
-    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+    try {
+      const token = await getArloToken();
+      if (!token) {
+        throw new Error("Authentication required");
+      }
 
-    // Generate contextual response
-    let response = "";
-    const lowerMessage = userMessage.toLowerCase();
-    
-    if (lowerMessage.includes("summarize") || lowerMessage.includes("summary")) {
-      response = noteContent 
-        ? `Based on your note content, here's a summary:\n\n• The note contains visual elements and text\n• Key themes appear to be related to your drawing\n• Consider adding headers for better organization`
-        : "I don't see any content in this note yet. Start adding some drawings or text, and I can help summarize!";
-    } else if (lowerMessage.includes("explain")) {
-      response = "I'd be happy to explain! Could you select the specific content you'd like me to explain? Just highlight it on the canvas.";
-    } else if (lowerMessage.includes("expand") || lowerMessage.includes("elaborate")) {
-      response = "Here are some ways to expand on your ideas:\n\n1. Add more visual diagrams\n2. Include supporting examples\n3. Link related concepts together\n4. Add annotations to your drawings";
-    } else if (lowerMessage.includes("help") || lowerMessage.includes("what can you do")) {
-      response = "I'm Arlo, your AI assistant for Smart Notes! I can:\n\n✨ Summarize your note content\n📝 Explain concepts you select\n💡 Suggest ideas and expansions\n🔍 Answer questions about your work\n\nJust ask me anything!";
-    } else {
-      response = `I understand you're asking about "${userMessage}". Here are my thoughts:\n\nThis is an interesting topic! Consider:\n• Breaking it down into smaller parts\n• Adding visual diagrams\n• Creating connections to other concepts\n\nWould you like me to help with any specific aspect?`;
+      const conversationHistory = messages.slice(-10).map((message) => ({
+        role: message.role,
+        content: message.content,
+      }));
+
+      const prompt = noteContent?.trim()
+        ? `${userMessage}\n\nNote context:\n${noteContent}`
+        : userMessage;
+
+      const { data, error } = await supabase.functions.invoke("arlo-ai", {
+        headers: { "X-Arlo-Authorization": `Bearer ${token}` },
+        body: {
+          prompt,
+          conversation: conversationHistory,
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      const response = data?.message;
+      if (!response || typeof response !== "string") {
+        throw new Error("No AI response received");
+      }
+
+      setMessages(prev => [...prev, { role: "assistant", content: response }]);
+    } catch (error) {
+      console.error("Arlo AI request failed:", error);
+      setMessages(prev => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "I couldn't generate a response right now. Please try again in a moment.",
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
     }
-
-    setMessages(prev => [...prev, { role: "assistant", content: response }]);
-    setIsLoading(false);
-  }, [input, isLoading, noteContent]);
+  }, [input, isLoading, noteContent, messages]);
 
   const handleCopy = useCallback((text: string, index: number) => {
     navigator.clipboard.writeText(text);

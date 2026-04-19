@@ -14,6 +14,8 @@ import { toast } from 'sonner';
 import { useChatHistory } from './ChatHistoryProvider';
 import { ChatMessageStatus } from '@/types/chat';
 import { notifyChat, showToast } from '@/lib/notifications/notify';
+import { supabase } from '@/integrations/supabase/client';
+import { getArloToken } from '@/lib/arloAuth';
 
 export interface ArloConfig {
   apiEndpoint: string;
@@ -62,6 +64,8 @@ const DEFAULT_CONFIG: ArloConfig = {
 
 // IMPORTANT — your backend route is `/ws/chat`
 const WS_PATH = '/ws/chat';
+const MESSAGE_RATE_LIMIT_WINDOW_MS = 60_000;
+const MESSAGE_RATE_LIMIT_MAX_MESSAGES = 20;
 
 type SocketMessage = Record<string, unknown>;
 
@@ -135,6 +139,7 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
   const streamingReplyMapRef = useRef(new Map<string, { conversationId: string; messageId: string }>());
   const streamingBufferRef = useRef(new Map<string, string>());
   const isUnmountingRef = useRef(false);
+  const messageTimestampsRef = useRef<number[]>([]);
 
   const messages = useMemo<ChatMessage[]>(
     () =>
@@ -415,6 +420,23 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
     const trimmed = content.trim();
     if (!trimmed) return;
 
+    const now = Date.now();
+    messageTimestampsRef.current = messageTimestampsRef.current.filter(
+      (timestamp) => now - timestamp < MESSAGE_RATE_LIMIT_WINDOW_MS,
+    );
+
+    if (messageTimestampsRef.current.length >= MESSAGE_RATE_LIMIT_MAX_MESSAGES) {
+      const oldestTimestamp = messageTimestampsRef.current[0];
+      const waitMs = Math.max(0, MESSAGE_RATE_LIMIT_WINDOW_MS - (now - oldestTimestamp));
+      const waitSeconds = Math.ceil(waitMs / 1000);
+      toast.error(
+        `Rate limit reached. Please wait ${waitSeconds}s before sending another message.`,
+      );
+      return;
+    }
+
+    messageTimestampsRef.current.push(now);
+
     const conversationId = ensureActiveConversation();
     const userMessage = appendMessage({
       conversationId,
@@ -449,8 +471,47 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    updateMessageStatus(conversationId, userMessage.id, 'error');
-    completePendingMessage(userMessage.id);
+    try {
+      const token = await getArloToken();
+      if (!token) throw new Error('Authentication required');
+
+      const { data, error } = await supabase.functions.invoke('arlo-ai', {
+        headers: { 'X-Arlo-Authorization': `Bearer ${token}` },
+        body: {
+          prompt: trimmed,
+          conversation: messages.slice(-10).map((message) => ({
+            role: message.role,
+            content: message.content,
+          })),
+        },
+      });
+
+      if (error) {
+        throw new Error(error.message || 'AI request failed');
+      }
+
+      const reply = typeof data?.message === 'string' ? data.message : null;
+      if (!reply) {
+        throw new Error('AI returned an empty response');
+      }
+
+      appendMessage({
+        conversationId,
+        text: reply,
+        sender: 'arlo',
+        status: 'sent',
+      });
+
+      updateMessageStatus(conversationId, userMessage.id, 'sent');
+      completePendingMessage(userMessage.id);
+      outboundMessageMapRef.current.delete(userMessage.id);
+      return;
+    } catch (error) {
+      console.error('HTTP fallback send failed', error);
+      updateMessageStatus(conversationId, userMessage.id, 'error');
+      completePendingMessage(userMessage.id);
+      toast.error(error instanceof Error ? error.message : 'Failed to send message');
+    }
   };
 
   const sendVoiceMessage = async () => {
