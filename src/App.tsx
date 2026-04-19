@@ -45,6 +45,7 @@ import Inbox from "./pages/Inbox";
 import ArloMaps from "./pages/ArloMaps";
 import MorningView from "./pages/MorningView";
 import FocusSession from "./pages/FocusSession";
+import Contacts from "./pages/modules/Contacts";
 import { NotificationMonitor } from "./components/NotificationMonitor";
 import { MorningWakeupScheduler } from "./components/MorningWakeupScheduler";
 import { VoiceAmbientGlow } from "./components/voice/VoiceAmbientGlow";
@@ -204,6 +205,11 @@ const App = () => (
                   <Route path="/focus" element={
                     <ProtectedRoute>
                       <FocusSession />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/contacts" element={
+                    <ProtectedRoute>
+                      <Contacts />
                     </ProtectedRoute>
                   } />
 

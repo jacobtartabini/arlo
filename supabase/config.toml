@@ -54,6 +54,9 @@ verify_jwt = false
 [functions.google-workspace-api]
 verify_jwt = false
 
+[functions.google-contacts-import]
+verify_jwt = false
+
 [functions.plaid-api]
 verify_jwt = false
 

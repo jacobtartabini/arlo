@@ -23,6 +23,7 @@ import {
   BellRing,
   Flame,
   Map,
+  Orbit,
   CalendarCheck,
   type LucideIcon,
 } from "lucide-react";
@@ -65,6 +66,7 @@ const moduleIconMap: Record<string, LucideIcon> = {
   notes: NotebookPen,
   habits: Flame,
   maps: Map,
+  contacts: Orbit,
 };
 
 const ArloCommandLauncher = () => {
