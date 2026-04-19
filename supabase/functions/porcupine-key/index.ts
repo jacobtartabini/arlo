@@ -31,8 +31,8 @@ serve(async (req) => {
     console.log("[porcupine-key] Returning access key for user:", authResult.userId);
     return jsonResponse(req, { accessKey });
     
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("[porcupine-key] Error:", error);
-    return errorResponse(req, error.message, 500);
+    return errorResponse(req, error instanceof Error ? error.message : String(error), 500);
   }
 });

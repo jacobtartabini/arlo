@@ -23,6 +23,7 @@ interface DashboardData {
   savedPlacesCount: number;
   userLocation?: { lat: number; lng: number } | null;
   upcomingTrips: { id: string; name: string; startDate: Date }[];
+  healthConnected: boolean;
   activityScore: number;
   sleepHours: number;
   connectedDevices: number;

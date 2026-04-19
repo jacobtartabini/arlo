@@ -344,53 +344,6 @@ export type Database = {
         }
         Relationships: []
       }
-      lab_items: {
-        Row: {
-          body: string | null
-          created_at: string
-          file_path: string | null
-          id: string
-          item_type: string
-          metadata: Json
-          original_filename: string | null
-          project_id: string
-          title: string
-          updated_at: string
-        }
-        Insert: {
-          body?: string | null
-          created_at?: string
-          file_path?: string | null
-          id?: string
-          item_type: string
-          metadata?: Json
-          original_filename?: string | null
-          project_id: string
-          title?: string
-          updated_at?: string
-        }
-        Update: {
-          body?: string | null
-          created_at?: string
-          file_path?: string | null
-          id?: string
-          item_type?: string
-          metadata?: Json
-          original_filename?: string | null
-          project_id?: string
-          title?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "lab_items_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "creation_projects"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       creation_scene_state: {
         Row: {
           project_id: string
@@ -1718,6 +1671,39 @@ export type Database = {
           latitude?: number
           longitude?: number
           upvotes?: number
+          user_key?: string
+        }
+        Relationships: []
+      }
+      map_pins: {
+        Row: {
+          created_at: string
+          id: string
+          latitude: number
+          longitude: number
+          note: string | null
+          title: string
+          updated_at: string
+          user_key: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          latitude: number
+          longitude: number
+          note?: string | null
+          title: string
+          updated_at?: string
+          user_key: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          latitude?: number
+          longitude?: number
+          note?: string | null
+          title?: string
+          updated_at?: string
           user_key?: string
         }
         Relationships: []

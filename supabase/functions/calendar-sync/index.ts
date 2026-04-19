@@ -273,9 +273,9 @@ async function syncGoogleCalendar(integration: CalendarIntegration, supabase: an
 
     console.log(`[calendar-sync] Synced ${totalSynced} total Google events for user_key ${integration.user_key}`);
     return { success: true, synced: totalSynced };
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("[calendar-sync] Sync error:", error);
-    return { success: false, error: error.message };
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
 
@@ -311,7 +311,7 @@ async function syncOutlookIcal(integration: CalendarIntegration, supabase: any):
       .eq("user_key", integration.user_key)
       .eq("source", "outlook_ics");
 
-    const existingIds = new Set((existingEvents || []).map((e: any) => e.external_id));
+    const existingIds = new Set<string>((existingEvents || []).map((e: any) => e.external_id));
     const currentIds = new Set<string>();
 
     for (const event of events) {
@@ -387,16 +387,17 @@ async function syncOutlookIcal(integration: CalendarIntegration, supabase: any):
 
     console.log(`[calendar-sync] Synced ${syncedCount} Outlook iCal events (${errorCount} errors) for user_key ${integration.user_key}`);
     return { success: true, synced: syncedCount };
-  } catch (error) {
+  } catch (error: unknown) {
+    const errMsg = error instanceof Error ? error.message : String(error);
     console.error("[calendar-sync] iCal sync error:", error);
     await supabase
       .from("calendar_integrations")
       .update({
         last_sync_status: "error",
-        last_sync_error: error.message,
+        last_sync_error: errMsg,
       })
       .eq("id", integration.id);
-    return { success: false, error: error.message };
+    return { success: false, error: errMsg };
   }
 }
 
@@ -596,9 +597,9 @@ async function pushEventToGoogle(
 
     const data = await response.json();
     return { success: true, externalId: `primary::${data.id}` };
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("[calendar-sync] Push event error:", error);
-    return { success: false, error: error.message };
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
 

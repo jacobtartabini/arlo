@@ -45,6 +45,8 @@ interface MiniContentProps {
     activityScore: number;
     sleepHours: number;
     healthRecentActivities: number;
+    healthScore: number;
+    weeklyActiveMinutes: number;
     connectedDevices: number;
     driveAccountsConnected: number;
     driveStorageUsedBytes: number | null;

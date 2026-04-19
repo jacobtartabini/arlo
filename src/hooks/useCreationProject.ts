@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { dataApiHelpers } from '@/lib/data-api';
+import { storageUpload, storageGetSignedUrl } from '@/lib/storage-proxy';
 import { supabase } from '@/integrations/supabase/client';
 import { useCreationHistory } from './useCreationHistory';
 import { performBooleanOperation } from '@/utils/csg-operations';
@@ -256,11 +257,8 @@ export function useCreationProject(projectId: string | undefined) {
       const activeProjectId = currentProject.id;
       const filePath = `${getUserId()}/${activeProjectId}/${Date.now()}_${file.name}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('creation-assets')
-        .upload(filePath, file);
-
-      if (uploadError) throw uploadError;
+      const uploadResult = await storageUpload('creation-assets', filePath, file);
+      if (!uploadResult) throw new Error('Upload failed');
 
       const assetRes = await dataApiHelpers.insert<CreationAsset>('creation_assets', {
         project_id: activeProjectId,
@@ -467,13 +465,12 @@ export function useCreationProject(projectId: string | undefined) {
     const asset = assets.find(a => a.id === assetId);
     if (!asset) return null;
 
-    const { data } = supabase.storage
-      .from('creation-assets')
-      .getPublicUrl(asset.file_path);
+    const signedUrl = await storageGetSignedUrl('creation-assets', asset.file_path);
+    if (!signedUrl) return null;
 
     return new Promise((resolve) => {
       const loader = new STLLoader();
-      loader.load(data.publicUrl, (geometry) => {
+      loader.load(signedUrl, (geometry) => {
         geometry.computeVertexNormals();
         resolve(geometry);
       }, undefined, () => resolve(null));
@@ -538,15 +535,11 @@ export function useCreationProject(projectId: string | undefined) {
     }
   };
 
-  const getAssetUrl = useCallback((assetId: string) => {
+  const getAssetUrl = useCallback(async (assetId: string): Promise<string | null> => {
     const asset = assets.find(a => a.id === assetId);
     if (!asset) return null;
 
-    const { data } = supabase.storage
-      .from('creation-assets')
-      .getPublicUrl(asset.file_path);
-
-    return data.publicUrl;
+    return storageGetSignedUrl('creation-assets', asset.file_path);
   }, [assets]);
 
   // Multi-select support

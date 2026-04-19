@@ -11,7 +11,7 @@ import {
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
 import * as THREE from 'three';
 import type { SceneObject, TransformMode, ViewMode, Vector3, SnapSettings, MeasureTool } from '@/types/creation';
-import { supabase } from '@/integrations/supabase/client';
+import { storageGetSignedUrl } from '@/lib/storage-proxy';
 import { createPrimitiveGeometry } from '@/utils/stl-exporter';
 
 interface TransformableObjectProps {
@@ -51,16 +51,18 @@ function TransformableObject({
     const filePath = getAssetFilePath(object.assetId);
     if (!filePath) return;
 
-    const { data } = supabase.storage
-      .from('creation-assets')
-      .getPublicUrl(filePath);
-
-    const loader = new STLLoader();
-    loader.load(data.publicUrl, (geo) => {
-      geo.center();
-      geo.computeVertexNormals();
-      setStlGeometry(geo);
+    let cancelled = false;
+    storageGetSignedUrl('creation-assets', filePath).then((url) => {
+      if (cancelled || !url) return;
+      const loader = new STLLoader();
+      loader.load(url, (geo) => {
+        if (cancelled) return;
+        geo.center();
+        geo.computeVertexNormals();
+        setStlGeometry(geo);
+      });
     });
+    return () => { cancelled = true; };
   }, [object.type, object.assetId, getAssetFilePath]);
 
   useEffect(() => {
