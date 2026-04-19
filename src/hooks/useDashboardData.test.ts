@@ -4,11 +4,14 @@ import { renderHook } from "@testing-library/react";
 const supabaseMocks = vi.hoisted(() => {
   const subscribeResult = { unsubscribe: vi.fn() };
   const subscribe = vi.fn(() => subscribeResult);
-  const on = vi.fn(() => ({ subscribe }));
+  const chain = {
+    on: vi.fn(),
+    subscribe,
+  };
+  chain.on.mockImplementation(() => chain);
   const removeChannel = vi.fn();
-  const channelObj = { on, subscribe };
-  const channel = vi.fn(() => channelObj);
-  return { subscribeResult, subscribe, on, removeChannel, channelObj, channel };
+  const channel = vi.fn(() => chain);
+  return { subscribeResult, subscribe, on: chain.on, removeChannel, channel, chain };
 });
 
 vi.mock("@/providers/AuthProvider", () => ({
@@ -46,17 +49,28 @@ describe("useDashboardData realtime drive accounts", () => {
     const { unmount } = renderHook(() => useDashboardData());
 
     expect(supabaseMocks.channel).toHaveBeenCalledWith("dashboard-drive-accounts");
+    expect(supabaseMocks.channel).toHaveBeenCalledWith("dashboard-circles");
     expect(supabaseMocks.on).toHaveBeenCalledWith(
       "postgres_changes",
       { event: "*", schema: "public", table: "drive_accounts" },
       expect.any(Function)
     );
-    expect(supabaseMocks.subscribe).toHaveBeenCalledTimes(1);
+    expect(supabaseMocks.on).toHaveBeenCalledWith(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "relationship_contacts" },
+      expect.any(Function)
+    );
+    expect(supabaseMocks.on).toHaveBeenCalledWith(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "relationship_contact_reminders" },
+      expect.any(Function)
+    );
+    expect(supabaseMocks.subscribe).toHaveBeenCalledTimes(2);
 
     expect(supabaseMocks.removeChannel).not.toHaveBeenCalled();
 
     unmount();
-    expect(supabaseMocks.removeChannel).toHaveBeenCalledTimes(1);
+    expect(supabaseMocks.removeChannel).toHaveBeenCalledTimes(2);
     expect(supabaseMocks.removeChannel).toHaveBeenCalledWith(supabaseMocks.subscribeResult);
   });
 });

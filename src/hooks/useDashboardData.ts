@@ -12,6 +12,8 @@ import { toast } from "@/hooks/use-toast";
 import { invokeEdgeFunction } from "@/lib/edge-functions";
 import { supabase } from "@/integrations/supabase/client";
 import { getCachedDriveAccounts } from "@/hooks/useFilesPersistence";
+import { buildContactNudges } from "@/lib/contacts-nudges";
+import type { RelationshipContact } from "@/types/contacts";
 
 interface DashboardData {
   // Productivity/Today
@@ -59,6 +61,12 @@ interface DashboardData {
   driveStorageUsedBytes: number | null;
   driveStorageTotalBytes: number | null;
   driveStorageUsedPercent: number | null;
+
+  // Circles (relationship contacts)
+  circlesTotalContacts: number;
+  circlesCountsByLayer: { inner: number; middle: number; outer: number };
+  circlesOpenReminders: { id: string; title: string; dueAt: Date }[];
+  circlesNudgesPreview: { contactId: string; displayName: string; circle: string; message: string }[];
   
   isLoading: boolean;
 }
@@ -92,6 +100,10 @@ const DEFAULT_DATA: DashboardData = {
   driveStorageUsedBytes: null,
   driveStorageTotalBytes: null,
   driveStorageUsedPercent: null,
+  circlesTotalContacts: 0,
+  circlesCountsByLayer: { inner: 0, middle: 0, outer: 0 },
+  circlesOpenReminders: [],
+  circlesNudgesPreview: [],
   isLoading: true,
 };
 
@@ -203,6 +215,8 @@ export function useDashboardData() {
         driveAccountsResult,
         stravaStatusResult,
         stravaStatsResult,
+        relationshipContactsResult,
+        relationshipRemindersResult,
       ] = await Promise.all([
         dataApiHelpers.select<any[]>("tasks", {
           order: { column: "priority", ascending: false },
@@ -229,6 +243,12 @@ export function useDashboardData() {
         dataApiHelpers.select<any[]>("drive_accounts_safe", {}),
         invokeEdgeFunction<StravaStatusPayload>("strava-api", { action: "status" }, { requireAuth: true }),
         invokeEdgeFunction<StravaStatsPayload>("strava-api", { action: "stats" }, { requireAuth: true }),
+        dataApiHelpers.select<any[]>("relationship_contacts", { limit: 400 }),
+        dataApiHelpers.select<any[]>("relationship_contact_reminders", {
+          filters: { completed_at: null },
+          order: { column: "due_at", ascending: true },
+          limit: 24,
+        }),
       ]);
 
       const today = startOfDay(new Date());
@@ -333,6 +353,36 @@ export function useDashboardData() {
           ? Math.round((driveStorageUsedBytes / driveStorageTotalBytes) * 100)
           : null;
 
+      // Circles / relationship contacts
+      const relationshipContacts = (relationshipContactsResult.data || []) as RelationshipContact[];
+      const circlesTotalContacts = relationshipContacts.length;
+      const circlesCountsByLayer = {
+        inner: relationshipContacts.filter((c) => c.circle === "inner").length,
+        middle: relationshipContacts.filter((c) => c.circle === "middle").length,
+        outer: relationshipContacts.filter((c) => c.circle === "outer").length,
+      };
+      const reminderRows = (relationshipRemindersResult.data || []) as Array<{
+        id: string;
+        title: string;
+        due_at: string;
+        completed_at?: string | null;
+      }>;
+      const circlesOpenReminders = reminderRows
+        .filter((r) => r.completed_at == null)
+        .slice(0, 5)
+        .map((r) => ({
+          id: r.id,
+          title: r.title,
+          dueAt: parseISO(r.due_at),
+        }));
+      const nudges = buildContactNudges(relationshipContacts);
+      const circlesNudgesPreview = nudges.slice(0, 6).map((n) => ({
+        contactId: n.contactId,
+        displayName: n.displayName,
+        circle: n.circle,
+        message: n.message,
+      }));
+
       // Process Health (Strava + localStorage)
       const healthConnected = Boolean(stravaStatusResult.ok && stravaStatusResult.data?.connected);
       const recentRuns = stravaStatsResult.ok ? (stravaStatsResult.data?.stats?.recent_runs?.count ?? 0) : 0;
@@ -412,6 +462,10 @@ export function useDashboardData() {
         driveStorageUsedBytes,
         driveStorageTotalBytes,
         driveStorageUsedPercent,
+        circlesTotalContacts,
+        circlesCountsByLayer,
+        circlesOpenReminders,
+        circlesNudgesPreview,
         isLoading: false,
       }));
     } catch (error) {
@@ -437,6 +491,28 @@ export function useDashboardData() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "drive_accounts" },
+        () => fetchData()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isAuthenticated, fetchData]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const channel = supabase
+      .channel("dashboard-circles")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "relationship_contacts" },
+        () => fetchData()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "relationship_contact_reminders" },
         () => fetchData()
       )
       .subscribe();
