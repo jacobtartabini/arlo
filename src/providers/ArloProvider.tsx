@@ -14,6 +14,8 @@ import { toast } from 'sonner';
 import { useChatHistory } from './ChatHistoryProvider';
 import { ChatMessageStatus } from '@/types/chat';
 import { notifyChat, showToast } from '@/lib/notifications/notify';
+import { supabase } from '@/integrations/supabase/client';
+import { getArloToken } from '@/lib/arloAuth';
 
 export interface ArloConfig {
   apiEndpoint: string;
@@ -469,8 +471,47 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    updateMessageStatus(conversationId, userMessage.id, 'error');
-    completePendingMessage(userMessage.id);
+    try {
+      const token = await getArloToken();
+      if (!token) throw new Error('Authentication required');
+
+      const { data, error } = await supabase.functions.invoke('arlo-ai', {
+        headers: { 'X-Arlo-Authorization': `Bearer ${token}` },
+        body: {
+          prompt: trimmed,
+          conversation: messages.slice(-10).map((message) => ({
+            role: message.role,
+            content: message.content,
+          })),
+        },
+      });
+
+      if (error) {
+        throw new Error(error.message || 'AI request failed');
+      }
+
+      const reply = typeof data?.message === 'string' ? data.message : null;
+      if (!reply) {
+        throw new Error('AI returned an empty response');
+      }
+
+      appendMessage({
+        conversationId,
+        text: reply,
+        sender: 'arlo',
+        status: 'sent',
+      });
+
+      updateMessageStatus(conversationId, userMessage.id, 'sent');
+      completePendingMessage(userMessage.id);
+      outboundMessageMapRef.current.delete(userMessage.id);
+      return;
+    } catch (error) {
+      console.error('HTTP fallback send failed', error);
+      updateMessageStatus(conversationId, userMessage.id, 'error');
+      completePendingMessage(userMessage.id);
+      toast.error(error instanceof Error ? error.message : 'Failed to send message');
+    }
   };
 
   const sendVoiceMessage = async () => {
