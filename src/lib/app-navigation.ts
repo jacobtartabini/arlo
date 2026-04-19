@@ -9,6 +9,7 @@ import {
   Home,
   Map,
   MessageCircle,
+  Orbit,
   NotebookPen,
   PenTool,
   Plane,
@@ -108,6 +109,18 @@ export const APP_MODULES: Module[] = [
     actionLabel: "Navigate",
     summary: "Directions & places",
     keywords: ["maps", "navigation", "directions", "places", "traffic", "location"]
+  },
+  {
+    id: "contacts",
+    title: "Circles",
+    icon: Orbit,
+    route: "/contacts",
+    color: "primary",
+    size: "secondary",
+    priority: "inner",
+    actionLabel: "Open Circles",
+    summary: "Contacts & follow-ups",
+    keywords: ["contacts", "people", "network", "crm", "relationships", "follow up", "linkedin", "circles"]
   },
 
   // OUTER RING - Less frequent / utility
@@ -213,6 +226,14 @@ export const APP_PAGES: NavigationItem[] = [
     route: "/maps",
     icon: Map,
     keywords: ["navigation", "directions", "places", "location", "traffic"]
+  },
+  {
+    id: "contacts",
+    title: "Circles",
+    description: "Relationship memory, imports, and follow-up reminders",
+    route: "/contacts",
+    icon: Orbit,
+    keywords: ["contacts", "people", "network", "follow up", "relationships", "circles"]
   },
   {
     id: "notes",

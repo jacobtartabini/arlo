@@ -54,7 +54,11 @@ const ALLOWED_TABLES = [
   'voice_settings',
   // Maps system tables
   'map_recent_searches', 'map_user_settings', 'map_destination_patterns',
-  'map_incidents', 'map_incident_votes'
+  'map_incidents', 'map_incident_votes',
+  // Relationship / contact circles
+  'relationship_contacts',
+  'relationship_contact_activities',
+  'relationship_contact_reminders',
 ]
 
 // Fields that should be encrypted when stored
