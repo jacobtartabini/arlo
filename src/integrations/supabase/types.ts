@@ -2137,6 +2137,160 @@ export type Database = {
         }
         Relationships: []
       }
+      relationship_contact_activities: {
+        Row: {
+          body: string
+          contact_id: string
+          created_at: string
+          id: string
+          kind: string
+          occurred_at: string
+          title: string | null
+          user_key: string
+        }
+        Insert: {
+          body?: string
+          contact_id: string
+          created_at?: string
+          id?: string
+          kind: string
+          occurred_at?: string
+          title?: string | null
+          user_key: string
+        }
+        Update: {
+          body?: string
+          contact_id?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          occurred_at?: string
+          title?: string | null
+          user_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "relationship_contact_activities_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "relationship_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      relationship_contact_reminders: {
+        Row: {
+          completed_at: string | null
+          contact_id: string
+          created_at: string
+          due_at: string
+          id: string
+          title: string
+          user_key: string
+        }
+        Insert: {
+          completed_at?: string | null
+          contact_id: string
+          created_at?: string
+          due_at: string
+          id?: string
+          title: string
+          user_key: string
+        }
+        Update: {
+          completed_at?: string | null
+          contact_id?: string
+          created_at?: string
+          due_at?: string
+          id?: string
+          title?: string
+          user_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "relationship_contact_reminders_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "relationship_contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      relationship_contacts: {
+        Row: {
+          circle: string
+          company: string | null
+          created_at: string
+          display_name: string
+          emails: string[]
+          family_name: string | null
+          given_name: string | null
+          id: string
+          import_sources: Json
+          job_title: string | null
+          last_interaction_at: string | null
+          linkedin_url: string | null
+          normalized_email: string | null
+          normalized_phone: string | null
+          phones: string[]
+          photo_url: string | null
+          primary_email: string | null
+          primary_phone: string | null
+          profile_notes: string | null
+          tags: string[]
+          updated_at: string
+          user_key: string
+        }
+        Insert: {
+          circle?: string
+          company?: string | null
+          created_at?: string
+          display_name: string
+          emails?: string[]
+          family_name?: string | null
+          given_name?: string | null
+          id?: string
+          import_sources?: Json
+          job_title?: string | null
+          last_interaction_at?: string | null
+          linkedin_url?: string | null
+          normalized_email?: string | null
+          normalized_phone?: string | null
+          phones?: string[]
+          photo_url?: string | null
+          primary_email?: string | null
+          primary_phone?: string | null
+          profile_notes?: string | null
+          tags?: string[]
+          updated_at?: string
+          user_key: string
+        }
+        Update: {
+          circle?: string
+          company?: string | null
+          created_at?: string
+          display_name?: string
+          emails?: string[]
+          family_name?: string | null
+          given_name?: string | null
+          id?: string
+          import_sources?: Json
+          job_title?: string | null
+          last_interaction_at?: string | null
+          linkedin_url?: string | null
+          normalized_email?: string | null
+          normalized_phone?: string | null
+          phones?: string[]
+          photo_url?: string | null
+          primary_email?: string | null
+          primary_phone?: string | null
+          profile_notes?: string | null
+          tags?: string[]
+          updated_at?: string
+          user_key?: string
+        }
+        Relationships: []
+      }
       reward_redemptions: {
         Row: {
           id: string

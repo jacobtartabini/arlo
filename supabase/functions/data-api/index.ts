@@ -59,6 +59,8 @@ const ALLOWED_TABLES = [
   'relationship_contacts',
   'relationship_contact_activities',
   'relationship_contact_reminders',
+  // Drive (read-only safe view used by dashboard / Files)
+  'drive_accounts_safe',
 ]
 
 // Fields that should be encrypted when stored
