@@ -1,6 +1,8 @@
 import { getAuthHeadersWithContentType } from '@/lib/arloAuth';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
+const SUPABASE_FUNCTIONS_BASE_URL = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1`;
 
 export interface EdgeFunctionResult<T = unknown> {
   ok: boolean;
@@ -33,6 +35,15 @@ export async function invokeEdgeFunction<T = unknown>(
   const headers = new Headers();
   headers.set('Content-Type', 'application/json');
 
+  // Supabase Edge Functions gateway expects API key headers for project routing.
+  if (SUPABASE_PUBLISHABLE_KEY) {
+    headers.set('apikey', SUPABASE_PUBLISHABLE_KEY);
+
+    if (!headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${SUPABASE_PUBLISHABLE_KEY}`);
+    }
+  }
+
   if (options?.requireAuth !== false) {
     const authHeaders = await getAuthHeadersWithContentType();
     if (!authHeaders) {
@@ -47,7 +58,7 @@ export async function invokeEdgeFunction<T = unknown>(
     });
   }
 
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/${functionName}`, {
+  const response = await fetch(`${SUPABASE_FUNCTIONS_BASE_URL}/${functionName}`, {
     method: 'POST',
     headers,
     body: JSON.stringify(body ?? {}),
@@ -56,10 +67,14 @@ export async function invokeEdgeFunction<T = unknown>(
   const payload = await parseEdgeFunctionBody(response);
 
   if (!response.ok) {
+    const fallbackMessage = response.status === 404
+      ? `Edge Function "${functionName}" was not found (404). Deploy it to your Supabase project and verify VITE_SUPABASE_URL points to the correct project.`
+      : 'Request failed';
+
     const message =
       typeof payload === 'string'
         ? payload
-        : (payload as { error?: { message?: string } })?.error?.message || 'Request failed';
+        : (payload as { error?: { message?: string } })?.error?.message || fallbackMessage;
     return {
       ok: false,
       status: response.status,
