@@ -42,6 +42,7 @@ const DEFAULT_MODULE_LAYOUTS: Record<string, ModuleLayout> = {
   notes: { x: -12, y: 0, size: 'large' },
   finance: { x: -10, y: -5, size: 'medium' },
   maps: { x: 0, y: 4, size: 'large' },
+  contacts: { x: 8, y: 4, size: 'medium' },
   travel: { x: -14, y: -4, size: 'small' },
   files: { x: 4, y: -6, size: 'medium' },
   creation: { x: 10, y: 0, size: 'small' },
