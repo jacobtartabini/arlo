@@ -26,7 +26,14 @@ interface DashboardData {
   healthConnected: boolean;
   activityScore: number;
   sleepHours: number;
+  healthRecentActivities: number;
+  healthScore: number;
+  weeklyActiveMinutes: number;
   connectedDevices: number;
+  driveAccountsConnected: number;
+  driveStorageUsedBytes: number | null;
+  driveStorageTotalBytes: number | null;
+  driveStorageUsedPercent: number | null;
   circlesTotalContacts: number;
   circlesCountsByLayer: { inner: number; middle: number; outer: number };
   circlesOpenReminders: { id: string; title: string; dueAt: Date }[];
