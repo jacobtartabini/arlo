@@ -1,6 +1,7 @@
 import { getAuthHeadersWithContentType } from '@/lib/arloAuth';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
 const SUPABASE_FUNCTIONS_BASE_URL = `${SUPABASE_URL.replace(/\/$/, '')}/functions/v1`;
 
 export interface EdgeFunctionResult<T = unknown> {
@@ -33,6 +34,15 @@ export async function invokeEdgeFunction<T = unknown>(
 ): Promise<EdgeFunctionResult<T>> {
   const headers = new Headers();
   headers.set('Content-Type', 'application/json');
+
+  // Supabase Edge Functions gateway expects API key headers for project routing.
+  if (SUPABASE_PUBLISHABLE_KEY) {
+    headers.set('apikey', SUPABASE_PUBLISHABLE_KEY);
+
+    if (!headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${SUPABASE_PUBLISHABLE_KEY}`);
+    }
+  }
 
   if (options?.requireAuth !== false) {
     const authHeaders = await getAuthHeadersWithContentType();
