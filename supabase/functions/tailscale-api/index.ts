@@ -390,9 +390,7 @@ async function upstreamError(
       : fallbackMessage
 
   console.error('[tailscale-api] Upstream error:', { action, upstreamStatus: response.status, status })
-  if (debug) {
-    console.error('[tailscale-api] Upstream error body:', errorPayload)
-  }
+  console.error('[tailscale-api] Upstream error body:', errorPayload)
 
   return jsonError(req, status, 'upstream_error', message, details)
 }
