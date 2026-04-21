@@ -176,7 +176,7 @@ Deno.serve(async (req) => {
           client_id: clientId,
           client_secret: clientSecret,
           code,
-          redirect_uri: REDIRECT_URI,
+          redirect_uri: getAllowedRedirectUri(req),
           grant_type: 'authorization_code',
         }),
       });
@@ -291,7 +291,7 @@ Deno.serve(async (req) => {
       // Build OAuth URL
       const params = new URLSearchParams({
         client_id: clientId,
-        redirect_uri: REDIRECT_URI,
+        redirect_uri: getAllowedRedirectUri(req),
         response_type: 'code',
         scope: oauthConfig.scopes.join(' '),
         state: encodedState,

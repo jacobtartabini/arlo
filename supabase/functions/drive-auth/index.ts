@@ -138,9 +138,10 @@ Deno.serve(async (req) => {
         // Encode state with nonce (not user ID - more secure)
         const encodedState = encodeOAuthState(nonce, 'google_drive');
 
+        const redirectUri = getAllowedRedirectUri(req);
         const params = new URLSearchParams({
           client_id: GOOGLE_CLIENT_ID,
-          redirect_uri: REDIRECT_URI,
+          redirect_uri: redirectUri,
           response_type: 'code',
           scope: [
             'https://www.googleapis.com/auth/drive',
@@ -201,7 +202,7 @@ Deno.serve(async (req) => {
             client_secret: GOOGLE_CLIENT_SECRET!,
             code,
             grant_type: 'authorization_code',
-            redirect_uri: REDIRECT_URI,
+            redirect_uri: getAllowedRedirectUri(req),
           }),
         });
 
