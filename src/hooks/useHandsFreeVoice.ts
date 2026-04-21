@@ -42,6 +42,7 @@ function isProtectedPath(pathname: string): boolean {
  */
 export function useHandsFreeVoice() {
   const { isAuthenticated } = useAuth();
+  const location = useLocation();
   const { settings, updateSettings, isLoading: settingsLoading } = useVoiceSettings();
   const { appendMessage, ensureActiveConversation } = useChatHistory();
   
@@ -57,12 +58,17 @@ export function useHandsFreeVoice() {
   const pendingTranscriptRef = useRef('');
   const sessionTimeoutRef = useRef<number | null>(null);
 
-  // Check if hands-free mode is enabled
+  // Hands-free is gated on:
+  // 1. User is authenticated (verified Arlo JWT)
+  // 2. Settings loaded and both voice mode + wake word enabled
+  // 3. Current route is a protected (non-public) route
+  const onProtectedRoute = isProtectedPath(location.pathname);
   const isHandsFreeEnabled = Boolean(
     isAuthenticated &&
     !settingsLoading &&
     settings?.voice_mode_enabled &&
-    settings?.wake_word_enabled
+    settings?.wake_word_enabled &&
+    onProtectedRoute
   );
 
   // Pre-initialize audio element for low latency TTS
