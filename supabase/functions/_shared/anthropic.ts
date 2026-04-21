@@ -11,18 +11,18 @@ export interface AnthropicRequest {
   maxTokens?: number;
 }
 
-// Use a pinned, known-valid Sonnet model. Older aliases/defaults used in this
-// project returned 404 from Anthropic.
-const DEFAULT_MODEL = "claude-3-5-sonnet-20240620";
-const INVALID_MODEL_ALIASES = new Set([
-  "claude-3-5-sonnet-latest",
-  "claude-sonnet-4-20250514",
+const DEFAULT_MODEL = "claude-sonnet-4-6";
+const MODEL_ALIASES = new Map<string, string>([
+  ["claude-3-5-sonnet-latest", DEFAULT_MODEL],
+  ["claude-3-5-sonnet-20240620", DEFAULT_MODEL],
+  ["claude-sonnet-4-20250514", DEFAULT_MODEL],
 ]);
+const FALLBACK_MODELS = [DEFAULT_MODEL, "claude-3-7-sonnet-20250219", "claude-3-5-haiku-20241022"];
 
 export function normalizeAnthropicModel(model?: string | null): string {
   const trimmed = model?.trim();
-  if (!trimmed || INVALID_MODEL_ALIASES.has(trimmed)) return DEFAULT_MODEL;
-  return trimmed;
+  if (!trimmed) return DEFAULT_MODEL;
+  return MODEL_ALIASES.get(trimmed) ?? trimmed;
 }
 
 interface AnthropicContentBlock {
@@ -56,29 +56,44 @@ export async function callAnthropicMessages({
     throw new Error("At least one message is required");
   }
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: normalizeAnthropicModel(model),
-      system,
-      max_tokens: maxTokens,
-      temperature,
-      messages,
-    }),
-  });
+  const requestedModel = normalizeAnthropicModel(model);
+  const candidateModels = Array.from(new Set([requestedModel, ...FALLBACK_MODELS]));
+  let lastError: string | null = null;
 
-  const payload = (await response.json()) as AnthropicResponse;
+  for (const candidateModel of candidateModels) {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: candidateModel,
+        system,
+        max_tokens: maxTokens,
+        temperature,
+        messages,
+      }),
+    });
 
-  if (!response.ok) {
-    throw new Error(payload.error?.message || `Anthropic request failed (${response.status})`);
+    const payload = (await response.json()) as AnthropicResponse;
+
+    if (response.ok) {
+      return payload;
+    }
+
+    const message = payload.error?.message || `Anthropic request failed (${response.status})`;
+    const isMissingModel = response.status === 404 && /^model:/i.test(message);
+    if (!isMissingModel) {
+      throw new Error(message);
+    }
+
+    console.warn(`[anthropic] Model unavailable: ${candidateModel}. Trying fallback.`);
+    lastError = message;
   }
 
-  return payload;
+  throw new Error(lastError || "No supported Anthropic models were available for this request");
 }
 
 export function extractTextFromAnthropic(payload: AnthropicResponse): string {

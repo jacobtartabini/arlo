@@ -6,7 +6,12 @@ import {
   jsonResponse,
   errorResponse,
 } from '../_shared/arloAuth.ts'
-import { normalizeAnthropicModel } from '../_shared/anthropic.ts'
+import {
+  buildAnthropicErrorMessage,
+  callAnthropicMessages,
+  extractTextFromAnthropic,
+  normalizeAnthropicModel,
+} from '../_shared/anthropic.ts'
 
 const DEFAULT_MAX_TOKENS = 4096
 
@@ -37,8 +42,7 @@ Deno.serve(async (req) => {
     return errorResponse(req, 'Method not allowed', 405)
   }
 
-  const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
-  if (!apiKey) {
+  if (!Deno.env.get('ANTHROPIC_API_KEY')) {
     console.error('[arlo-ai] ANTHROPIC_API_KEY is not set')
     return jsonResponse(
       req,
@@ -88,41 +92,14 @@ Deno.serve(async (req) => {
       : 'You are Arlo, a concise and helpful personal assistant inside the Arlo command center app.'
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens,
-        system,
-        messages: normalized,
-      }),
+    const payload = await callAnthropicMessages({
+      model,
+      system,
+      maxTokens: max_tokens,
+      messages: normalized,
     })
 
-    const raw = await response.text()
-    let parsed: { content?: Array<{ type?: string; text?: string }>; error?: { message?: string } }
-    try {
-      parsed = JSON.parse(raw) as typeof parsed
-    } catch {
-      return errorResponse(req, 'Invalid response from AI provider', 502)
-    }
-
-    if (!response.ok) {
-      const msg = parsed.error?.message || raw.slice(0, 200) || `Anthropic error ${response.status}`
-      console.error('[arlo-ai] Anthropic API error:', response.status, msg)
-      return jsonResponse(req, { error: msg }, response.status >= 400 && response.status < 600 ? response.status : 502)
-    }
-
-    const blocks = parsed.content ?? []
-    const text = blocks
-      .filter((b) => b && b.type === 'text' && typeof b.text === 'string')
-      .map((b) => b.text)
-      .join('')
-      .trim()
+    const text = extractTextFromAnthropic(payload)
 
     if (!text) {
       return errorResponse(req, 'Empty response from AI model', 502)
@@ -130,7 +107,8 @@ Deno.serve(async (req) => {
 
     return jsonResponse(req, { text })
   } catch (e) {
-    console.error('[arlo-ai] Unexpected error:', e)
-    return errorResponse(req, e instanceof Error ? e.message : 'Unexpected error', 500)
+    const message = buildAnthropicErrorMessage(e, 'Unexpected error')
+    console.error('[arlo-ai] Unexpected error:', message)
+    return errorResponse(req, message, /^model:/i.test(message) ? 502 : 500)
   }
 })
