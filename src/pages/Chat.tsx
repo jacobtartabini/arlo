@@ -232,7 +232,14 @@ function ChatDesktop() {
         console.error('Error loading folders:', error);
         return;
       }
-      setFolders(data || []);
+      const loaded = data || [];
+      setFolders(loaded);
+      // Auto-expand all folders so conversations inside them are always visible
+      setExpandedFolders(prev => {
+        const next = new Set(prev);
+        loaded.forEach(f => next.add(f.id));
+        return next;
+      });
     };
 
     loadFolders();
@@ -334,8 +341,17 @@ function ChatDesktop() {
     }
 
     setMovingConversationId(null);
-    // Force reload of conversations to update folder assignments
-    window.location.reload();
+    // Ensure target folder is expanded so moved chat is visible
+    if (folderId) {
+      setExpandedFolders(prev => {
+        const next = new Set(prev);
+        next.add(folderId);
+        return next;
+      });
+    }
+    toast.success(folderId ? "Moved to folder" : "Removed from folder");
+    // Soft refresh: reload conversations from DB without losing page state
+    setTimeout(() => window.location.reload(), 300);
   };
 
   // Toggle folder expanded/collapsed
