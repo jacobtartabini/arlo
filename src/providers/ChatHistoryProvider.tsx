@@ -66,6 +66,7 @@ interface ChatHistoryContextValue {
     text: string,
   ) => void;
   updateConversationTitle: (conversationId: string, title: string) => void;
+  updateConversationFolder: (conversationId: string, folderId: string | null) => void;
   setActiveConversation: (conversationId: string | null) => void;
   deleteConversation: (conversationId: string) => void;
   getConversationById: (conversationId: string) => Conversation | undefined;
@@ -451,6 +452,20 @@ export function ChatHistoryProvider({
       }
     },
     [isAuthenticated, dbPersistence],
+  );
+
+  const updateConversationFolder = useCallback(
+    (conversationId: string, folderId: string | null) => {
+      setConversations((previous) => {
+        const updated = previous.map((conversation) =>
+          conversation.id === conversationId
+            ? { ...conversation, folderId }
+            : conversation,
+        );
+        return sortConversations(updated);
+      });
+    },
+    [],
   );
 
   const deleteConversation = useCallback(
