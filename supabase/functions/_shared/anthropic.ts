@@ -11,6 +11,8 @@ export interface AnthropicRequest {
   maxTokens?: number;
 }
 
+// Use the alias for the latest stable Sonnet model. The previously used
+// pinned id "claude-sonnet-4-20250514" returns 404 from Anthropic.
 const DEFAULT_MODEL = "claude-3-5-sonnet-latest";
 
 interface AnthropicContentBlock {
