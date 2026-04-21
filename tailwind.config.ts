@@ -163,7 +163,7 @@ export default {
 						transform: 'scale(1.05)'
 					}
 				},
-				'float': {
+				'float-rotate': {
 					'0%, 100%': {
 						transform: 'translateY(0px) rotate(0deg)'
 					},
