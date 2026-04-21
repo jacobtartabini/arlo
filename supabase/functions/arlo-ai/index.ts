@@ -13,7 +13,7 @@ import {
   normalizeAnthropicModel,
 } from '../_shared/anthropic.ts'
 
-const DEFAULT_MAX_TOKENS = 4096
+const DEFAULT_MAX_TOKENS = 400
 
 function defaultAnthropicModel(): string {
   // Normalize env overrides too, so stale aliases don't break production.
