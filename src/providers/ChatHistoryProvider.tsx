@@ -520,6 +520,7 @@ export function ChatHistoryProvider({
       setActiveConversation: setActiveConversationInternal,
       deleteConversation,
       getConversationById,
+      updateConversationFolder,
     }),
     [
       conversations,
@@ -535,6 +536,7 @@ export function ChatHistoryProvider({
       setActiveConversationInternal,
       deleteConversation,
       getConversationById,
+      updateConversationFolder,
     ],
   );
 
