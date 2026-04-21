@@ -57,18 +57,18 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider defaultTheme="dark" storageKey="arlo-ui-theme">
-      <AuthProvider>
-        <UserSettingsProvider>
-          <ChatHistoryProvider>
-            <ArloProvider>
-              <NotificationsProvider>
-                <VoiceStateProvider>
-                  <TooltipProvider>
-                    <Toaster />
-                    <Sonner />
-                    <NotificationMonitor />
-                    <MorningWakeupScheduler />
-                    <BrowserRouter>
+      <BrowserRouter>
+        <AuthProvider>
+          <UserSettingsProvider>
+            <ChatHistoryProvider>
+              <ArloProvider>
+                <NotificationsProvider>
+                  <VoiceStateProvider>
+                    <TooltipProvider>
+                      <Toaster />
+                      <Sonner />
+                      <NotificationMonitor />
+                      <MorningWakeupScheduler />
                       <CapacitorInitializer />
                       <ArloCommandLauncher />
                       <VoiceAmbientGlow />
