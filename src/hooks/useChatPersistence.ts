@@ -80,13 +80,18 @@ export function useChatPersistence(isAuthenticated: boolean) {
       console.error('Error in fetchConversations:', error);
       return [];
     }
-  }, []);
+  }, [isAuthenticated]);
 
-  const createConversation = useCallback(async (title: string = 'New Chat'): Promise<Conversation | null> => {
+  const createConversation = useCallback(async (
+    title: string = 'New Chat',
+    id?: string,
+  ): Promise<Conversation | null> => {
     if (!isAuthenticated) return null;
 
     try {
-      const { data, error } = await dataApiHelpers.insert<DbConversation>('conversations', { title });
+      const payload: Record<string, unknown> = { title };
+      if (id) payload.id = id;
+      const { data, error } = await dataApiHelpers.insert<DbConversation>('conversations', payload);
 
       if (error || !data) {
         console.error('Error creating conversation:', error);
@@ -98,7 +103,7 @@ export function useChatPersistence(isAuthenticated: boolean) {
       console.error('Error in createConversation:', error);
       return null;
     }
-  }, []);
+  }, [isAuthenticated]);
 
   const updateConversationTitle = useCallback(async (conversationId: string, title: string): Promise<boolean> => {
     if (!isAuthenticated) return false;
@@ -114,7 +119,7 @@ export function useChatPersistence(isAuthenticated: boolean) {
       console.error('Error in updateConversationTitle:', error);
       return false;
     }
-  }, []);
+  }, [isAuthenticated]);
 
   const deleteConversation = useCallback(async (conversationId: string): Promise<boolean> => {
     if (!isAuthenticated) return false;
@@ -130,23 +135,26 @@ export function useChatPersistence(isAuthenticated: boolean) {
       console.error('Error in deleteConversation:', error);
       return false;
     }
-  }, []);
+  }, [isAuthenticated]);
 
   const addMessage = useCallback(async (
     conversationId: string,
     content: string,
     sender: ChatSender,
-    status: ChatMessageStatus = 'sent'
+    status: ChatMessageStatus = 'sent',
+    id?: string,
   ): Promise<ConversationMessage | null> => {
     if (!isAuthenticated) return null;
 
     try {
-      const { data, error } = await dataApiHelpers.insert<DbMessage>('conversation_messages', {
+      const payload: Record<string, unknown> = {
         conversation_id: conversationId,
         content,
         sender,
         status,
-      });
+      };
+      if (id) payload.id = id;
+      const { data, error } = await dataApiHelpers.insert<DbMessage>('conversation_messages', payload);
 
       if (error || !data) {
         console.error('Error adding message:', error);
@@ -163,7 +171,7 @@ export function useChatPersistence(isAuthenticated: boolean) {
       console.error('Error in addMessage:', error);
       return null;
     }
-  }, []);
+  }, [isAuthenticated]);
 
   const updateMessageStatus = useCallback(async (
     messageId: string,
@@ -186,7 +194,7 @@ export function useChatPersistence(isAuthenticated: boolean) {
       console.error('Error in updateMessageStatus:', error);
       return false;
     }
-  }, []);
+  }, [isAuthenticated]);
 
   return {
     fetchConversations,
