@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { VoiceState } from '@/types/voice';
 import { getSpeechRecognition, SpeechRecognitionInstance, SpeechRecognitionEventResult } from '@/types/speech-recognition';
 import { useVoiceSettings } from './useVoiceSettings';
@@ -7,6 +8,27 @@ import { usePorcupineWakeWord } from './usePorcupineWakeWord';
 import { useAuth } from '@/providers/AuthProvider';
 import { useChatHistory } from '@/providers/ChatHistoryProvider';
 import { invokeEdgeFunction } from '@/lib/edge-functions';
+
+/**
+ * Routes where "Hey Arlo" is NEVER allowed (unauthenticated / public surfaces).
+ * Wake word + voice session are only ever enabled when the user is authenticated
+ * AND on a protected application route.
+ */
+const PUBLIC_ROUTE_PREFIXES = [
+  '/login',
+  '/auth/callback',
+  '/auth/error',
+  '/book',
+  '/booking',
+  '/unauthorized',
+];
+
+function isProtectedPath(pathname: string): boolean {
+  const normalized = pathname.toLowerCase();
+  return !PUBLIC_ROUTE_PREFIXES.some(
+    (prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`),
+  );
+}
 
 /**
  * Hands-Free Voice Mode Hook
