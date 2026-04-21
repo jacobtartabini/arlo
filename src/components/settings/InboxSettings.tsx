@@ -37,6 +37,8 @@ import { toast } from 'sonner';
 import { getAuthHeaders } from '@/lib/arloAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
+import { parseSyncError } from '@/lib/integration-errors';
+import { AlertCircle } from 'lucide-react';
 
 // Helper to invoke edge functions with auth (matches CalendarIntegrations pattern)
 async function invokeWithAuth(functionName: string, body: Record<string, unknown>) {
@@ -283,17 +285,44 @@ export default function InboxSettings({ embedded = false }: InboxSettingsProps) 
                         </span>
                       )}
                     </div>
-                    {account.last_sync_error && (
-                      <div className="flex items-center gap-1 mt-2">
-                        <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/10">
-                          <XCircle className="w-3 h-3 mr-1" />
-                          Sync Error
-                        </Badge>
-                      </div>
-                    )}
+                    {(() => {
+                      const parsed = parseSyncError(account.last_sync_error);
+                      if (!parsed) return null;
+                      return (
+                        <div className="flex items-center gap-1 mt-2">
+                          {parsed.reconnectRequired ? (
+                            <Badge variant="outline" className="text-amber-600 border-amber-600/30 bg-amber-100 dark:bg-amber-950/50">
+                              <AlertCircle className="w-3 h-3 mr-1" />
+                              Reconnect required
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/10">
+                              <XCircle className="w-3 h-3 mr-1" />
+                              Sync Error
+                            </Badge>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  {parseSyncError(account.last_sync_error)?.reconnectRequired && (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => handleConnect(account.provider)}
+                      disabled={connectingProvider === account.provider}
+                      className="gap-1.5"
+                    >
+                      {connectingProvider === account.provider ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <ExternalLink className="w-4 h-4" />
+                      )}
+                      Reconnect
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
