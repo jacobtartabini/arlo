@@ -201,6 +201,7 @@ function ChatDesktop() {
     deleteConversation,
     updateConversationTitle,
     updateMessageText,
+    updateConversationFolder,
   } = useChatHistory();
 
   // Scroll to bottom when messages change
@@ -330,8 +331,19 @@ function ChatDesktop() {
   };
 
   const handleMoveConversationToFolder = async (conversationId: string, folderId: string | null) => {
+    // Optimistic local update — no app reload needed
+    updateConversationFolder(conversationId, folderId);
+    setMovingConversationId(null);
+    if (folderId) {
+      setExpandedFolders(prev => {
+        const next = new Set(prev);
+        next.add(folderId);
+        return next;
+      });
+    }
+
     const { error } = await dataApiHelpers.update('conversations', conversationId, {
-      folder_id: folderId
+      folder_id: folderId,
     });
 
     if (error) {
@@ -340,18 +352,7 @@ function ChatDesktop() {
       return;
     }
 
-    setMovingConversationId(null);
-    // Ensure target folder is expanded so moved chat is visible
-    if (folderId) {
-      setExpandedFolders(prev => {
-        const next = new Set(prev);
-        next.add(folderId);
-        return next;
-      });
-    }
     toast.success(folderId ? "Moved to folder" : "Removed from folder");
-    // Soft refresh: reload conversations from DB without losing page state
-    setTimeout(() => window.location.reload(), 300);
   };
 
   // Toggle folder expanded/collapsed
