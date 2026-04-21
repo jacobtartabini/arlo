@@ -24,6 +24,10 @@ export function usePorcupineWakeWord({ onWakeWordDetected, enabled = false }: Us
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
+  // Picovoice's free tier enforces a monthly activation cap. Once we hit it
+  // there's no point retrying for the rest of the session — it will keep
+  // failing with the same error and waste auth requests + mic prompts.
+  const quotaExhaustedRef = useRef(false);
   
   const porcupineRef = useRef<PorcupineWorker | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -53,7 +57,8 @@ export function usePorcupineWakeWord({ onWakeWordDetected, enabled = false }: Us
 
   const start = useCallback(async () => {
     if (porcupineRef.current || isInitializing) return;
-    
+    if (quotaExhaustedRef.current) return;
+
     setIsInitializing(true);
     setError(null);
 
@@ -142,8 +147,23 @@ export function usePorcupineWakeWord({ onWakeWordDetected, enabled = false }: Us
       setIsListening(true);
       console.log('[Porcupine] Wake word detection started with AudioWorklet');
     } catch (e) {
-      console.error('[Porcupine] Initialization error:', e);
-      setError(e instanceof Error ? e.message : 'Failed to initialize wake word detection');
+      const message = e instanceof Error ? e.message : String(e);
+      const errorName = e instanceof Error ? e.name : '';
+      const isQuotaError =
+        errorName.includes('ActivationLimitReached') ||
+        errorName.includes('ActivationRefused') ||
+        errorName.includes('ActivationThrottled') ||
+        message.includes('ActivationLimitReached') ||
+        message.includes('AccessKey') && message.includes('limit');
+
+      if (isQuotaError) {
+        quotaExhaustedRef.current = true;
+        console.warn('[Porcupine] Wake word disabled: Picovoice activation quota reached for this AccessKey. "Hey Arlo" will be unavailable until the quota resets or a new key is configured.');
+        setError('Wake word quota reached. Voice activation paused.');
+      } else {
+        console.error('[Porcupine] Initialization error:', e);
+        setError(message || 'Failed to initialize wake word detection');
+      }
       cleanup();
     } finally {
       setIsInitializing(false);
