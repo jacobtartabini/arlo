@@ -220,22 +220,27 @@ function ChatDesktop() {
     "#f97316", // orange
   ];
 
-  // Load folders from database using dataApiHelpers
+  // Load folders from database (retries when auth becomes available / window regains focus)
   useEffect(() => {
+    let cancelled = false;
     const loadFolders = async () => {
       const { data, error } = await dataApiHelpers.select<ChatFolder[]>('chat_folders', {
         order: { column: 'name', ascending: true }
       });
-      
+      if (cancelled) return;
       if (error) {
         console.error('Error loading folders:', error);
         return;
       }
-      
       setFolders(data || []);
     };
 
     loadFolders();
+    window.addEventListener('focus', loadFolders);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('focus', loadFolders);
+    };
   }, []);
 
   // Folder CRUD handlers using dataApiHelpers
