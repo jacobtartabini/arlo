@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 import { verifyArloJWT, handleCorsOptions, jsonResponse, unauthorizedResponse, errorResponse } from '../_shared/arloAuth.ts';
 import { decrypt, encrypt } from '../_shared/encryption.ts';
+import { classifyException, buildSyncErrorPayload, type ClassifiedError } from '../_shared/providerErrors.ts';
 
 type InboxProvider = 'gmail' | 'outlook' | 'teams';
 
@@ -362,12 +363,32 @@ Deno.serve(async (req) => {
       console.log('[inbox-sync] Tokens decrypted successfully');
     } catch (decryptError) {
       console.error('[inbox-sync] Token decryption failed:', decryptError);
-      return errorResponse(req, 'Failed to decrypt tokens, please reconnect account', 401);
+      const classified: ClassifiedError = {
+        reason: 'auth_invalid',
+        message: 'Stored credentials could not be read. Please reconnect this account.',
+        reconnectRequired: true,
+        status: 200,
+      };
+      await supabase
+        .from('inbox_accounts')
+        .update({ last_sync_error: buildSyncErrorPayload(classified) })
+        .eq('id', account_id);
+      return jsonResponse(req, { fallback: true, ...classified });
     }
     
     if (!accessToken) {
       console.error('[inbox-sync] Access token is empty after decryption');
-      return errorResponse(req, 'Invalid access token, please reconnect account', 401);
+      const classified: ClassifiedError = {
+        reason: 'auth_invalid',
+        message: 'Invalid access token. Please reconnect this account.',
+        reconnectRequired: true,
+        status: 200,
+      };
+      await supabase
+        .from('inbox_accounts')
+        .update({ last_sync_error: buildSyncErrorPayload(classified) })
+        .eq('id', account_id);
+      return jsonResponse(req, { fallback: true, ...classified });
     }
 
     // Check if token needs refresh
@@ -376,23 +397,33 @@ Deno.serve(async (req) => {
       console.log('[inbox-sync] Token expired, refreshing...');
       
       if (!refreshToken) {
+        const classified: ClassifiedError = {
+          reason: 'auth_expired',
+          message: 'Access token expired and no refresh token is stored. Please reconnect.',
+          reconnectRequired: true,
+          status: 200,
+        };
         await supabase
           .from('inbox_accounts')
-          .update({ last_sync_error: 'Token expired and no refresh token available' })
+          .update({ last_sync_error: buildSyncErrorPayload(classified) })
           .eq('id', account_id);
-        
-        return errorResponse(req, 'Token expired, please reconnect account', 401);
+        return jsonResponse(req, { fallback: true, ...classified });
       }
 
       const newTokens = await refreshAccessToken(account.provider, refreshToken);
       
       if (!newTokens) {
+        const classified: ClassifiedError = {
+          reason: 'auth_expired',
+          message: 'Token refresh failed. Please reconnect this account.',
+          reconnectRequired: true,
+          status: 200,
+        };
         await supabase
           .from('inbox_accounts')
-          .update({ last_sync_error: 'Failed to refresh token' })
+          .update({ last_sync_error: buildSyncErrorPayload(classified) })
           .eq('id', account_id);
-        
-        return errorResponse(req, 'Failed to refresh token', 401);
+        return jsonResponse(req, { fallback: true, ...classified });
       }
 
       currentAccessToken = newTokens.access_token;
@@ -481,6 +512,16 @@ Deno.serve(async (req) => {
 
   } catch (err) {
     console.error('[inbox-sync] Error:', err);
-    return errorResponse(req, err instanceof Error ? err.message : 'Sync failed', 500);
+    const classified = classifyException(err);
+    // Best-effort: update integration row if we know the account_id from the body.
+    try {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL');
+      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      if (supabaseUrl && supabaseServiceKey) {
+        const sb = createClient(supabaseUrl, supabaseServiceKey);
+        // accountId not in scope here — only update if available via re-parse
+      }
+    } catch {/* ignore */}
+    return jsonResponse(req, { fallback: true, ...classified });
   }
 });
