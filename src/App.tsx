@@ -57,18 +57,18 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider defaultTheme="dark" storageKey="arlo-ui-theme">
-      <AuthProvider>
-        <UserSettingsProvider>
-          <ChatHistoryProvider>
-            <ArloProvider>
-              <NotificationsProvider>
-                <VoiceStateProvider>
-                  <TooltipProvider>
-                    <Toaster />
-                    <Sonner />
-                    <NotificationMonitor />
-                    <MorningWakeupScheduler />
-                    <BrowserRouter>
+      <BrowserRouter>
+        <AuthProvider>
+          <UserSettingsProvider>
+            <ChatHistoryProvider>
+              <ArloProvider>
+                <NotificationsProvider>
+                  <VoiceStateProvider>
+                    <TooltipProvider>
+                      <Toaster />
+                      <Sonner />
+                      <NotificationMonitor />
+                      <MorningWakeupScheduler />
                       <CapacitorInitializer />
                       <ArloCommandLauncher />
                       <VoiceAmbientGlow />
@@ -221,14 +221,14 @@ const App = () => (
                   {/* Catch-all route */}
                   <Route path="*" element={<NotFound />} />
                   </Routes>
-                </BrowserRouter>
-              </TooltipProvider>
-            </VoiceStateProvider>
-          </NotificationsProvider>
-            </ArloProvider>
-          </ChatHistoryProvider>
-        </UserSettingsProvider>
-      </AuthProvider>
+                    </TooltipProvider>
+                  </VoiceStateProvider>
+                </NotificationsProvider>
+              </ArloProvider>
+            </ChatHistoryProvider>
+          </UserSettingsProvider>
+        </AuthProvider>
+      </BrowserRouter>
     </ThemeProvider>
   </QueryClientProvider>
 );
