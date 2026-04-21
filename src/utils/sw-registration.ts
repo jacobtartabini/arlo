@@ -35,6 +35,10 @@ function registerValidSW(swUrl: string, config?: Config) {
   navigator.serviceWorker
     .register(swUrl)
     .then((registration) => {
+      // Force a fresh check against the network for sw.js so users pick up
+      // new caching logic without having to manually unregister.
+      registration.update().catch(() => {});
+
       registration.onupdatefound = () => {
         const installingWorker = registration.installing;
         if (installingWorker == null) {
@@ -43,7 +47,9 @@ function registerValidSW(swUrl: string, config?: Config) {
         installingWorker.onstatechange = () => {
           if (installingWorker.state === 'installed') {
             if (navigator.serviceWorker.controller) {
-              console.log('New Arlo content is available; please refresh.');
+              console.log('New Arlo content is available; activating immediately.');
+              // Tell the new SW to take over without waiting for all tabs to close.
+              installingWorker.postMessage({ type: 'SKIP_WAITING' });
               if (config && config.onUpdate) {
                 config.onUpdate(registration);
               }
@@ -56,6 +62,15 @@ function registerValidSW(swUrl: string, config?: Config) {
           }
         };
       };
+
+      // When the controlling SW changes, reload once so the page runs against
+      // the new build instead of stale cached chunks.
+      let hasReloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (hasReloaded) return;
+        hasReloaded = true;
+        window.location.reload();
+      });
     })
     .catch((error) => {
       console.error('Error during service worker registration:', error);
