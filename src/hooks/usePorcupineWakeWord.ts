@@ -57,7 +57,8 @@ export function usePorcupineWakeWord({ onWakeWordDetected, enabled = false }: Us
 
   const start = useCallback(async () => {
     if (porcupineRef.current || isInitializing) return;
-    
+    if (quotaExhaustedRef.current) return;
+
     setIsInitializing(true);
     setError(null);
 
