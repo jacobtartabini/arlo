@@ -6,9 +6,7 @@ import { getAuthHeaders } from '@/lib/arloAuth';
 import { usePorcupineWakeWord } from './usePorcupineWakeWord';
 import { useAuth } from '@/providers/AuthProvider';
 import { useChatHistory } from '@/providers/ChatHistoryProvider';
-
-// Generic test response for TTS testing (will be replaced with real Arlo response)
-const TEST_RESPONSE = "Hey! I heard you loud and clear. This is a test response from Arlo to verify the voice flow is working correctly.";
+import { invokeEdgeFunction } from '@/lib/edge-functions';
 
 /**
  * Hands-Free Voice Mode Hook
@@ -187,7 +185,7 @@ export function useHandsFreeVoice() {
 
     // Log what user said
     console.log('[HandsFree] User said:', textToSend);
-    
+
     // Get or create a conversation and save user message
     const conversationId = ensureActiveConversation();
     appendMessage({
@@ -196,22 +194,53 @@ export function useHandsFreeVoice() {
       sender: 'user',
       status: 'sent',
     });
-    
-    // For now, use generic test response instead of calling Arlo API
-    // This allows testing the full TTS flow
-    setTimeout(() => {
-      console.log('[HandsFree] Sending test response');
-      
-      // Save assistant response to chat history
+
+    // Call the real Arlo AI (Claude via arlo-ai edge function)
+    try {
+      const result = await invokeEdgeFunction<{ text?: string; error?: string }>(
+        'arlo-ai',
+        {
+          messages: [{ role: 'user', content: textToSend }],
+          system:
+            'You are Arlo, a concise and friendly voice assistant. Respond in 1-3 short sentences suitable for being spoken aloud. Avoid markdown, lists, or code blocks.',
+        },
+        { requireAuth: true },
+      );
+
+      if (!result.ok) {
+        throw new Error(result.message || 'AI request failed');
+      }
+
+      const reply =
+        typeof result.data === 'object' && result.data && 'text' in result.data
+          ? String((result.data as { text?: string }).text ?? '').trim()
+          : '';
+
+      if (!reply) {
+        throw new Error('Empty AI response');
+      }
+
+      console.log('[HandsFree] Arlo replied:', reply);
+
       appendMessage({
         conversationId,
-        text: TEST_RESPONSE,
+        text: reply,
         sender: 'arlo',
         status: 'sent',
       });
-      
-      speakResponse(TEST_RESPONSE);
-    }, 500); // Small delay to simulate "thinking"
+
+      await speakResponse(reply);
+    } catch (err) {
+      console.error('[HandsFree] AI call failed:', err);
+      const fallback = "Sorry, I couldn't reach my brain just now. Please try again in a moment.";
+      appendMessage({
+        conversationId,
+        text: fallback,
+        sender: 'arlo',
+        status: 'error',
+      });
+      await speakResponse(fallback);
+    }
   }, [cleanup, speakResponse, ensureActiveConversation, appendMessage]);
 
   // Start voice session after wake word detection
