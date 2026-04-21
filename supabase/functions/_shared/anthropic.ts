@@ -11,9 +11,19 @@ export interface AnthropicRequest {
   maxTokens?: number;
 }
 
-// Use a pinned, known-valid Sonnet model. The previous alias/default
-// returned 404 from Anthropic in this project.
+// Use a pinned, known-valid Sonnet model. Older aliases/defaults used in this
+// project returned 404 from Anthropic.
 const DEFAULT_MODEL = "claude-3-5-sonnet-20240620";
+const INVALID_MODEL_ALIASES = new Set([
+  "claude-3-5-sonnet-latest",
+  "claude-sonnet-4-20250514",
+]);
+
+export function normalizeAnthropicModel(model?: string | null): string {
+  const trimmed = model?.trim();
+  if (!trimmed || INVALID_MODEL_ALIASES.has(trimmed)) return DEFAULT_MODEL;
+  return trimmed;
+}
 
 interface AnthropicContentBlock {
   type: string;
@@ -54,7 +64,7 @@ export async function callAnthropicMessages({
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model,
+      model: normalizeAnthropicModel(model),
       system,
       max_tokens: maxTokens,
       temperature,

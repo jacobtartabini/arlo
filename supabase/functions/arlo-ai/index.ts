@@ -6,13 +6,13 @@ import {
   jsonResponse,
   errorResponse,
 } from '../_shared/arloAuth.ts'
+import { normalizeAnthropicModel } from '../_shared/anthropic.ts'
 
 const DEFAULT_MAX_TOKENS = 4096
 
 function defaultAnthropicModel(): string {
-  // Use a pinned, known-valid Claude model. The previous default/alias
-  // returned 404 from Anthropic in this project.
-  return Deno.env.get('ARLO_AI_MODEL')?.trim() || 'claude-3-5-sonnet-20240620'
+  // Normalize env overrides too, so stale aliases don't break production.
+  return normalizeAnthropicModel(Deno.env.get('ARLO_AI_MODEL'))
 }
 
 interface ChatTurn {
@@ -74,7 +74,9 @@ Deno.serve(async (req) => {
   }
 
   const model =
-    typeof body.model === 'string' && body.model.trim() ? body.model.trim() : defaultAnthropicModel()
+    typeof body.model === 'string' && body.model.trim()
+      ? normalizeAnthropicModel(body.model)
+      : defaultAnthropicModel()
   const max_tokens =
     typeof body.max_tokens === 'number' && Number.isFinite(body.max_tokens)
       ? Math.min(Math.max(body.max_tokens, 1), 8192)
