@@ -196,9 +196,16 @@ async function getValidAccessToken(supabase: ReturnType<typeof getSupabaseClient
 
     if (!response.ok) {
       console.error('[workspace-api] Token refresh failed:', await response.text());
+      const payload = JSON.stringify({
+        reason: 'auth_expired',
+        message: 'Google Workspace token refresh failed. Please reconnect this account.',
+        reconnectRequired: true,
+        upstreamStatus: response.status,
+        at: new Date().toISOString(),
+      });
       await supabase
         .from('drive_accounts')
-        .update({ last_sync_error: 'Token refresh failed - reconnection required' })
+        .update({ last_sync_error: payload })
         .eq('id', accountId);
       return null;
     }

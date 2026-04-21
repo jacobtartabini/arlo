@@ -20,6 +20,7 @@ import {
   Settings2
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { parseSyncError } from '@/lib/integration-errors';
 
 // NO MORE HARD-CODED USER ID - identity comes from JWT via AuthProvider
 
@@ -351,24 +352,44 @@ export default function CalendarIntegrations({ embedded = false }: CalendarInteg
                 <p className="text-sm text-muted-foreground">
                   2-way sync: Events sync both ways
                 </p>
-                {googleIntegration && (
-                  <div className="flex items-center gap-2 mt-2">
-                    {googleIntegration.last_sync_status === 'error' && (
-                      <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/10">
-                        <AlertCircle className="w-3 h-3 mr-1" />
-                        Sync Error
-                      </Badge>
-                    )}
-                    <span className="text-xs text-muted-foreground">
-                      Last sync: {formatLastSync(googleIntegration.last_sync_at)}
-                    </span>
-                  </div>
-                )}
+                {googleIntegration && (() => {
+                  const parsed = parseSyncError(googleIntegration.last_sync_error);
+                  return (
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      {parsed?.reconnectRequired ? (
+                        <Badge variant="outline" className="text-amber-600 border-amber-600/30 bg-amber-100 dark:bg-amber-950/50">
+                          <AlertCircle className="w-3 h-3 mr-1" />
+                          Reconnect required
+                        </Badge>
+                      ) : googleIntegration.last_sync_status === 'error' || parsed ? (
+                        <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/10">
+                          <AlertCircle className="w-3 h-3 mr-1" />
+                          {parsed?.message ? 'Sync Error' : 'Sync Error'}
+                        </Badge>
+                      ) : null}
+                      <span className="text-xs text-muted-foreground">
+                        Last sync: {formatLastSync(googleIntegration.last_sync_at)}
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
             <div className="flex items-center gap-2">
               {googleIntegration ? (
                 <>
+                  {parseSyncError(googleIntegration.last_sync_error)?.reconnectRequired && (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={connectGoogle}
+                      disabled={isConnecting.google}
+                      className="gap-1.5"
+                    >
+                      {isConnecting.google ? <Loader2 className="w-4 h-4 animate-spin" /> : <ExternalLink className="w-4 h-4" />}
+                      Reconnect
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"

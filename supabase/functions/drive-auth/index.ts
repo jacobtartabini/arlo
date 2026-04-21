@@ -333,10 +333,16 @@ Deno.serve(async (req) => {
         const refreshed = await refreshAccessToken(account.refresh_token);
         
         if (!refreshed) {
-          // Mark account as needing reconnection
+          // Mark account as needing reconnection (structured payload — UI shows Reconnect badge)
+          const payload = JSON.stringify({
+            reason: 'auth_expired',
+            message: 'Google Drive token refresh failed. Please reconnect this account.',
+            reconnectRequired: true,
+            at: new Date().toISOString(),
+          });
           await supabase
             .from('drive_accounts')
-            .update({ last_sync_error: 'Token refresh failed - reconnection required' })
+            .update({ last_sync_error: payload })
             .eq('id', accountId);
           
           return errorResponse(req, 'Token refresh failed - please reconnect the account', 401);

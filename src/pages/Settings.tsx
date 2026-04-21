@@ -11,6 +11,7 @@ import DriveIntegrations from '@/components/settings/DriveIntegrations';
 import DashboardVisibilitySettings from '@/components/settings/DashboardVisibilitySettings';
 import DashboardLayoutSettings from '@/components/settings/DashboardLayoutSettings';
 import VoiceSettings from '@/components/settings/VoiceSettings';
+import TailscaleStatus from '@/components/settings/TailscaleStatus';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -26,7 +27,8 @@ import {
   ChevronDown,
   Mic,
   LayoutDashboard,
-  Move
+  Move,
+  Shield,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -283,6 +285,15 @@ export default function Settings() {
                 <InboxSettings embedded />
               </div>
             </div>
+          </SettingsSection>
+
+          {/* Services */}
+          <SettingsSection
+            icon={Shield}
+            title="Services"
+            description="Internal connectivity (Tailscale)"
+          >
+            <TailscaleStatus embedded />
           </SettingsSection>
         </div>
       </div>
