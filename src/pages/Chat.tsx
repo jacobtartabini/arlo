@@ -1254,7 +1254,7 @@ function ChatDesktop() {
               </div>
             </div>
           ) : (
-            <div className="max-w-3xl mx-auto py-6 px-4 space-y-4">
+            <div className="max-w-5xl mx-auto py-6 px-4 space-y-4">
               {messages.map((message) => {
                 const { text, attachments } = parseMessageAttachments(message.content);
                 const isEditing = editingMessageId === message.id;
@@ -1282,7 +1282,7 @@ function ChatDesktop() {
                     
                     <div
                       className={cn(
-                        "max-w-[80%] px-4 py-3 rounded-2xl",
+                        "max-w-[90%] px-4 py-3 rounded-xl",
                         message.role === "user"
                           ? "bg-primary text-primary-foreground"
                           : "bg-muted text-foreground"
@@ -1352,7 +1352,7 @@ function ChatDesktop() {
                   animate={{ opacity: 1 }}
                   className="flex justify-start"
                 >
-                  <div className="bg-muted px-4 py-3 rounded-2xl flex items-center gap-2">
+                  <div className="bg-muted px-4 py-3 rounded-xl flex items-center gap-2">
                     <Loader2 className="w-4 h-4 animate-spin" />
                     <span className="text-sm text-muted-foreground">Arlo is thinking...</span>
                   </div>
@@ -1365,7 +1365,7 @@ function ChatDesktop() {
 
         {/* Input Area */}
         <div className="border-t border-border p-4">
-          <div className="max-w-3xl mx-auto">
+          <div className="max-w-5xl mx-auto">
             {/* File previews */}
             {files.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-3">
