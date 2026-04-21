@@ -24,6 +24,10 @@ export function usePorcupineWakeWord({ onWakeWordDetected, enabled = false }: Us
   const [isListening, setIsListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
+  // Picovoice's free tier enforces a monthly activation cap. Once we hit it
+  // there's no point retrying for the rest of the session — it will keep
+  // failing with the same error and waste auth requests + mic prompts.
+  const quotaExhaustedRef = useRef(false);
   
   const porcupineRef = useRef<PorcupineWorker | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
