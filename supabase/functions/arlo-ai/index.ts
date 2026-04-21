@@ -12,6 +12,21 @@ import {
   extractTextFromAnthropic,
   normalizeAnthropicModel,
 } from '../_shared/anthropic.ts'
+import { checkRateLimit, getClientIP } from '../_shared/rateLimit.ts'
+
+// Per-user rate limit (authenticated): 30 requests / minute / user.
+// Per-IP rate limit (pre-auth defense): 60 requests / minute / IP.
+// Generous for normal chat + voice usage but blocks abuse.
+const USER_RATE_LIMIT = {
+  maxRequests: 30,
+  windowSeconds: 60,
+  keyPrefix: 'arlo_ai_user',
+}
+const IP_RATE_LIMIT = {
+  maxRequests: 60,
+  windowSeconds: 60,
+  keyPrefix: 'arlo_ai_ip',
+}
 
 const DEFAULT_MAX_TOKENS = 400
 
