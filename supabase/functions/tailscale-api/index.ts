@@ -158,15 +158,17 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'audit-logs') {
-      // Fetch audit logs - need to use the admin API
-      // Note: Audit logs require a Tailscale plan that supports them
-      const params = new URLSearchParams({ stream: 'audit' })
+      // Fetch configuration audit logs from Tailscale.
+      // Correct endpoint: /api/v2/tailnet/{tailnet}/logging?type=configuration
+      // (The old `/logs?stream=audit` path returns 400 — it is not a valid endpoint.)
+      // Requires a Tailscale plan that includes configuration audit logging.
+      const params = new URLSearchParams({ type: 'configuration' })
       // Default to last 7 days if no start date provided
       const defaultStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
       params.set('start', body.start || defaultStart)
-      if (body.end) params.set('end', body.end)
+      params.set('end', body.end || new Date().toISOString())
       if (body.cursor) params.set('cursor', body.cursor)
-      const response = await fetchWithRetry(`${baseUrl}/logs?${params.toString()}`, { headers })
+      const response = await fetchWithRetry(`${baseUrl}/logging?${params.toString()}`, { headers })
       
       if (!response.ok) {
         const fallbackMessage =
