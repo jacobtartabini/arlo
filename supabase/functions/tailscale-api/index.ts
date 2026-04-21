@@ -178,20 +178,27 @@ Deno.serve(async (req) => {
         return await upstreamError(req, { requestId, action, response, debug, fallbackMessage })
       }
 
-      // Parse JSONL response (one JSON object per line)
+      // Parse response — Tailscale /logging returns either JSON `{logs: [...]}`
+      // or JSONL depending on plan/version. Try JSON first, fall back to JSONL.
       const text = await response.text()
-      const events: TailscaleAuditEvent[] = text
-        .split('\n')
-        .filter(line => line.trim())
-        .slice(0, 50) // Limit to last 50 events
-        .map(line => {
-          try {
-            return JSON.parse(line)
-          } catch {
-            return null
-          }
-        })
-        .filter(Boolean)
+      let events: TailscaleAuditEvent[] = []
+      try {
+        const parsed = JSON.parse(text)
+        if (Array.isArray(parsed?.logs)) {
+          events = parsed.logs
+        } else if (Array.isArray(parsed)) {
+          events = parsed
+        }
+      } catch {
+        events = text
+          .split('\n')
+          .filter(line => line.trim())
+          .map(line => {
+            try { return JSON.parse(line) } catch { return null }
+          })
+          .filter(Boolean) as TailscaleAuditEvent[]
+      }
+      events = events.slice(0, 50)
 
       // Transform to our format
       const transformedEvents = events.map((event: TailscaleAuditEvent) => ({
