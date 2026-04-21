@@ -6,7 +6,8 @@ import {
   validateOrigin,
   jsonResponse, 
   unauthorizedResponse, 
-  errorResponse 
+  errorResponse,
+  getAllowedRedirectUri,
 } from '../_shared/arloAuth.ts'
 import { encrypt, decrypt, isEncrypted } from '../_shared/encryption.ts'
 import { 
@@ -28,10 +29,6 @@ const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-// Determine the redirect URI based on environment
-function getRedirectUri(): string {
-  return "https://arlo.jacobtartabini.com/login";
-}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -100,7 +97,7 @@ Deno.serve(async (req: Request) => {
         return errorResponse(req, "OAuth session mismatch", 400);
       }
 
-      const redirectUri = getRedirectUri();
+      const redirectUri = getAllowedRedirectUri(req);
 
       // Exchange code for tokens
       const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
@@ -173,7 +170,7 @@ Deno.serve(async (req: Request) => {
       const rateLimitResponse = checkAuthRateLimit(req, AUTH_RATE_LIMITS.oauthAuthUrl);
       if (rateLimitResponse) return rateLimitResponse;
 
-      const redirectUri = getRedirectUri();
+      const redirectUri = getAllowedRedirectUri(req);
       const scopes = [
         "https://www.googleapis.com/auth/calendar.readonly",
         "https://www.googleapis.com/auth/calendar.events",

@@ -9,6 +9,7 @@ import Unauthorized from "./pages/Unauthorized";
 import NotFound from "./pages/NotFound";
 import TailscaleAuth from "./components/TailscaleAuth";
 import AuthCallback from "./pages/AuthCallback";
+import OAuthCallback from "./pages/OAuthCallback";
 import AuthError from "./pages/AuthError";
 import ProtectedRoute from "./components/ProtectedRoute";
 import DomainAwareRoute from "./components/DomainAwareRoute";
@@ -77,6 +78,7 @@ const App = () => (
                   {/* Public routes */}
                   <Route path="/login" element={<TailscaleAuth />} />
                   <Route path="/auth/callback" element={<AuthCallback />} />
+                  <Route path="/auth/oauth-callback" element={<OAuthCallback />} />
                   <Route path="/auth/error" element={<AuthError />} />
                   <Route path="/book/:handle" element={<PublicBookingPage />} />
                   <Route path="/book" element={<PublicBookingPage />} />

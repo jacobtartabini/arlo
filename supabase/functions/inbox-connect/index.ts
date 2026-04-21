@@ -4,7 +4,8 @@ import {
   validateOrigin,
   jsonResponse, 
   unauthorizedResponse, 
-  errorResponse 
+  errorResponse,
+  getAllowedRedirectUri,
 } from '../_shared/arloAuth.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { encrypt } from '../_shared/encryption.ts';
@@ -82,9 +83,8 @@ const OAUTH_CONFIG: Record<string, {
   },
 };
 
-// Redirect to app URL (same pattern as Google Calendar OAuth)
-const REDIRECT_URI = 'https://arlo.jacobtartabini.com/settings';
-
+// Redirect URI is now derived dynamically from the request origin via getAllowedRedirectUri(req).
+// All providers share the canonical /auth/oauth-callback route.
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
@@ -176,7 +176,7 @@ Deno.serve(async (req) => {
           client_id: clientId,
           client_secret: clientSecret,
           code,
-          redirect_uri: REDIRECT_URI,
+          redirect_uri: getAllowedRedirectUri(req),
           grant_type: 'authorization_code',
         }),
       });
@@ -291,7 +291,7 @@ Deno.serve(async (req) => {
       // Build OAuth URL
       const params = new URLSearchParams({
         client_id: clientId,
-        redirect_uri: REDIRECT_URI,
+        redirect_uri: getAllowedRedirectUri(req),
         response_type: 'code',
         scope: oauthConfig.scopes.join(' '),
         state: encodedState,

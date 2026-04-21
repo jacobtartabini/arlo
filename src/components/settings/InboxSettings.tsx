@@ -38,17 +38,6 @@ import { getAuthHeaders } from '@/lib/arloAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 
-function decodeOAuthStateFromQuery(state: string): { provider?: string } | null {
-  try {
-    // Support base64url + legacy base64 (and tolerate + turning into spaces).
-    const normalized = state.replace(/ /g, '+').replace(/-/g, '+').replace(/_/g, '/');
-    const pad = '='.repeat((4 - (normalized.length % 4)) % 4);
-    return JSON.parse(atob(normalized + pad)) as { provider?: string };
-  } catch {
-    return null;
-  }
-}
-
 // Helper to invoke edge functions with auth (matches CalendarIntegrations pattern)
 async function invokeWithAuth(functionName: string, body: Record<string, unknown>) {
   const headers = await getAuthHeaders();
@@ -144,58 +133,16 @@ export default function InboxSettings({ embedded = false }: InboxSettingsProps) 
   const [connectingProvider, setConnectingProvider] = useState<InboxProvider | null>(null);
   const [syncingAccountId, setSyncingAccountId] = useState<string | null>(null);
 
-  // Check for OAuth callback on mount (same pattern as CalendarIntegrations)
+  // OAuth callback handling is centralized in /auth/oauth-callback (OAuthCallback.tsx).
+  // After a successful exchange, the dispatcher redirects to /settings?tab=inbox&connected=<provider>.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-    const state = params.get('state');
-    
-    // Check if this is an inbox OAuth callback by looking at the state
-    // State format from inbox-connect includes provider info
-    if (code && state) {
-      const decoded = decodeOAuthStateFromQuery(state);
-      if (decoded?.provider && ['gmail', 'outlook', 'teams'].includes(decoded.provider)) {
-        handleInboxCallback(code, state);
-        // Clean up URL
-        window.history.replaceState({}, '', window.location.pathname);
-      }
+    const connected = params.get('connected');
+    if (connected && ['gmail', 'outlook', 'teams'].includes(connected)) {
+      refetch();
+      window.history.replaceState({}, '', window.location.pathname);
     }
-  }, []);
-
-  // Handle OAuth callback - exchange code for tokens with JWT auth
-  const handleInboxCallback = async (code: string, state: string) => {
-    setConnectingProvider('gmail'); // Show loading state
-    
-    try {
-      const { data, error } = await invokeWithAuth('inbox-connect', {
-        action: 'exchange_code',
-        code,
-        state,
-      });
-
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-
-      toast.success(`Connected ${data.email || data.provider}`);
-      await refetch();
-      
-      // Trigger initial sync for the newly connected account
-      if (data.account_id) {
-        toast.info('Starting initial sync...');
-        try {
-          await handleSync(data.account_id);
-          toast.success('Messages synced successfully');
-        } catch (syncErr) {
-          console.error('Initial sync failed:', syncErr);
-          toast.error('Connected but initial sync failed. Try syncing manually.');
-        }
-      }
-    } catch (error: unknown) {
-      toast.error('Failed to connect: ' + (error instanceof Error ? error.message : 'Unknown error'));
-    } finally {
-      setConnectingProvider(null);
-    }
-  };
+  }, [refetch]);
 
   const handleConnect = async (provider: InboxProvider) => {
     // Ensure authentication is ready

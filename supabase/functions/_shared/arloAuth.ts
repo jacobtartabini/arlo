@@ -83,6 +83,39 @@ export function isAllowedOrigin(origin: string | null): boolean {
   return ALLOWED_ORIGINS.includes(origin) || isJacobtartabiniOrigin(origin) || isLovableOrigin(origin);
 }
 
+/**
+ * Build the canonical OAuth callback redirect URI for the request's origin.
+ *
+ * All OAuth-handling edge functions (google-calendar-auth, drive-auth, inbox-connect)
+ * MUST use this helper instead of hard-coding a redirect host. The returned URI
+ * always points to `<origin>/auth/oauth-callback` so a single client-side
+ * dispatcher can handle every provider's response.
+ *
+ * If the request origin is not in the allowlist, falls back to the production
+ * apex domain so that misconfigured callers cannot trick Google/Microsoft into
+ * sending the authorization code to an attacker-controlled host. The OAuth
+ * provider will reject the mismatch with `redirect_uri_mismatch` — which is
+ * exactly the safe behavior we want.
+ */
+export const OAUTH_CALLBACK_PATH = '/auth/oauth-callback';
+
+export function getAllowedRedirectUri(req: Request): string {
+  const origin = req.headers.get('origin') ?? req.headers.get('referer');
+  if (origin) {
+    try {
+      const url = new URL(origin);
+      const cleanOrigin = `${url.protocol}//${url.host}`;
+      if (isAllowedOrigin(cleanOrigin)) {
+        return `${cleanOrigin}${OAUTH_CALLBACK_PATH}`;
+      }
+    } catch {
+      // fall through to default
+    }
+  }
+  // Safe default: production apex
+  return `https://arlo.jacobtartabini.com${OAUTH_CALLBACK_PATH}`;
+}
+
 function normalizeHeaderName(headerName: string): string {
   return headerName.trim().toLowerCase();
 }

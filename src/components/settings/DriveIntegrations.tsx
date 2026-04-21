@@ -46,69 +46,27 @@ export default function DriveIntegrations({ embedded = false }: DriveIntegration
     syncFiles,
   } = useFilesPersistence();
 
-  type OAuthState = { provider?: string };
-
   const [accounts, setAccounts] = useState<DriveAccount[]>([]);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSyncing, setIsSyncing] = useState<Record<string, boolean>>({});
   const [isDisconnecting, setIsDisconnecting] = useState<Record<string, boolean>>({});
 
-  const decodeOAuthState = (raw: string): OAuthState | null => {
-    try {
-      const normalized = raw.replace(/ /g, '+').replace(/-/g, '+').replace(/_/g, '/');
-      const pad = '='.repeat((4 - (normalized.length % 4)) % 4);
-      return JSON.parse(atob(normalized + pad)) as OAuthState;
-    } catch {
-      return null;
-    }
-  };
-
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
       loadAccounts();
     }
-
-    // Check for Google Drive OAuth callback by decoding state parameter
+    // OAuth callback handling is now centralized in /auth/oauth-callback (OAuthCallback.tsx).
+    // After a successful exchange, that page redirects back to /settings?tab=drive&connected=google_drive.
     const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-    const state = params.get('state');
-
-    if (code && state) {
-      const decoded = decodeOAuthState(state);
-      if (decoded?.provider === 'google_drive') {
-          handleDriveCallback(code, state);
-          window.history.replaceState({}, '', window.location.pathname);
-      }
+    if (params.get('connected') === 'google_drive') {
+      toast.success('Google Drive connected');
+      window.history.replaceState({}, '', window.location.pathname);
     }
   }, [authLoading, isAuthenticated]);
 
   const loadAccounts = async () => {
     const data = await listAccounts();
     setAccounts(data);
-  };
-
-  // Handle OAuth callback - exchange code for tokens with JWT auth
-  const handleDriveCallback = async (code: string, state: string) => {
-    setIsConnecting(true);
-    
-    try {
-      const { data, error } = await invokeWithAuth('drive-auth', {
-        action: 'exchange_code',
-        code,
-        state,
-      });
-
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-
-      toast.success(`Connected ${data.email || 'Google Drive'}`);
-      loadAccounts();
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      toast.error('Failed to connect Google Drive: ' + message);
-    } finally {
-      setIsConnecting(false);
-    }
   };
 
   const handleConnect = async () => {
