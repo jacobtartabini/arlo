@@ -97,7 +97,7 @@ Deno.serve(async (req: Request) => {
         return errorResponse(req, "OAuth session mismatch", 400);
       }
 
-      const redirectUri = getRedirectUri();
+      const redirectUri = getAllowedRedirectUri(req);
 
       // Exchange code for tokens
       const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
@@ -170,7 +170,7 @@ Deno.serve(async (req: Request) => {
       const rateLimitResponse = checkAuthRateLimit(req, AUTH_RATE_LIMITS.oauthAuthUrl);
       if (rateLimitResponse) return rateLimitResponse;
 
-      const redirectUri = getRedirectUri();
+      const redirectUri = getAllowedRedirectUri(req);
       const scopes = [
         "https://www.googleapis.com/auth/calendar.readonly",
         "https://www.googleapis.com/auth/calendar.events",

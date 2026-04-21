@@ -4,7 +4,8 @@ import {
   validateOrigin,
   jsonResponse, 
   unauthorizedResponse, 
-  errorResponse 
+  errorResponse,
+  getAllowedRedirectUri,
 } from '../_shared/arloAuth.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { encrypt, decrypt, isEncrypted } from '../_shared/encryption.ts';
@@ -20,9 +21,6 @@ const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_DRIVE_CLIENT_ID') || Deno.env.get(
 const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_DRIVE_CLIENT_SECRET') || Deno.env.get('GOOGLE_CLIENT_SECRET');
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-
-// Redirect to app URL (same pattern as Google Calendar OAuth)
-const REDIRECT_URI = 'https://arlo.jacobtartabini.com/settings';
 
 interface DriveAuthRequest {
   action: 'get_auth_url' | 'exchange_code' | 'disconnect' | 'list_accounts' | 'refresh_token';
