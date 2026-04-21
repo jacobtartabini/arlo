@@ -9,6 +9,7 @@ import {
 } from '../_shared/arloAuth.ts'
 import { encrypt, decrypt, isEncrypted } from '../_shared/encryption.ts'
 import { checkAuthRateLimit, AUTH_RATE_LIMITS, logAuthFailure } from '../_shared/authRateLimit.ts'
+import { classifyException, buildSyncErrorPayload } from '../_shared/providerErrors.ts'
 
 const GOOGLE_CLIENT_ID = Deno.env.get("GOOGLE_CLIENT_ID")!;
 const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
@@ -390,11 +391,12 @@ async function syncOutlookIcal(integration: CalendarIntegration, supabase: any):
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : String(error);
     console.error("[calendar-sync] iCal sync error:", error);
+    const classified = classifyException(error);
     await supabase
       .from("calendar_integrations")
       .update({
         last_sync_status: "error",
-        last_sync_error: errMsg,
+        last_sync_error: buildSyncErrorPayload(classified),
       })
       .eq("id", integration.id);
     return { success: false, error: errMsg };
