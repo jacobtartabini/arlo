@@ -394,6 +394,25 @@ export function useHandsFreeVoice() {
     }
   }, [wakeWordError]);
 
+  // If user navigates to a public/unauthenticated route mid-session, hard-stop everything
+  useEffect(() => {
+    if (!onProtectedRoute || !isAuthenticated) {
+      cleanup();
+      if (audioRef.current) {
+        try {
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+        } catch {
+          // ignore
+        }
+      }
+      setIsSessionActive(false);
+      setVoiceState('idle');
+      setTranscript('');
+      pendingTranscriptRef.current = '';
+    }
+  }, [onProtectedRoute, isAuthenticated, cleanup]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
