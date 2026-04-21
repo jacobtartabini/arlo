@@ -146,14 +146,16 @@ export function ChatHistoryProvider({
   const dbPersistence = useChatPersistence(isAuthenticated);
 
   // Load conversations when auth becomes available (re-runs if auth flips true)
+  const hasLoadedAuthedRef = useRef(false);
   useEffect(() => {
     if (!isAuthenticated) {
       setConversations([]);
       setIsLoading(false);
       setIsInitialized(true);
+      hasLoadedAuthedRef.current = false;
       return;
     }
-    if (isInitialized) return;
+    if (hasLoadedAuthedRef.current) return;
 
     let cancelled = false;
     const loadData = async () => {
@@ -170,11 +172,12 @@ export function ChatHistoryProvider({
       }
       setIsLoading(false);
       setIsInitialized(true);
+      hasLoadedAuthedRef.current = true;
     };
 
     loadData();
     return () => { cancelled = true; };
-  }, [isAuthenticated, isInitialized, dbPersistence]);
+  }, [isAuthenticated, dbPersistence]);
 
   // Note: localStorage persistence removed - auth required for all chat operations
 
