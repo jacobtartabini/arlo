@@ -245,7 +245,9 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
 
             // Send chat notification
             const preview = content.length > 100 ? content.substring(0, 100) + '...' : content;
-            showToast('chat', 'Arlo responded', preview);
+            if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/chat')) {
+              showToast('chat', 'Arlo responded', preview);
+            }
             
             // Get user ID and send push notification
             (async () => {
@@ -497,7 +499,9 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
         });
 
         const preview = reply.length > 100 ? `${reply.slice(0, 100)}...` : reply;
-        showToast('chat', 'Arlo responded', preview);
+        if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/chat')) {
+          showToast('chat', 'Arlo responded', preview);
+        }
 
         try {
           const userId = sessionStorage.getItem('arlo_user_id');
