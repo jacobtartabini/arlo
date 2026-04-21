@@ -201,6 +201,7 @@ function ChatDesktop() {
     deleteConversation,
     updateConversationTitle,
     updateMessageText,
+    updateConversationFolder,
   } = useChatHistory();
 
   // Scroll to bottom when messages change
