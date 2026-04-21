@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
   }
 
   // Per-user rate limit (authenticated identity from JWT)
-  const userIdentifier = authResult.user?.sub || authResult.user?.email || ip
+  const userIdentifier = authResult.userId || ip
   const userLimit = checkRateLimit(userIdentifier, USER_RATE_LIMIT)
   if (!userLimit.allowed) {
     return new Response(
