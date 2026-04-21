@@ -48,9 +48,47 @@ Deno.serve(async (req) => {
   const originError = validateOrigin(req)
   if (originError) return originError
 
+  // Per-IP rate limit (cheap, runs before auth verification work)
+  const ip = getClientIP(req)
+  const ipLimit = checkRateLimit(ip, IP_RATE_LIMIT)
+  if (!ipLimit.allowed) {
+    return new Response(
+      JSON.stringify({
+        error: 'Too many requests from this network. Please slow down.',
+        code: 'RATE_LIMITED',
+      }),
+      {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          'Retry-After': String(ipLimit.retryAfterSeconds || 60),
+        },
+      },
+    )
+  }
+
   const authResult = await verifyArloJWT(req)
   if (!authResult.authenticated) {
     return unauthorizedResponse(req, authResult.error || 'Authentication required')
+  }
+
+  // Per-user rate limit (authenticated identity from JWT)
+  const userIdentifier = authResult.user?.sub || authResult.user?.email || ip
+  const userLimit = checkRateLimit(userIdentifier, USER_RATE_LIMIT)
+  if (!userLimit.allowed) {
+    return new Response(
+      JSON.stringify({
+        error: 'You have hit the AI request limit. Please wait a moment.',
+        code: 'RATE_LIMITED',
+      }),
+      {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          'Retry-After': String(userLimit.retryAfterSeconds || 60),
+        },
+      },
+    )
   }
 
   if (req.method !== 'POST') {
