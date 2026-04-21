@@ -59,19 +59,6 @@ interface Device {
   expires?: string;
 }
 
-interface AuditEvent {
-  id: string;
-  type: 'login' | 'logout' | 'failed' | 'refresh';
-  timestamp: string;
-  device: string;
-  os: string;
-  ip: string;
-  location: string;
-  source: 'tailnet' | 'public';
-  actor?: string;
-  eventType?: string;
-}
-
 interface AuthKey {
   id: string;
   description: string;
@@ -195,13 +182,10 @@ const Services = () => {
   
   // Live data state
   const [devices, setDevices] = useState<Device[]>([]);
-  const [recentEvents, setRecentEvents] = useState<AuditEvent[]>([]);
   const [authKeys, setAuthKeys] = useState<AuthKey[]>([]);
   const [isLoadingDevices, setIsLoadingDevices] = useState(false);
-  const [isLoadingEvents, setIsLoadingEvents] = useState(false);
   const [isLoadingKeys, setIsLoadingKeys] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
-  const [auditError, setAuditError] = useState<string | null>(null);
   const [debugEntries, setDebugEntries] = useState<DebugEntry[]>([]);
   const debugEnabled = useMemo(() => {
     return new URLSearchParams(location.search).get('debug') === '1';
@@ -319,44 +303,6 @@ const Services = () => {
     }
   }, [fetchTailscaleData]);
 
-  const loadAuditEvents = useCallback(async () => {
-    setIsLoadingEvents(true);
-    try {
-      const data = await fetchTailscaleData('audit-logs') as { events?: Record<string, unknown>[] } | null;
-      if (data?.events) {
-        const formattedEvents: AuditEvent[] = data.events.map((e) => {
-          const rawType = e.type as string;
-          const validType = ['login', 'logout', 'failed', 'refresh'].includes(rawType) 
-            ? rawType as 'login' | 'logout' | 'failed' | 'refresh'
-            : 'login';
-          const rawSource = e.source as string;
-          const validSource = rawSource === 'public' ? 'public' : 'tailnet';
-          return {
-            id: e.id as string,
-            type: validType,
-            timestamp: formatLastSeen(e.timestamp as string),
-            device: e.device as string,
-            os: (e.os as string) || 'Unknown',
-            ip: e.ip as string,
-            location: (e.location as string) || 'Via Tailnet',
-            source: validSource as 'tailnet' | 'public',
-            actor: e.actor as string,
-            eventType: e.eventType as string,
-          };
-        });
-        setRecentEvents(formattedEvents);
-        setAuditError(null);
-      }
-    } catch (err) {
-      const raw = err instanceof Error ? err.message : 'Audit logs unavailable.';
-      const isPlanLimit = raw.toLowerCase().includes('unavailable on current tailscale plan');
-      setAuditError(isPlanLimit ? 'Audit logs are not available on your current Tailscale plan.' : raw);
-      setRecentEvents([]);
-    } finally {
-      setIsLoadingEvents(false);
-    }
-  }, [fetchTailscaleData]);
-
   const loadAuthKeys = useCallback(async () => {
     setIsLoadingKeys(true);
     try {
@@ -383,9 +329,9 @@ const Services = () => {
 
   const loadAllData = useCallback(async () => {
     setIsRefreshing(true);
-    await Promise.all([loadDevices(), loadAuditEvents(), loadAuthKeys()]);
+    await Promise.all([loadDevices(), loadAuthKeys()]);
     setIsRefreshing(false);
-  }, [loadDevices, loadAuditEvents, loadAuthKeys]);
+  }, [loadDevices, loadAuthKeys]);
 
   // Initial load and realtime polling - wait for auth to be ready
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -425,7 +371,6 @@ const Services = () => {
     const report = {
       exportedAt: new Date().toISOString(),
       devices,
-      recentEvents,
       authKeys,
       intelligenceFindings: osintFindings,
     };
@@ -713,7 +658,6 @@ const Services = () => {
   };
 
   const onlineDevices = devices.filter(d => d.status === 'online').length;
-  const failedEvents = recentEvents.filter(e => e.type === 'failed').length;
   const expiringKeys = authKeys.filter(key => {
     if (!key.expires) return false;
     const expiresDate = new Date(key.expires);
@@ -1002,73 +946,6 @@ const Services = () => {
                 </div>
                 <p className="text-sm font-medium text-foreground">No auth keys</p>
                 <p className="text-xs text-muted-foreground mt-1">Create keys in Tailscale admin</p>
-              </div>
-            )}
-          </Card>
-
-          {/* Audit Logs Section */}
-          <Card className="relative overflow-hidden border-border/60 bg-card/80 p-5 shadow-sm backdrop-blur lg:col-span-12">
-            <div className="absolute inset-0 pointer-events-none opacity-60">
-              <div className="absolute right-6 top-4 h-12 w-12 rounded-full bg-muted/40 blur-2xl" />
-            </div>
-
-            <div className="relative mb-4 flex items-start justify-between gap-3">
-              <div className="space-y-1">
-                <h2 className="text-base font-semibold text-foreground">Access Activity</h2>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  Recent sign-ins and security events from your Tailnet
-                </p>
-              </div>
-              {isLoadingEvents && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-            </div>
-
-            {auditError ? (
-              <div className={cn(
-                "rounded-xl border p-4 text-sm flex items-center justify-between gap-3",
-                auditError.includes('not available on your current Tailscale plan')
-                  ? "border-amber-500/30 bg-amber-500/5 text-amber-600 dark:text-amber-400"
-                  : "border-rose-500/30 bg-rose-500/5 text-rose-600 dark:text-rose-400"
-              )}>
-                <span>{auditError}</span>
-                {!auditError.includes('not available on your current Tailscale plan') && (
-                  <Button variant="ghost" size="sm" onClick={loadAuditEvents} disabled={isLoadingEvents} className="shrink-0">
-                    {isLoadingEvents ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                    <span className="ml-1">Retry</span>
-                  </Button>
-                )}
-              </div>
-            ) : recentEvents.length > 0 ? (
-              <div className="space-y-2">
-                {recentEvents.slice(0, 5).map((event) => (
-                  <div
-                    key={event.id}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-muted/30 p-3"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{event.eventType || event.type}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {event.device} · {event.timestamp}
-                      </p>
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-xs",
-                        event.type === 'failed'
-                          ? 'border-rose-500/40 text-rose-500'
-                          : event.type === 'login'
-                          ? 'border-emerald-500/40 text-emerald-500'
-                          : 'border-border/60 text-muted-foreground'
-                      )}
-                    >
-                      {event.type}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-xl border border-border/60 bg-muted/30 p-4 text-sm text-muted-foreground">
-                No audit events available yet.
               </div>
             )}
           </Card>
