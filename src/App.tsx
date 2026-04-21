@@ -221,14 +221,14 @@ const App = () => (
                   {/* Catch-all route */}
                   <Route path="*" element={<NotFound />} />
                   </Routes>
-                </BrowserRouter>
-              </TooltipProvider>
-            </VoiceStateProvider>
-          </NotificationsProvider>
-            </ArloProvider>
-          </ChatHistoryProvider>
-        </UserSettingsProvider>
-      </AuthProvider>
+                    </TooltipProvider>
+                  </VoiceStateProvider>
+                </NotificationsProvider>
+              </ArloProvider>
+            </ChatHistoryProvider>
+          </UserSettingsProvider>
+        </AuthProvider>
+      </BrowserRouter>
     </ThemeProvider>
   </QueryClientProvider>
 );
