@@ -158,15 +158,17 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'audit-logs') {
-      // Fetch audit logs - need to use the admin API
-      // Note: Audit logs require a Tailscale plan that supports them
-      const params = new URLSearchParams({ stream: 'audit' })
+      // Fetch configuration audit logs from Tailscale.
+      // Correct endpoint: /api/v2/tailnet/{tailnet}/logging?type=configuration
+      // (The old `/logs?stream=audit` path returns 400 — it is not a valid endpoint.)
+      // Requires a Tailscale plan that includes configuration audit logging.
+      const params = new URLSearchParams({ type: 'configuration' })
       // Default to last 7 days if no start date provided
       const defaultStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
       params.set('start', body.start || defaultStart)
-      if (body.end) params.set('end', body.end)
+      params.set('end', body.end || new Date().toISOString())
       if (body.cursor) params.set('cursor', body.cursor)
-      const response = await fetchWithRetry(`${baseUrl}/logs?${params.toString()}`, { headers })
+      const response = await fetchWithRetry(`${baseUrl}/logging?${params.toString()}`, { headers })
       
       if (!response.ok) {
         const fallbackMessage =
@@ -176,20 +178,27 @@ Deno.serve(async (req) => {
         return await upstreamError(req, { requestId, action, response, debug, fallbackMessage })
       }
 
-      // Parse JSONL response (one JSON object per line)
+      // Parse response — Tailscale /logging returns either JSON `{logs: [...]}`
+      // or JSONL depending on plan/version. Try JSON first, fall back to JSONL.
       const text = await response.text()
-      const events: TailscaleAuditEvent[] = text
-        .split('\n')
-        .filter(line => line.trim())
-        .slice(0, 50) // Limit to last 50 events
-        .map(line => {
-          try {
-            return JSON.parse(line)
-          } catch {
-            return null
-          }
-        })
-        .filter(Boolean)
+      let events: TailscaleAuditEvent[] = []
+      try {
+        const parsed = JSON.parse(text)
+        if (Array.isArray(parsed?.logs)) {
+          events = parsed.logs
+        } else if (Array.isArray(parsed)) {
+          events = parsed
+        }
+      } catch {
+        events = text
+          .split('\n')
+          .filter(line => line.trim())
+          .map(line => {
+            try { return JSON.parse(line) } catch { return null }
+          })
+          .filter(Boolean) as TailscaleAuditEvent[]
+      }
+      events = events.slice(0, 50)
 
       // Transform to our format
       const transformedEvents = events.map((event: TailscaleAuditEvent) => ({
@@ -381,9 +390,7 @@ async function upstreamError(
       : fallbackMessage
 
   console.error('[tailscale-api] Upstream error:', { action, upstreamStatus: response.status, status })
-  if (debug) {
-    console.error('[tailscale-api] Upstream error body:', errorPayload)
-  }
+  console.error('[tailscale-api] Upstream error body:', errorPayload)
 
   return jsonError(req, status, 'upstream_error', message, details)
 }
