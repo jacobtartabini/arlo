@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { VoiceState } from '@/types/voice';
 import { getSpeechRecognition, SpeechRecognitionInstance, SpeechRecognitionEventResult } from '@/types/speech-recognition';
 import { useVoiceSettings } from './useVoiceSettings';
@@ -7,6 +8,27 @@ import { usePorcupineWakeWord } from './usePorcupineWakeWord';
 import { useAuth } from '@/providers/AuthProvider';
 import { useChatHistory } from '@/providers/ChatHistoryProvider';
 import { invokeEdgeFunction } from '@/lib/edge-functions';
+
+/**
+ * Routes where "Hey Arlo" is NEVER allowed (unauthenticated / public surfaces).
+ * Wake word + voice session are only ever enabled when the user is authenticated
+ * AND on a protected application route.
+ */
+const PUBLIC_ROUTE_PREFIXES = [
+  '/login',
+  '/auth/callback',
+  '/auth/error',
+  '/book',
+  '/booking',
+  '/unauthorized',
+];
+
+function isProtectedPath(pathname: string): boolean {
+  const normalized = pathname.toLowerCase();
+  return !PUBLIC_ROUTE_PREFIXES.some(
+    (prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`),
+  );
+}
 
 /**
  * Hands-Free Voice Mode Hook
@@ -20,6 +42,7 @@ import { invokeEdgeFunction } from '@/lib/edge-functions';
  */
 export function useHandsFreeVoice() {
   const { isAuthenticated } = useAuth();
+  const location = useLocation();
   const { settings, updateSettings, isLoading: settingsLoading } = useVoiceSettings();
   const { appendMessage, ensureActiveConversation } = useChatHistory();
   
@@ -35,12 +58,17 @@ export function useHandsFreeVoice() {
   const pendingTranscriptRef = useRef('');
   const sessionTimeoutRef = useRef<number | null>(null);
 
-  // Check if hands-free mode is enabled
+  // Hands-free is gated on:
+  // 1. User is authenticated (verified Arlo JWT)
+  // 2. Settings loaded and both voice mode + wake word enabled
+  // 3. Current route is a protected (non-public) route
+  const onProtectedRoute = isProtectedPath(location.pathname);
   const isHandsFreeEnabled = Boolean(
     isAuthenticated &&
     !settingsLoading &&
     settings?.voice_mode_enabled &&
-    settings?.wake_word_enabled
+    settings?.wake_word_enabled &&
+    onProtectedRoute
   );
 
   // Pre-initialize audio element for low latency TTS
@@ -365,6 +393,25 @@ export function useHandsFreeVoice() {
       setError(wakeWordError);
     }
   }, [wakeWordError]);
+
+  // If user navigates to a public/unauthenticated route mid-session, hard-stop everything
+  useEffect(() => {
+    if (!onProtectedRoute || !isAuthenticated) {
+      cleanup();
+      if (audioRef.current) {
+        try {
+          audioRef.current.pause();
+          audioRef.current.currentTime = 0;
+        } catch {
+          // ignore
+        }
+      }
+      setIsSessionActive(false);
+      setVoiceState('idle');
+      setTranscript('');
+      pendingTranscriptRef.current = '';
+    }
+  }, [onProtectedRoute, isAuthenticated, cleanup]);
 
   // Cleanup on unmount
   useEffect(() => {
