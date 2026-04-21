@@ -10,9 +10,9 @@ import {
 const DEFAULT_MAX_TOKENS = 4096
 
 function defaultAnthropicModel(): string {
-  // Use a stable, currently-available Claude model. The previous default
-  // ('claude-sonnet-4-20250514') returns 404 from Anthropic.
-  return Deno.env.get('ARLO_AI_MODEL')?.trim() || 'claude-3-5-sonnet-latest'
+  // Use a pinned, known-valid Claude model. The previous default/alias
+  // returned 404 from Anthropic in this project.
+  return Deno.env.get('ARLO_AI_MODEL')?.trim() || 'claude-3-5-sonnet-20240620'
 }
 
 interface ChatTurn {
