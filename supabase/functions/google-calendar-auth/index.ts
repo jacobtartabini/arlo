@@ -6,7 +6,8 @@ import {
   validateOrigin,
   jsonResponse, 
   unauthorizedResponse, 
-  errorResponse 
+  errorResponse,
+  getAllowedRedirectUri,
 } from '../_shared/arloAuth.ts'
 import { encrypt, decrypt, isEncrypted } from '../_shared/encryption.ts'
 import { 
@@ -28,10 +29,6 @@ const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-// Determine the redirect URI based on environment
-function getRedirectUri(): string {
-  return "https://arlo.jacobtartabini.com/login";
-}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
