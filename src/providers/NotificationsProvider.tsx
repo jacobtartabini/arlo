@@ -58,7 +58,10 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       // If new notifications arrived, show a toast for the newest one
       if (count > prevUnreadRef.current && notifs.length > 0) {
         const newest = notifs[0];
-        if (!newest.read) {
+        const onChatPage = typeof window !== 'undefined' && window.location.pathname.startsWith('/chat');
+        const isChatNotification = newest.type === 'chat';
+
+        if (!newest.read && !(onChatPage && isChatNotification)) {
           toast(newest.title, { description: newest.body });
         }
       }
