@@ -327,31 +327,17 @@ export function ChatHistoryProvider({
         return sortedConversations;
       });
 
-      // Persist to database
+      // Persist to database (pass our messageId so it matches local state)
       if (isAuthenticated) {
         pendingDbOperationsRef.current.add(messageId);
         dbPersistence.addMessage(
           conversationId,
           input.text,
           input.sender,
-          input.status ?? "pending"
-        ).then((dbMsg) => {
+          input.status ?? "pending",
+          messageId,
+        ).then(() => {
           pendingDbOperationsRef.current.delete(messageId);
-          if (dbMsg && dbMsg.id !== messageId) {
-            // Update local message with DB ID
-            setConversations((prev) =>
-              prev.map((conv) =>
-                conv.id === conversationId
-                  ? {
-                      ...conv,
-                      messages: conv.messages.map((m) =>
-                        m.id === messageId ? { ...m, id: dbMsg.id } : m
-                      ),
-                    }
-                  : conv
-              )
-            );
-          }
         });
 
         // Update conversation title if needed
