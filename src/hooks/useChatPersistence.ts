@@ -80,7 +80,7 @@ export function useChatPersistence(isAuthenticated: boolean) {
       console.error('Error in fetchConversations:', error);
       return [];
     }
-  }, []);
+  }, [isAuthenticated]);
 
   const createConversation = useCallback(async (
     title: string = 'New Chat',
@@ -119,7 +119,7 @@ export function useChatPersistence(isAuthenticated: boolean) {
       console.error('Error in updateConversationTitle:', error);
       return false;
     }
-  }, []);
+  }, [isAuthenticated]);
 
   const deleteConversation = useCallback(async (conversationId: string): Promise<boolean> => {
     if (!isAuthenticated) return false;
@@ -135,7 +135,7 @@ export function useChatPersistence(isAuthenticated: boolean) {
       console.error('Error in deleteConversation:', error);
       return false;
     }
-  }, []);
+  }, [isAuthenticated]);
 
   const addMessage = useCallback(async (
     conversationId: string,
@@ -171,7 +171,7 @@ export function useChatPersistence(isAuthenticated: boolean) {
       console.error('Error in addMessage:', error);
       return null;
     }
-  }, []);
+  }, [isAuthenticated]);
 
   const updateMessageStatus = useCallback(async (
     messageId: string,
@@ -194,7 +194,7 @@ export function useChatPersistence(isAuthenticated: boolean) {
       console.error('Error in updateMessageStatus:', error);
       return false;
     }
-  }, []);
+  }, [isAuthenticated]);
 
   return {
     fetchConversations,
