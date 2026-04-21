@@ -67,14 +67,32 @@ export async function invokeEdgeFunction<T = unknown>(
   const payload = await parseEdgeFunctionBody(response);
 
   if (!response.ok) {
-    const fallbackMessage = response.status === 404
-      ? `Edge Function "${functionName}" was not found (404). Deploy it to your Supabase project and verify VITE_SUPABASE_URL points to the correct project.`
-      : 'Request failed';
+    // Try to surface the real upstream error message first. Many edge functions
+    // proxy 4xx/5xx responses from third-party APIs (e.g. Anthropic), so the
+    // status code alone does NOT mean the function is missing.
+    const payloadObj = (typeof payload === 'object' && payload !== null) ? payload as Record<string, unknown> : null;
+    const payloadError = payloadObj?.error;
+    const payloadMessage =
+      typeof payloadError === 'string'
+        ? payloadError
+        : (payloadError && typeof payloadError === 'object' && 'message' in (payloadError as object))
+          ? String((payloadError as { message?: unknown }).message ?? '')
+          : typeof payloadObj?.message === 'string'
+            ? (payloadObj.message as string)
+            : '';
 
-    const message =
-      typeof payload === 'string'
-        ? payload
-        : (payload as { error?: { message?: string } })?.error?.message || fallbackMessage;
+    const stringPayload = typeof payload === 'string' ? payload : '';
+
+    // Only treat as "function not found" when the gateway itself returned a
+    // 404 with no JSON body (i.e. the function really isn't deployed).
+    const looksLikeMissingFunction =
+      response.status === 404 && !payloadObj && !stringPayload.trim();
+
+    const fallbackMessage = looksLikeMissingFunction
+      ? `Edge Function "${functionName}" was not found (404). Deploy it to your Supabase project and verify VITE_SUPABASE_URL points to the correct project.`
+      : `Request to "${functionName}" failed (${response.status})`;
+
+    const message = payloadMessage || stringPayload || fallbackMessage;
     return {
       ok: false,
       status: response.status,
