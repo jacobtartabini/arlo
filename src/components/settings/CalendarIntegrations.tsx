@@ -71,18 +71,13 @@ export default function CalendarIntegrations({ embedded = false }: CalendarInteg
 
   useEffect(() => {
     loadIntegrations();
-
-    // Check for Google OAuth callback
+    // OAuth callback handling is now centralized in /auth/oauth-callback (OAuthCallback.tsx).
+    // After a successful exchange, that page redirects back here with ?tab=calendar&connected=google,
+    // so we just refresh the integration list when that flag is present.
     const params = new URLSearchParams(window.location.search);
-    if (params.get('google_callback') === 'true') {
-      const code = params.get('code');
-      const state = params.get('state');
-      
-      if (code && state) {
-        handleGoogleCallback(code, state);
-      }
-      
-      // Clean up URL
+    if (params.get('connected') === 'google') {
+      toast.success('Google Calendar connected');
+      loadIntegrations();
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
@@ -183,27 +178,8 @@ export default function CalendarIntegrations({ embedded = false }: CalendarInteg
     );
   };
 
-  const handleGoogleCallback = async (code: string, state: string) => {
-    setIsConnecting(prev => ({ ...prev, google: true }));
-    
-    try {
-      // exchange_code now requires JWT auth with nonce validation
-      const { data, error } = await invokeWithAuth('google-calendar-auth', {
-        action: 'exchange_code', code, state,
-      });
-
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-
-      toast.success('Google Calendar connected successfully');
-      await syncCalendar('google');
-      loadIntegrations();
-    } catch (error: any) {
-      toast.error('Failed to connect Google Calendar: ' + error.message);
-    } finally {
-      setIsConnecting(prev => ({ ...prev, google: false }));
-    }
-  };
+  // OAuth code exchange is now handled by /auth/oauth-callback (OAuthCallback.tsx).
+  // This component only initiates the auth URL and refreshes the list when the user returns.
 
   const connectGoogle = async () => {
     setIsConnecting(prev => ({ ...prev, google: true }));

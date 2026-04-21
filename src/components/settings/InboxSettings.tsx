@@ -38,17 +38,6 @@ import { getAuthHeaders } from '@/lib/arloAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 
-function decodeOAuthStateFromQuery(state: string): { provider?: string } | null {
-  try {
-    // Support base64url + legacy base64 (and tolerate + turning into spaces).
-    const normalized = state.replace(/ /g, '+').replace(/-/g, '+').replace(/_/g, '/');
-    const pad = '='.repeat((4 - (normalized.length % 4)) % 4);
-    return JSON.parse(atob(normalized + pad)) as { provider?: string };
-  } catch {
-    return null;
-  }
-}
-
 // Helper to invoke edge functions with auth (matches CalendarIntegrations pattern)
 async function invokeWithAuth(functionName: string, body: Record<string, unknown>) {
   const headers = await getAuthHeaders();
