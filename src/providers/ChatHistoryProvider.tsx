@@ -14,6 +14,7 @@ import {
   ChatSender,
 } from "@/types/chat";
 import { useChatPersistence } from "@/hooks/useChatPersistence";
+import { isAuthenticated as isArloAuthenticated, ARLO_AUTH_INVALIDATED_EVENT } from "@/lib/arloAuth";
 
 interface InitialMessageInput {
   id?: string;
@@ -126,14 +127,21 @@ export function ChatHistoryProvider({
   const [isLoading, setIsLoading] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
   
-  // Check legacy flags for backward compatibility
-  const isAuthenticated = (() => {
-    if (typeof window === 'undefined') return false;
-    const verified = sessionStorage.getItem('arlo_access_verified') === 'true';
-    const expiry = sessionStorage.getItem('arlo_access_verified_expiry');
-    return verified && !!expiry && Date.now() < parseInt(expiry);
-  })();
-  
+  // Use the real Arlo JWT auth check (reactive)
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => isArloAuthenticated());
+
+  useEffect(() => {
+    const recheck = () => setIsAuthenticated(isArloAuthenticated());
+    // Recheck on mount (in case token loaded after first render)
+    recheck();
+    window.addEventListener(ARLO_AUTH_INVALIDATED_EVENT, recheck);
+    window.addEventListener('focus', recheck);
+    return () => {
+      window.removeEventListener(ARLO_AUTH_INVALIDATED_EVENT, recheck);
+      window.removeEventListener('focus', recheck);
+    };
+  }, []);
+
   const pendingDbOperationsRef = useRef<Set<string>>(new Set());
   const dbPersistence = useChatPersistence(isAuthenticated);
 
