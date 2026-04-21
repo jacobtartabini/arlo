@@ -145,35 +145,35 @@ export function ChatHistoryProvider({
   const pendingDbOperationsRef = useRef<Set<string>>(new Set());
   const dbPersistence = useChatPersistence(isAuthenticated);
 
-  // Load conversations based on auth state
+  // Load conversations when auth becomes available (re-runs if auth flips true)
   useEffect(() => {
+    if (!isAuthenticated) {
+      setConversations([]);
+      setIsLoading(false);
+      setIsInitialized(true);
+      return;
+    }
     if (isInitialized) return;
 
+    let cancelled = false;
     const loadData = async () => {
       setIsLoading(true);
+      const dbConversations = await dbPersistence.fetchConversations();
+      if (cancelled) return;
+      setConversations(dbConversations);
 
-      if (isAuthenticated) {
-        // Load from database via edge function
-        const dbConversations = await dbPersistence.fetchConversations();
-        setConversations(dbConversations);
-        
-        // Load active conversation from localStorage (for session persistence)
-        const savedActiveId = loadActiveConversationId();
-        if (savedActiveId && dbConversations.some(c => c.id === savedActiveId)) {
-          setActiveConversationIdState(savedActiveId);
-        } else if (dbConversations.length > 0) {
-          setActiveConversationIdState(dbConversations[0].id);
-        }
-      } else {
-        // Unauthenticated users get no chat history
-        setConversations([]);
+      const savedActiveId = loadActiveConversationId();
+      if (savedActiveId && dbConversations.some(c => c.id === savedActiveId)) {
+        setActiveConversationIdState(savedActiveId);
+      } else if (dbConversations.length > 0) {
+        setActiveConversationIdState(dbConversations[0].id);
       }
-
       setIsLoading(false);
       setIsInitialized(true);
     };
 
     loadData();
+    return () => { cancelled = true; };
   }, [isAuthenticated, isInitialized, dbPersistence]);
 
   // Note: localStorage persistence removed - auth required for all chat operations
@@ -228,19 +228,11 @@ export function ChatHistoryProvider({
         return next;
       });
 
-      // Persist to database if authenticated
+      // Persist to database with the SAME id so foreign keys match immediately
       if (isAuthenticated) {
-        dbPersistence.createConversation(title).then((dbConv) => {
-          if (dbConv) {
-            // Update local state with DB-assigned ID if different
-            setConversations((prev) => {
-              return prev.map((c) => 
-                c.id === id ? { ...c, id: dbConv.id } : c
-              );
-            });
-            if (options?.setActive !== false) {
-              setActiveConversationInternal(dbConv.id);
-            }
+        dbPersistence.createConversation(title, id).then((dbConv) => {
+          if (!dbConv) {
+            console.error('Failed to persist conversation to database');
           }
         });
       }
