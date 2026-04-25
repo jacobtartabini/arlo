@@ -50,19 +50,18 @@ export const CalendarMonthGrid: React.FC<CalendarMonthGridProps> = ({
                 <span className="text-[10px] text-muted-foreground">{dayBlocks.length}</span>
               )}
             </div>
-            <div className="mt-3 space-y-1">
+            <div className="mt-2 space-y-0.5">
               {dayBlocks.slice(0, 3).map(block => (
                 <div
                   key={block.id}
-                  className="flex items-center gap-2 rounded-md bg-muted/50 px-2 py-1 text-xs"
-                  style={{ borderLeft: `3px solid ${block.color}` }}
+                  className="flex items-center gap-1 rounded-sm bg-muted/50 px-1.5 py-0.5 text-[11px]"
+                  style={{ borderLeft: `2px solid ${block.color}` }}
                 >
                   <span className="truncate font-medium">{block.title}</span>
-                  {/* Source indicator */}
                   {block.eventSource && block.eventSource !== "arlo" && (
-                    <span 
+                    <span
                       className={cn(
-                        "flex-shrink-0 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-bold",
+                        "flex-shrink-0 w-3 h-3 rounded-full flex items-center justify-center text-[8px] font-bold",
                         block.eventSource === "google" && "bg-blue-500/30 text-blue-700 dark:text-blue-300",
                         block.eventSource === "outlook_ics" && "bg-cyan-500/30 text-cyan-700 dark:text-cyan-300"
                       )}
@@ -70,7 +69,7 @@ export const CalendarMonthGrid: React.FC<CalendarMonthGridProps> = ({
                       {block.eventSource === "google" ? "G" : "O"}
                     </span>
                   )}
-                  <span className="truncate text-[10px] text-muted-foreground">
+                  <span className="ml-auto truncate text-[10px] text-muted-foreground">
                     {block.allDay ? "All day" : formatDisplayTime(block.startMinutes)}
                   </span>
                 </div>
