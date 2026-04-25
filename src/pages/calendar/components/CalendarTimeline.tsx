@@ -517,7 +517,7 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                       const height = Math.max(32, minutesToPx(selectionForDay.endMinutes) - top);
                       return (
                         <div
-                          className="pointer-events-none absolute left-1 right-1 rounded-lg border border-primary/60 bg-primary/10 px-2 py-1.5 text-[11px] font-medium text-primary shadow-sm"
+                          className="pointer-events-none absolute left-0 right-0 rounded-md border border-primary/60 bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary shadow-sm"
                           style={{ top, height }}
                         >
                           {formatTimeRange(selectionForDay.startMinutes, selectionForDay.endMinutes)}
