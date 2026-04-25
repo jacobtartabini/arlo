@@ -965,7 +965,7 @@ const CalendarPage: React.FC = () => {
           </aside>
 
           <div className="flex min-w-0 flex-1 flex-col">
-            <main className="flex-1 min-w-0 overflow-hidden rounded-2xl border bg-card shadow-sm">
+            <main className="flex-1 min-w-0 overflow-hidden rounded-lg border bg-card shadow-sm">
               {view === "month" ? (
                 <CalendarMonthGrid
                   days={days}
