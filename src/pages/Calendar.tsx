@@ -948,8 +948,8 @@ const CalendarPage: React.FC = () => {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 px-4 pb-4 pt-3 sm:px-6 lg:px-10">
-        <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[240px,minmax(0,1fr)] 2xl:grid-cols-[240px,minmax(0,1fr),280px]">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 px-2 pb-2 pt-2 sm:px-3 lg:px-4">
+        <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[220px,minmax(0,1fr)] 2xl:grid-cols-[220px,minmax(0,1fr),260px]">
           <aside className="hidden min-h-0 flex-col gap-4 lg:flex">
             <CalendarMiniMonth
               selectedDate={selectedDate}
