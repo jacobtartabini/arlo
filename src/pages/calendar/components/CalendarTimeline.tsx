@@ -509,7 +509,7 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                     })}
                   </div>
                   <div
-                    className="absolute inset-x-3 inset-y-0 pb-6"
+                    className="absolute inset-x-1 inset-y-0 pb-4"
                     ref={node => setBlockContainerRef(dayKey, node)}
                   >
                     {selectionForDay && (() => {
