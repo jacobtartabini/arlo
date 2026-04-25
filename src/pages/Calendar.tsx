@@ -893,7 +893,7 @@ const CalendarPage: React.FC = () => {
   return (
     <div className="flex h-full w-full flex-col">
       <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur">
-        <div className="flex w-full flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:px-10">
+        <div className="flex w-full flex-wrap items-center justify-between gap-3 px-3 py-2 sm:px-4 lg:px-4">
           {/* Left: Navigation controls */}
           <div className="flex items-center gap-2">
             <div className="flex items-center rounded-full border bg-background px-1 py-0.5">
