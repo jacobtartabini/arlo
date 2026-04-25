@@ -32,7 +32,7 @@ export const CalendarMonthGrid: React.FC<CalendarMonthGridProps> = ({
             type="button"
             onClick={() => onSelectDate(day)}
             className={cn(
-              "flex min-h-[120px] flex-col border-b border-r px-3 pb-3 pt-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+              "flex min-h-[120px] flex-col border-b border-r px-1.5 pb-2 pt-1.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
               !isSameMonth(day, selectedDate) && "bg-muted/60 text-muted-foreground",
               isSelected && "bg-primary/5"
             )}
