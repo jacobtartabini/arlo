@@ -552,6 +552,7 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                       const dragState = blockDragRef.current;
                       const isDragging = dragState?.block.id === block.id && dragState.isDragging;
 
+                      const isShort = height < 44;
                       return (
                         <button
                           key={block.id}
@@ -564,8 +565,9 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                           onClick={event => handleBlockClick(event, block)}
                           title={`${block.title} · ${block.allDay ? "All day" : formatTimeRange(block.startMinutes, block.endMinutes)}`}
                           className={cn(
-                            "absolute flex h-full flex-col justify-between overflow-hidden rounded-2xl p-3 text-left text-sm shadow-lg transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                            "absolute flex h-full flex-col overflow-hidden rounded-md text-left text-xs shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
                             "cursor-grab active:cursor-grabbing",
+                            isShort ? "px-1.5 py-0.5 justify-center" : "px-2 py-1 justify-start gap-0.5",
                             isTask && "border border-dashed"
                           )}
                           style={{
@@ -575,14 +577,14 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                             height: previewForBlock && previewForBlock.dayKey === dayKey
                               ? Math.max(36, minutesToPx(previewForBlock.endMinutes) - minutesToPx(previewForBlock.startMinutes))
                               : height,
-                            left: `calc(${leftPercent}% + 0.25rem)`,
-                            width: `calc(${widthPercent}% - 0.5rem)`,
+                            left: `calc(${leftPercent}% + 1px)`,
+                            width: `calc(${widthPercent}% - 2px)`,
                             backgroundColor,
                             color: baseTextColor,
                             borderColor,
                             boxShadow: isTask
-                              ? "0 10px 20px -15px rgba(15, 23, 42, 0.5)"
-                              : "0 18px 40px -24px rgba(15, 23, 42, 0.65)",
+                              ? "0 4px 10px -8px rgba(15, 23, 42, 0.4)"
+                              : "0 6px 14px -10px rgba(15, 23, 42, 0.5)",
                             opacity:
                               previewForBlock && previewForBlock.dayKey !== dayKey
                                 ? 0.35
@@ -591,40 +593,43 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                                   : 1
                           }}
                         >
-                          <div className="flex flex-col gap-1 overflow-hidden">
-                            <div className="flex items-center gap-1.5">
-                              <p className="truncate text-sm font-semibold leading-snug">{block.title}</p>
-                              {/* Source badge */}
-                              {block.eventSource && block.eventSource !== "arlo" && (
-                                <span 
-                                  className={cn(
-                                    "flex-shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide",
-                                    block.eventSource === "google" && "bg-blue-500/20 text-blue-700 dark:text-blue-300",
-                                    block.eventSource === "outlook_ics" && "bg-cyan-500/20 text-cyan-700 dark:text-cyan-300"
-                                  )}
-                                >
-                                  {block.eventSource === "google" ? "G" : "O"}
-                                  {block.readOnly && (
-                                    <svg className="w-2 h-2" viewBox="0 0 24 24" fill="currentColor">
-                                      <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
-                                    </svg>
-                                  )}
+                          {isShort ? (
+                            <div className="flex items-center gap-1.5 overflow-hidden">
+                              <p className="truncate text-[11px] font-semibold leading-tight">{block.title}</p>
+                              <span className="truncate text-[10px] font-medium" style={{ color: subtleTextColor }}>
+                                {timeLabel}
+                              </span>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex items-center gap-1 overflow-hidden">
+                                <p className="truncate text-[12px] font-semibold leading-tight">{block.title}</p>
+                                {block.eventSource && block.eventSource !== "arlo" && (
+                                  <span
+                                    className={cn(
+                                      "flex-shrink-0 inline-flex items-center px-1 rounded text-[8px] font-bold uppercase tracking-wide",
+                                      block.eventSource === "google" && "bg-blue-500/20 text-blue-700 dark:text-blue-300",
+                                      block.eventSource === "outlook_ics" && "bg-cyan-500/20 text-cyan-700 dark:text-cyan-300"
+                                    )}
+                                  >
+                                    {block.eventSource === "google" ? "G" : "O"}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="truncate text-[10px] font-medium" style={{ color: subtleTextColor }}>
+                                {timeLabel}
+                              </p>
+                              {block.subtitle && height > 70 && (
+                                <p className="truncate text-[10px]" style={{ color: subtleTextColor }}>
+                                  {block.subtitle}
+                                </p>
+                              )}
+                              {block.isAvailable && (
+                                <span className="mt-auto text-[10px] font-semibold uppercase tracking-wide text-emerald-600">
+                                  Available
                                 </span>
                               )}
-                            </div>
-                            <p className="text-xs font-medium" style={{ color: subtleTextColor }}>
-                              {timeLabel}
-                            </p>
-                            {block.subtitle && (
-                              <p className="truncate text-xs" style={{ color: subtleTextColor }}>
-                                {block.subtitle}
-                              </p>
-                            )}
-                          </div>
-                          {block.isAvailable && (
-                            <span className="text-[11px] font-semibold uppercase tracking-wide text-emerald-600">
-                              Available
-                            </span>
+                            </>
                           )}
                         </button>
                       );
