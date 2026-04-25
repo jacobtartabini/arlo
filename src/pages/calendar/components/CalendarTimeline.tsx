@@ -653,7 +653,7 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                         return (
                           <div
                             key="block-preview"
-                            className="pointer-events-none absolute left-[0.25rem] right-[0.25rem] flex flex-col justify-between overflow-hidden rounded-2xl border border-dashed border-primary/40 bg-primary/10 p-3 text-left text-sm shadow-lg"
+                            className="pointer-events-none absolute left-[1px] right-[1px] flex flex-col justify-between overflow-hidden rounded-md border border-dashed border-primary/40 bg-primary/10 px-2 py-1 text-left text-xs shadow-sm"
                             style={{
                               top: previewTop,
                               height: previewHeight,
