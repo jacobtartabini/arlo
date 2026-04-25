@@ -462,10 +462,10 @@ export const CalendarTimeline: React.FC<CalendarTimelineProps> = ({
                           type="button"
                           onClick={(e) => onBlockSelect(block, e.currentTarget)}
                           className={cn(
-                            "w-full truncate rounded px-2 py-1 text-left text-[11px] font-medium transition-colors",
+                            "w-full truncate rounded-sm px-1.5 py-0.5 text-left text-[11px] font-medium transition-colors",
                             "hover:opacity-80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
                           )}
-                          style={{ 
+                          style={{
                             backgroundColor: block.color,
                             color: getContrastTextColor(block.color),
                           }}
