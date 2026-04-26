@@ -159,7 +159,7 @@ Deno.serve(async (req) => {
         id: device.id,
         name: device.hostname || device.name,
         os: device.os,
-        status: device.online ? 'online' : 'offline',
+        status: isDeviceOnline(device) ? 'online' : 'offline',
         tailnetIp: device.addresses?.[0] || '',
         lastSeen: device.lastSeen,
         tags: device.tags || [],
