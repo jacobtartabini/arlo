@@ -116,6 +116,9 @@ type StravaStatsPayload = {
     recent_swims?: StravaStatsTotals;
   };
 };
+type TailscaleDevicesPayload = {
+  devices?: Array<{ status?: "online" | "offline" | string }>;
+};
 
 function computeDashboardHealthScore(p: {
   activitiesToday: number;
@@ -213,6 +216,7 @@ export function useDashboardData() {
         placesResult,
         tripsResult,
         driveAccountsResult,
+        tailscaleDevicesResult,
         stravaStatusResult,
         stravaStatsResult,
         relationshipContactsResult,
@@ -241,6 +245,7 @@ export function useDashboardData() {
           order: { column: "start_date", ascending: true },
         }),
         dataApiHelpers.select<any[]>("drive_accounts_safe", {}),
+        invokeEdgeFunction<TailscaleDevicesPayload>("tailscale-api", { action: "devices" }, { requireAuth: true }),
         invokeEdgeFunction<StravaStatusPayload>("strava-api", { action: "status" }, { requireAuth: true }),
         invokeEdgeFunction<StravaStatsPayload>("strava-api", { action: "stats" }, { requireAuth: true }),
         dataApiHelpers.select<any[]>("relationship_contacts", { limit: 400 }),
@@ -353,6 +358,10 @@ export function useDashboardData() {
           ? Math.round((driveStorageUsedBytes / driveStorageTotalBytes) * 100)
           : null;
 
+      // Process security device count (Tailnet online devices)
+      const tailscaleDevices = tailscaleDevicesResult.ok ? (tailscaleDevicesResult.data?.devices ?? []) : [];
+      const connectedDevices = tailscaleDevices.filter((device) => device.status === "online").length;
+
       // Circles / relationship contacts
       const relationshipContacts = (relationshipContactsResult.data || []) as RelationshipContact[];
       const circlesTotalContacts = relationshipContacts.length;
@@ -457,7 +466,7 @@ export function useDashboardData() {
         sleepHours,
         healthScore,
         weeklyActiveMinutes,
-        connectedDevices: 0, // Placeholder - could fetch from tailscale-api
+        connectedDevices,
         driveAccountsConnected,
         driveStorageUsedBytes,
         driveStorageTotalBytes,
