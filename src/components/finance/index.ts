@@ -9,3 +9,7 @@ export { BudgetSetupWizard } from "./BudgetSetupWizard";
 export { BudgetInsightsPanel } from "./BudgetInsightsPanel";
 export { TopMerchantsCard } from "./TopMerchantsCard";
 export { EditBudgetDialog } from "./EditBudgetDialog";
+export { AddStockDialog } from "./AddStockDialog";
+export { AddHoldingDialog } from "./AddHoldingDialog";
+export { StocksTab } from "./StocksTab";
+export { ScanGiftCardDialog } from "./ScanGiftCardDialog";
