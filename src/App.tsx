@@ -37,6 +37,7 @@ import Files from "./pages/modules/Files";
 import Lab from "./pages/modules/Lab";
 import LabProject from "./pages/modules/LabProject";
 import LabModelEditor from "./pages/modules/LabModelEditor";
+import LabItemEditor from "./pages/modules/LabItemEditor";
 import Automations from "./pages/modules/Automations";
 import Notifications from "./pages/modules/Notifications";
 import Notes from "./pages/Notes";
@@ -165,6 +166,11 @@ const App = () => (
                   <Route path="/lab/project/:projectId/model" element={
                     <ProtectedRoute>
                       <LabModelEditor />
+                    </ProtectedRoute>
+                  } />
+                  <Route path="/lab/project/:projectId/item/:itemId" element={
+                    <ProtectedRoute>
+                      <LabItemEditor />
                     </ProtectedRoute>
                   } />
                   <Route path="/creation" element={<Navigate to="/lab" replace />} />
