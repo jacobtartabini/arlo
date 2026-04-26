@@ -172,9 +172,11 @@ export default function LabProject() {
 
   const openEditItem = (item: LabItem) => {
     if (item.item_type === "media" || item.item_type === "file") return;
-    setEditItem(item);
-    setEditTitle(item.title);
-    setEditBody(item.body ?? "");
+    if (item.item_type === "design") {
+      navigate(`/lab/project/${projectId}/model`);
+      return;
+    }
+    navigate(`/lab/project/${projectId}/item/${item.id}`);
   };
 
   const saveEditItem = async () => {
@@ -184,9 +186,8 @@ export default function LabProject() {
   };
 
   const openCreator = (kind: EditorKind) => {
-    setCreatorKind(kind);
-    setCreatorTitle("");
-    setCreatorBody("");
+    if (!projectId) return;
+    navigate(`/lab/project/${projectId}/item/new?kind=${kind}`);
   };
 
   const submitCreator = async () => {
