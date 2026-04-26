@@ -47,13 +47,15 @@ export function useLabItems(projectId: string | undefined) {
   }, [refresh]);
 
   const addTextItem = useCallback(
-    async (itemType: LabItemType, title: string, body: string) => {
+    async (itemType: LabItemType, title: string, body: string | null) => {
       if (!projectId) return null;
+      const safeTitle = (title ?? '').trim() || 'Untitled';
+      const safeBody = body == null ? null : (body.trim() || null);
       const res = await dataApiHelpers.insert<LabItem>('lab_items', {
         project_id: projectId,
         item_type: itemType,
-        title: title.trim() || 'Untitled',
-        body: body.trim() || null,
+        title: safeTitle,
+        body: safeBody,
       });
       if (res.data) {
         await refresh();
