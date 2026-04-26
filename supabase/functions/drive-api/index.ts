@@ -725,6 +725,14 @@ Deno.serve(async (req) => {
     }
 
   } catch (err) {
+    if (err instanceof TokenDecryptionError) {
+      console.warn('[drive-api] Token decryption failed - user must reconnect');
+      return jsonResponse(req, {
+        error: 'Google Drive credentials are invalid. Please disconnect and reconnect this account.',
+        reconnectRequired: true,
+        reason: 'auth_expired',
+      }, 401);
+    }
     console.error('[drive-api] Error:', err);
     return errorResponse(req, err instanceof Error ? err.message : 'Internal error', 500);
   }
