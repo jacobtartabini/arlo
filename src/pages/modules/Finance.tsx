@@ -13,15 +13,23 @@ import {
   AddTransactionDialog, 
   AddSubscriptionDialog, 
   AddGiftCardDialog, 
-  AddBudgetDialog 
+  AddBudgetDialog,
+  BudgetOverviewCard,
+  BudgetCategoryRow,
+  BudgetSetupWizard,
+  BudgetInsightsPanel,
+  TopMerchantsCard,
 } from "@/components/finance";
 import { 
   Building2, CreditCard, PiggyBank, TrendingUp, RefreshCw, 
   Plus, Wallet, Gift, BarChart3, ArrowUpRight, ArrowDownRight,
-  Calendar, AlertCircle, ChevronRight, ArrowLeft
+  Calendar, AlertCircle, ChevronRight, ArrowLeft, Sparkles
 } from "lucide-react";
 import { toast } from "sonner";
 import { format, startOfMonth, endOfMonth } from "date-fns";
+import { useBudgetData } from "@/hooks/useBudgetData";
+import { useBudgetInsights } from "@/hooks/useBudgetInsights";
+import { categorizeTransaction, getCategoryDef } from "@/lib/finance/categories";
 
 export default function Finance() {
   const navigate = useNavigate();
