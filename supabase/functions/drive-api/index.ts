@@ -156,8 +156,13 @@ async function getValidAccessToken(supabase: ReturnType<typeof getSupabaseClient
     return tokens.access_token;
   }
 
-  // Decrypt and return current token
-  return isEncrypted(account.access_token) ? await decrypt(account.access_token) : account.access_token;
+  // Decrypt and return current token (handle key mismatch gracefully)
+  try {
+    return await safeDecrypt(account.access_token);
+  } catch {
+    await markAccountNeedsReconnect(supabase, accountId);
+    throw new TokenDecryptionError();
+  }
 }
 
 // List files from Google Drive with section support
