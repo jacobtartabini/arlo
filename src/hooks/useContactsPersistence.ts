@@ -97,6 +97,47 @@ export function useContactsPersistence() {
     [],
   );
 
+  const createContactDetailed = useCallback(
+    async (input: {
+      display_name: string;
+      given_name?: string | null;
+      family_name?: string | null;
+      emails?: string[];
+      phones?: string[];
+      company?: string | null;
+      job_title?: string | null;
+      linkedin_url?: string | null;
+      circle?: 'inner' | 'middle' | 'outer';
+      tags?: string[];
+      profile_notes?: string | null;
+    }): Promise<RelationshipContact | null> => {
+      const draft: ContactImportDraft = {
+        display_name: input.display_name,
+        given_name: input.given_name ?? null,
+        family_name: input.family_name ?? null,
+        emails: input.emails ?? [],
+        phones: input.phones ?? [],
+        company: input.company ?? null,
+        job_title: input.job_title ?? null,
+        linkedin_url: input.linkedin_url ?? null,
+        source: 'device',
+      };
+      const payload = {
+        ...buildContactInsertPayload(draft),
+        circle: input.circle ?? 'outer',
+        tags: input.tags ?? [],
+        profile_notes: input.profile_notes ?? null,
+      };
+      const { data, error } = await dataApiHelpers.insert<RelationshipContact>('relationship_contacts', payload);
+      if (error) {
+        console.error('[contacts] createDetailed', error);
+        return null;
+      }
+      return data;
+    },
+    [],
+  );
+
   const updateContact = useCallback(async (id: string, patch: Record<string, unknown>) => {
     const { data, error } = await dataApiHelpers.update<RelationshipContact>('relationship_contacts', id, patch);
     if (error) console.error('[contacts] update', error);
