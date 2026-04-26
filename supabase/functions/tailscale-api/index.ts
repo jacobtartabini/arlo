@@ -13,12 +13,30 @@ interface TailscaleDevice {
   addresses: string[]
   os: string
   lastSeen: string
-  online: boolean
+  online?: boolean
+  connectedToControl?: boolean
   tags?: string[]
   user: string
   clientVersion: string
   updateAvailable: boolean
   expires?: string
+}
+
+// Tailscale's /devices endpoint does NOT return an `online` field.
+// Derive online status from `connectedToControl` plus a fresh `lastSeen`
+// (Tailscale's own dashboard treats devices as online if they were seen
+// within the last ~5 minutes).
+const ONLINE_THRESHOLD_MS = 5 * 60 * 1000
+function isDeviceOnline(device: TailscaleDevice): boolean {
+  if (typeof device.online === 'boolean') return device.online
+  const lastSeenMs = device.lastSeen ? Date.parse(device.lastSeen) : NaN
+  const fresh = Number.isFinite(lastSeenMs)
+    ? Date.now() - lastSeenMs < ONLINE_THRESHOLD_MS
+    : false
+  // connectedToControl alone isn't sufficient (it can stay true briefly
+  // after disconnect), but combined with a fresh lastSeen it's reliable.
+  if (device.connectedToControl === true && fresh) return true
+  return fresh
 }
 
 interface TailscaleAuditEvent {
@@ -141,7 +159,7 @@ Deno.serve(async (req) => {
         id: device.id,
         name: device.hostname || device.name,
         os: device.os,
-        status: device.online ? 'online' : 'offline',
+        status: isDeviceOnline(device) ? 'online' : 'offline',
         tailnetIp: device.addresses?.[0] || '',
         lastSeen: device.lastSeen,
         tags: device.tags || [],
