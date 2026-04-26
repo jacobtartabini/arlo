@@ -19,6 +19,8 @@ import {
   BudgetSetupWizard,
   BudgetInsightsPanel,
   TopMerchantsCard,
+  StocksTab,
+  ScanGiftCardDialog,
 } from "@/components/finance";
 import { 
   Building2, CreditCard, PiggyBank, TrendingUp, RefreshCw, 
@@ -395,7 +397,10 @@ export default function Finance() {
                     </CardTitle>
                     <CardDescription>Total available: {formatCurrency(totalGiftCards)}</CardDescription>
                   </div>
-                  <AddGiftCardDialog onSuccess={loadData} />
+                  <div className="flex gap-2">
+                    <ScanGiftCardDialog onSuccess={loadData} />
+                    <AddGiftCardDialog onSuccess={loadData} />
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -429,43 +434,7 @@ export default function Finance() {
           </TabsContent>
 
           <TabsContent value="stocks">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <TrendingUp className="h-5 w-5" />
-                      Watchlist
-                    </CardTitle>
-                    <CardDescription>Track stocks you're interested in</CardDescription>
-                  </div>
-                  <Button size="sm">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Stock
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {watchlist.length === 0 ? (
-                  <div className="text-center py-12">
-                    <TrendingUp className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground">Add stocks to your watchlist</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {watchlist.map(stock => (
-                      <div key={stock.id} className="flex items-center justify-between p-3 rounded-lg border">
-                        <div>
-                          <p className="font-bold">{stock.symbol}</p>
-                          <p className="text-sm text-muted-foreground">{stock.name}</p>
-                        </div>
-                        <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <StocksTab />
           </TabsContent>
         </Tabs>
       </div>
