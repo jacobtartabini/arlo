@@ -329,22 +329,11 @@ export default function Finance() {
           </TabsContent>
 
           <TabsContent value="budget">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <PiggyBank className="h-5 w-5" />
-                  Monthly Budget
-                </CardTitle>
-                <CardDescription>Track spending against your category budgets</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-12">
-                  <PiggyBank className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground mb-4">Set up your first budget category</p>
-                  <AddBudgetDialog onSuccess={loadData} />
-                </div>
-              </CardContent>
-            </Card>
+            <BudgetTab
+              transactions={transactions}
+              subscriptions={subscriptions}
+              giftCards={giftCards}
+            />
           </TabsContent>
 
           <TabsContent value="subscriptions">
