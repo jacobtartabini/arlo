@@ -88,12 +88,16 @@ export default function Finance() {
       setSyncing(false);
     }
   };
-  // Calculate summary stats
+  // Calculate summary stats — exclude transfers/loans from "spending"
   const totalBalance = accounts.reduce((sum, a) => sum + (a.current_balance || 0), 0);
   const monthStart = startOfMonth(new Date()).toISOString().split('T')[0];
   const monthEnd = endOfMonth(new Date()).toISOString().split('T')[0];
   const monthlyTransactions = transactions.filter(t => t.date >= monthStart && t.date <= monthEnd);
-  const monthlySpending = monthlyTransactions.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
+  const realSpendTxns = monthlyTransactions.filter(t => {
+    if (t.amount <= 0) return false;
+    return getCategoryDef(categorizeTransaction(t)).countsAsSpend;
+  });
+  const monthlySpending = realSpendTxns.reduce((sum, t) => sum + t.amount, 0);
   const monthlyIncome = monthlyTransactions.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(t.amount), 0);
   const monthlySubscriptions = subscriptions.filter(s => s.frequency === 'MONTHLY').reduce((sum, s) => sum + s.amount, 0);
   const totalGiftCards = giftCards.reduce((sum, c) => sum + c.current_balance, 0);
