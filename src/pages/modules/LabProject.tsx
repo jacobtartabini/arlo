@@ -176,6 +176,10 @@ export default function LabProject() {
       navigate(`/lab/project/${projectId}/model`);
       return;
     }
+    if (item.item_type === "note") {
+      navigate(`/lab/project/${projectId}/note/${item.id}`);
+      return;
+    }
     navigate(`/lab/project/${projectId}/item/${item.id}`);
   };
 
@@ -187,6 +191,11 @@ export default function LabProject() {
 
   const openCreator = (kind: EditorKind) => {
     if (!projectId) return;
+    if (kind === "note") {
+      // Notes get the full /notes editing experience.
+      navigate(`/lab/project/${projectId}/note/new`);
+      return;
+    }
     navigate(`/lab/project/${projectId}/item/new?kind=${kind}`);
   };
 
