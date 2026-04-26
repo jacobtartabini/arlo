@@ -8,28 +8,19 @@ import { Switch } from "@/components/ui/switch";
 import { Plus } from "lucide-react";
 import { useFinancePersistence } from "@/hooks/useFinancePersistence";
 import { toast } from "sonner";
+import { BUDGET_CATEGORIES } from "@/lib/finance/categories";
 
-const CATEGORIES = [
-  "Food & Dining",
-  "Shopping",
-  "Transportation",
-  "Bills & Utilities",
-  "Entertainment",
-  "Health & Fitness",
-  "Travel",
-  "Personal Care",
-  "Education",
-  "Other",
-];
+const SELECTABLE = BUDGET_CATEGORIES.filter(c => c.countsAsSpend);
 
 type AddBudgetDialogProps = {
   onSuccess?: () => void;
+  triggerLabel?: string;
 };
 
-export function AddBudgetDialog({ onSuccess }: AddBudgetDialogProps) {
+export function AddBudgetDialog({ onSuccess, triggerLabel = "Add budget" }: AddBudgetDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { createBudget } = useFinancePersistence();
+  const { upsertBudget } = useFinancePersistence();
 
   const now = new Date();
   const [formData, setFormData] = useState({
@@ -41,33 +32,36 @@ export function AddBudgetDialog({ onSuccess }: AddBudgetDialogProps) {
     notes: "",
   });
 
+  const reset = () => {
+    setFormData({
+      category: "",
+      amount: "",
+      month: now.getMonth() + 1,
+      year: now.getFullYear(),
+      carryover_enabled: false,
+      notes: "",
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.category || !formData.amount) {
       toast.error("Category and amount are required");
       return;
     }
-
     setLoading(true);
     try {
-      await createBudget({
+      await upsertBudget({
         category: formData.category,
         amount: parseFloat(formData.amount),
         month: formData.month,
         year: formData.year,
         carryover_enabled: formData.carryover_enabled,
         notes: formData.notes || null,
-      });
-      toast.success("Budget created");
+      } as any);
+      toast.success("Budget saved");
       setOpen(false);
-      setFormData({
-        category: "",
-        amount: "",
-        month: now.getMonth() + 1,
-        year: now.getFullYear(),
-        carryover_enabled: false,
-        notes: "",
-      });
+      reset();
       onSuccess?.();
     } catch (error) {
       console.error("Failed to create budget:", error);
@@ -83,15 +77,15 @@ export function AddBudgetDialog({ onSuccess }: AddBudgetDialogProps) {
   ];
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" className="gap-2">
-          <Plus className="w-4 h-4" /> Add Budget
+          <Plus className="w-4 h-4" /> {triggerLabel}
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Create Budget</DialogTitle>
+          <DialogTitle>Create budget</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
@@ -101,12 +95,13 @@ export function AddBudgetDialog({ onSuccess }: AddBudgetDialogProps) {
               onValueChange={(value) => setFormData({ ...formData, category: value })}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select category" />
+                <SelectValue placeholder="Pick a category" />
               </SelectTrigger>
               <SelectContent>
-                {CATEGORIES.map((cat) => (
-                  <SelectItem key={cat} value={cat}>
-                    {cat}
+                {SELECTABLE.map((cat) => (
+                  <SelectItem key={cat.key} value={cat.key}>
+                    <span className="mr-2">{cat.emoji}</span>
+                    {cat.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -114,15 +109,19 @@ export function AddBudgetDialog({ onSuccess }: AddBudgetDialogProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="amount">Monthly Budget</Label>
-            <Input
-              id="amount"
-              type="number"
-              step="0.01"
-              value={formData.amount}
-              onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-              placeholder="500.00"
-            />
+            <Label htmlFor="amount">Monthly limit</Label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
+              <Input
+                id="amount"
+                type="number"
+                step="10"
+                value={formData.amount}
+                onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                placeholder="500"
+                className="pl-7"
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -164,8 +163,11 @@ export function AddBudgetDialog({ onSuccess }: AddBudgetDialogProps) {
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
-            <Label htmlFor="carryover">Rollover unused budget</Label>
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div>
+              <Label htmlFor="carryover" className="text-sm font-medium">Roll unused over</Label>
+              <p className="text-xs text-muted-foreground">Leftover this month adds to next month.</p>
+            </div>
             <Switch
               id="carryover"
               checked={formData.carryover_enabled}
@@ -173,22 +175,12 @@ export function AddBudgetDialog({ onSuccess }: AddBudgetDialogProps) {
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="notes">Notes</Label>
-            <Input
-              id="notes"
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              placeholder="Optional notes"
-            />
-          </div>
-
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 pt-1">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "Creating..." : "Create Budget"}
+              {loading ? "Saving…" : "Save budget"}
             </Button>
           </div>
         </form>

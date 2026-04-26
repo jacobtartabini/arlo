@@ -13,15 +13,23 @@ import {
   AddTransactionDialog, 
   AddSubscriptionDialog, 
   AddGiftCardDialog, 
-  AddBudgetDialog 
+  AddBudgetDialog,
+  BudgetOverviewCard,
+  BudgetCategoryRow,
+  BudgetSetupWizard,
+  BudgetInsightsPanel,
+  TopMerchantsCard,
 } from "@/components/finance";
 import { 
   Building2, CreditCard, PiggyBank, TrendingUp, RefreshCw, 
   Plus, Wallet, Gift, BarChart3, ArrowUpRight, ArrowDownRight,
-  Calendar, AlertCircle, ChevronRight, ArrowLeft
+  Calendar, AlertCircle, ChevronRight, ArrowLeft, Sparkles
 } from "lucide-react";
 import { toast } from "sonner";
 import { format, startOfMonth, endOfMonth } from "date-fns";
+import { useBudgetData } from "@/hooks/useBudgetData";
+import { useBudgetInsights } from "@/hooks/useBudgetInsights";
+import { categorizeTransaction, getCategoryDef } from "@/lib/finance/categories";
 
 export default function Finance() {
   const navigate = useNavigate();
@@ -80,12 +88,16 @@ export default function Finance() {
       setSyncing(false);
     }
   };
-  // Calculate summary stats
+  // Calculate summary stats — exclude transfers/loans from "spending"
   const totalBalance = accounts.reduce((sum, a) => sum + (a.current_balance || 0), 0);
   const monthStart = startOfMonth(new Date()).toISOString().split('T')[0];
   const monthEnd = endOfMonth(new Date()).toISOString().split('T')[0];
   const monthlyTransactions = transactions.filter(t => t.date >= monthStart && t.date <= monthEnd);
-  const monthlySpending = monthlyTransactions.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
+  const realSpendTxns = monthlyTransactions.filter(t => {
+    if (t.amount <= 0) return false;
+    return getCategoryDef(categorizeTransaction(t)).countsAsSpend;
+  });
+  const monthlySpending = realSpendTxns.reduce((sum, t) => sum + t.amount, 0);
   const monthlyIncome = monthlyTransactions.filter(t => t.amount < 0).reduce((sum, t) => sum + Math.abs(t.amount), 0);
   const monthlySubscriptions = subscriptions.filter(s => s.frequency === 'MONTHLY').reduce((sum, s) => sum + s.amount, 0);
   const totalGiftCards = giftCards.reduce((sum, c) => sum + c.current_balance, 0);
@@ -317,22 +329,11 @@ export default function Finance() {
           </TabsContent>
 
           <TabsContent value="budget">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <PiggyBank className="h-5 w-5" />
-                  Monthly Budget
-                </CardTitle>
-                <CardDescription>Track spending against your category budgets</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center py-12">
-                  <PiggyBank className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground mb-4">Set up your first budget category</p>
-                  <AddBudgetDialog onSuccess={loadData} />
-                </div>
-              </CardContent>
-            </Card>
+            <BudgetTab
+              transactions={transactions}
+              subscriptions={subscriptions}
+              giftCards={giftCards}
+            />
           </TabsContent>
 
           <TabsContent value="subscriptions">
@@ -468,6 +469,98 @@ export default function Finance() {
           </TabsContent>
         </Tabs>
       </div>
+    </div>
+  );
+}
+
+interface BudgetTabProps {
+  transactions: any[];
+  subscriptions: any[];
+  giftCards: any[];
+}
+
+function BudgetTab({ transactions, subscriptions, giftCards }: BudgetTabProps) {
+  const summary = useBudgetData();
+  const insights = useBudgetInsights({ summary, subscriptions, transactions, giftCards });
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const now = new Date();
+
+  if (summary.loading) {
+    return <Skeleton className="h-96" />;
+  }
+
+  const hasBudgets = summary.categories.length > 0;
+
+  if (!hasBudgets) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center space-y-4">
+          <PiggyBank className="h-12 w-12 mx-auto text-muted-foreground" />
+          <div>
+            <p className="font-medium">No budgets yet</p>
+            <p className="text-sm text-muted-foreground">
+              Let Arlo suggest budgets from your last 90 days, or add one manually.
+            </p>
+          </div>
+          <div className="flex justify-center gap-2">
+            <Button onClick={() => setWizardOpen(true)} className="gap-2">
+              <Sparkles className="h-4 w-4" /> Smart setup
+            </Button>
+            <AddBudgetDialog onSuccess={summary.refresh} />
+          </div>
+          <BudgetSetupWizard
+            open={wizardOpen}
+            onOpenChange={setWizardOpen}
+            onComplete={summary.refresh}
+          />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-3">
+      <div className="lg:col-span-2 space-y-4">
+        <BudgetOverviewCard
+          totalBudgeted={summary.totalBudgeted}
+          totalSpent={summary.totalSpent}
+          totalRemaining={summary.totalRemaining}
+          pacing={summary.pacing}
+          month={now.getMonth() + 1}
+          year={now.getFullYear()}
+        />
+
+        <Card>
+          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <PiggyBank className="h-4 w-4" /> Categories
+            </CardTitle>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setWizardOpen(true)} className="gap-1.5">
+                <Sparkles className="h-3.5 w-3.5" /> Suggest
+              </Button>
+              <AddBudgetDialog onSuccess={summary.refresh} />
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {summary.categories.map(cat => (
+              <BudgetCategoryRow key={cat.budgetId} category={cat} onChange={summary.refresh} />
+            ))}
+          </CardContent>
+        </Card>
+
+        <TopMerchantsCard merchants={summary.topMerchants} />
+      </div>
+
+      <div className="space-y-4">
+        <BudgetInsightsPanel insights={insights} />
+      </div>
+
+      <BudgetSetupWizard
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        onComplete={summary.refresh}
+      />
     </div>
   );
 }
