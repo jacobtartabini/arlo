@@ -118,6 +118,22 @@ export default function LabItemEditor() {
 
   const { items, loading, addTextItem, updateItem, deleteItem } = useLabItems(projectId);
 
+  // Notes are now handled by the dedicated LabNoteEditor (which reuses the
+  // full /notes experience). Redirect any traffic that lands here for a note.
+  useEffect(() => {
+    if (!projectId) return;
+    if (isNew && queryKind === "note") {
+      navigate(`/lab/project/${projectId}/note/new`, { replace: true });
+      return;
+    }
+    if (!isNew && !loading) {
+      const found = items.find((i) => i.id === itemId);
+      if (found && found.item_type === "note") {
+        navigate(`/lab/project/${projectId}/note/${found.id}`, { replace: true });
+      }
+    }
+  }, [projectId, isNew, queryKind, loading, items, itemId, navigate]);
+
   const [kind, setKind] = useState<EditorKind>(initialKind);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
