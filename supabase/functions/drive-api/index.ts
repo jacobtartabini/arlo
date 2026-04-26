@@ -54,6 +54,37 @@ function getSupabaseClient() {
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 }
 
+// Custom error so callers can distinguish decryption issues from generic failures
+class TokenDecryptionError extends Error {
+  constructor(message = 'Token decryption failed - reconnection required') {
+    super(message);
+    this.name = 'TokenDecryptionError';
+  }
+}
+
+async function safeDecrypt(value: string): Promise<string> {
+  try {
+    return isEncrypted(value) ? await decrypt(value) : value;
+  } catch (err) {
+    console.error('[drive-api] Decryption failed:', err);
+    throw new TokenDecryptionError();
+  }
+}
+
+async function markAccountNeedsReconnect(
+  supabase: ReturnType<typeof getSupabaseClient>,
+  accountId: string,
+  reason = 'Stored Google Drive credentials could not be decrypted. Please reconnect this account.'
+) {
+  const payload = JSON.stringify({
+    reason: 'auth_expired',
+    message: reason,
+    reconnectRequired: true,
+    at: new Date().toISOString(),
+  });
+  await supabase.from('drive_accounts').update({ last_sync_error: payload }).eq('id', accountId);
+}
+
 // Get valid access token for an account
 async function getValidAccessToken(supabase: ReturnType<typeof getSupabaseClient>, accountId: string, userKey: string): Promise<string | null> {
   const { data: account, error } = await supabase
@@ -73,8 +104,14 @@ async function getValidAccessToken(supabase: ReturnType<typeof getSupabaseClient
   const isExpired = expiresAt < new Date(Date.now() + 60000); // 1 minute buffer
 
   if (isExpired && account.refresh_token) {
-    // Refresh the token
-    const decryptedRefresh = isEncrypted(account.refresh_token) ? await decrypt(account.refresh_token) : account.refresh_token;
+    // Refresh the token — decrypt may fail if encryption key changed
+    let decryptedRefresh: string;
+    try {
+      decryptedRefresh = await safeDecrypt(account.refresh_token);
+    } catch {
+      await markAccountNeedsReconnect(supabase, accountId);
+      throw new TokenDecryptionError();
+    }
     
     const response = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -119,8 +156,13 @@ async function getValidAccessToken(supabase: ReturnType<typeof getSupabaseClient
     return tokens.access_token;
   }
 
-  // Decrypt and return current token
-  return isEncrypted(account.access_token) ? await decrypt(account.access_token) : account.access_token;
+  // Decrypt and return current token (handle key mismatch gracefully)
+  try {
+    return await safeDecrypt(account.access_token);
+  } catch {
+    await markAccountNeedsReconnect(supabase, accountId);
+    throw new TokenDecryptionError();
+  }
 }
 
 // List files from Google Drive with section support
@@ -683,6 +725,14 @@ Deno.serve(async (req) => {
     }
 
   } catch (err) {
+    if (err instanceof TokenDecryptionError) {
+      console.warn('[drive-api] Token decryption failed - user must reconnect');
+      return jsonResponse(req, {
+        error: 'Google Drive credentials are invalid. Please disconnect and reconnect this account.',
+        reconnectRequired: true,
+        reason: 'auth_expired',
+      }, 401);
+    }
     console.error('[drive-api] Error:', err);
     return errorResponse(req, err instanceof Error ? err.message : 'Internal error', 500);
   }
