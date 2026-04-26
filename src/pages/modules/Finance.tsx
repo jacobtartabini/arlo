@@ -472,3 +472,95 @@ export default function Finance() {
     </div>
   );
 }
+
+interface BudgetTabProps {
+  transactions: any[];
+  subscriptions: any[];
+  giftCards: any[];
+}
+
+function BudgetTab({ transactions, subscriptions, giftCards }: BudgetTabProps) {
+  const summary = useBudgetData();
+  const insights = useBudgetInsights({ summary, subscriptions, transactions, giftCards });
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const now = new Date();
+
+  if (summary.loading) {
+    return <Skeleton className="h-96" />;
+  }
+
+  const hasBudgets = summary.categories.length > 0;
+
+  if (!hasBudgets) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center space-y-4">
+          <PiggyBank className="h-12 w-12 mx-auto text-muted-foreground" />
+          <div>
+            <p className="font-medium">No budgets yet</p>
+            <p className="text-sm text-muted-foreground">
+              Let Arlo suggest budgets from your last 90 days, or add one manually.
+            </p>
+          </div>
+          <div className="flex justify-center gap-2">
+            <Button onClick={() => setWizardOpen(true)} className="gap-2">
+              <Sparkles className="h-4 w-4" /> Smart setup
+            </Button>
+            <AddBudgetDialog onSuccess={summary.refresh} />
+          </div>
+          <BudgetSetupWizard
+            open={wizardOpen}
+            onOpenChange={setWizardOpen}
+            onComplete={summary.refresh}
+          />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-3">
+      <div className="lg:col-span-2 space-y-4">
+        <BudgetOverviewCard
+          totalBudgeted={summary.totalBudgeted}
+          totalSpent={summary.totalSpent}
+          totalRemaining={summary.totalRemaining}
+          pacing={summary.pacing}
+          month={now.getMonth() + 1}
+          year={now.getFullYear()}
+        />
+
+        <Card>
+          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <PiggyBank className="h-4 w-4" /> Categories
+            </CardTitle>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setWizardOpen(true)} className="gap-1.5">
+                <Sparkles className="h-3.5 w-3.5" /> Suggest
+              </Button>
+              <AddBudgetDialog onSuccess={summary.refresh} />
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {summary.categories.map(cat => (
+              <BudgetCategoryRow key={cat.budgetId} category={cat} onChange={summary.refresh} />
+            ))}
+          </CardContent>
+        </Card>
+
+        <TopMerchantsCard merchants={summary.topMerchants} />
+      </div>
+
+      <div className="space-y-4">
+        <BudgetInsightsPanel insights={insights} />
+      </div>
+
+      <BudgetSetupWizard
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        onComplete={summary.refresh}
+      />
+    </div>
+  );
+}
