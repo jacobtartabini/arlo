@@ -248,6 +248,7 @@ export function useContactsPersistence() {
     fetchOpenReminders,
     fetchRemindersForContact,
     createContactManual,
+    createContactDetailed,
     updateContact,
     deleteContact,
     addActivity,
