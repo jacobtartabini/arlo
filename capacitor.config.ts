@@ -1,13 +1,13 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'app.lovable.5901d3889aa146d0a038dc8340d632be',
-  appName: 'arlo-ai-command-center',
+  appId: 'com.jacobtartabini.arlo',
+  appName: 'arlo-ai',
   webDir: 'dist',
   
   // Live reload configuration for development
   server: {
-    url: 'https://5901d388-9aa1-46d0-a038-dc8340d632be.lovableproject.com?forceHideBadge=true',
+    url: 'https://arlo.jacobtartabini.com',
     cleartext: true,
   },
   
