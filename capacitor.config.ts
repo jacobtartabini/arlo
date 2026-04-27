@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.jacobtartabini.arlo',
-  appName: 'arlo-ai',
+  appId: 'com.tartabinienterprises.arlo',
+  appName: 'arlo',
   webDir: 'dist',
   
   // Live reload configuration for development
