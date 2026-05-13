@@ -15,6 +15,8 @@ import { useChatHistory } from './ChatHistoryProvider';
 import { ChatMessageStatus } from '@/types/chat';
 import { notifyChat, showToast } from '@/lib/notifications/notify';
 import { invokeEdgeFunction } from '@/lib/edge-functions';
+import { decideRoute } from '@/lib/task-router';
+import { approveAgentTask, startAgentTask, type AgentActionProposal } from '@/lib/pi-agent';
 
 export interface ArloConfig {
   apiEndpoint: string;
@@ -47,6 +49,8 @@ interface ArloContextType {
   messages: ChatMessage[];
   sendMessage: (content: string) => Promise<void>;
   sendVoiceMessage: (audioBlob: Blob) => Promise<void>;
+  pendingApproval: { taskId: string; proposal: AgentActionProposal } | null;
+  respondToApproval: (decision: 'approve' | 'deny', note?: string) => Promise<void>;
   checkConnection: () => Promise<boolean>;
   refreshStatus: () => Promise<void>;
   restartArlo: () => Promise<void>;
@@ -121,6 +125,10 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [latestWeatherUpdate, setLatestWeatherUpdate] = useState<WeatherUpdate | null>(null);
   const [latestMapUpdate, setLatestMapUpdate] = useState<MapUpdate | null>(null);
+  const [pendingApproval, setPendingApproval] = useState<{
+    taskId: string;
+    proposal: AgentActionProposal;
+  } | null>(null);
 
   const {
     activeConversation,
@@ -423,6 +431,9 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
       const trimmed = content.trim();
       if (!trimmed) return;
 
+      const routeDecision = decideRoute(trimmed);
+      console.info('[arlo-router]', { route: routeDecision.route, reason: routeDecision.reason, confidence: routeDecision.confidence });
+
       const conversationId = ensureActiveConversation();
       const priorMessages = getConversationById(conversationId)?.messages ?? [];
 
@@ -435,6 +446,43 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
 
       pendingMessagesRef.current.add(userMessage.id);
       updateLoadingState();
+
+      // If this looks like a tool-using task, send it to the Pi agent service.
+      if (routeDecision.route === 'tool_task' && config.apiToken) {
+        try {
+          const response = await startAgentTask({
+            apiEndpoint: config.apiEndpoint,
+            apiToken: config.apiToken,
+            body: { conversationId, message: trimmed },
+          });
+
+          updateMessageStatus(conversationId, userMessage.id, 'sent');
+
+          if (response.status === 'needs_approval' && response.proposal) {
+            setPendingApproval({ taskId: response.taskId, proposal: response.proposal });
+          }
+
+          const text = response.status === 'completed'
+            ? (response.result?.text ?? 'Task completed.')
+            : response.status === 'needs_approval'
+              ? 'I have a proposed action that needs your approval.'
+              : 'Working on that…';
+
+          appendMessage({
+            conversationId,
+            text,
+            sender: 'arlo',
+            status: 'sent',
+          });
+        } catch (err) {
+          console.error('Pi agent task failed', err);
+          toast.error(err instanceof Error ? err.message : 'Agent request failed');
+          updateMessageStatus(conversationId, userMessage.id, 'error');
+        } finally {
+          completePendingMessage(userMessage.id);
+        }
+        return;
+      }
 
       const socket = socketRef.current;
       const socketReady = socket && socket.readyState === WebSocket.OPEN;
@@ -527,9 +575,55 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
       completePendingMessage,
       ensureActiveConversation,
       getConversationById,
+      config.apiEndpoint,
+      config.apiToken,
       updateLoadingState,
       updateMessageStatus,
     ],
+  );
+
+  const respondToApproval = useCallback(
+    async (decision: 'approve' | 'deny', note?: string) => {
+      if (!pendingApproval) return;
+      if (!config.apiToken) {
+        toast.error('Missing Arlo API token.');
+        return;
+      }
+
+      const conversationId = ensureActiveConversation();
+      setPendingApproval(null);
+
+      try {
+        const res = await approveAgentTask({
+          apiEndpoint: config.apiEndpoint,
+          apiToken: config.apiToken,
+          taskId: pendingApproval.taskId,
+          body: { decision, note },
+        });
+
+        const reply =
+          res.status === 'completed'
+            ? (res.result?.text ?? 'Done.')
+            : 'Working on that…';
+
+        appendMessage({
+          conversationId,
+          text: reply,
+          sender: 'arlo',
+          status: 'sent',
+        });
+      } catch (err) {
+        console.error('Agent approval failed', err);
+        toast.error(err instanceof Error ? err.message : 'Approval failed');
+        appendMessage({
+          conversationId,
+          text: 'Approval failed. Please try again.',
+          sender: 'arlo',
+          status: 'sent',
+        });
+      }
+    },
+    [appendMessage, config.apiEndpoint, config.apiToken, ensureActiveConversation, pendingApproval],
   );
 
   const sendVoiceMessage = async () => {
@@ -561,6 +655,8 @@ export function ArloProvider({ children }: { children: React.ReactNode }) {
     messages,
     sendMessage,
     sendVoiceMessage,
+    pendingApproval,
+    respondToApproval,
     checkConnection,
     refreshStatus,
     restartArlo,
