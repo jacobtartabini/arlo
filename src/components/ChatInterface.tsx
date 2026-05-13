@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Send, Mic, MicOff } from 'lucide-react';
 import { toast } from 'sonner';
+import { AgentApprovalDialog } from '@/components/chat/AgentApprovalDialog';
 
 interface ChatInterfaceProps {
   onWidgetRequest: (type: 'weather' | 'map' | 'health', data?: any) => void;
@@ -80,6 +81,7 @@ export function ChatInterface({ onWidgetRequest }: ChatInterfaceProps) {
 
   return (
     <>
+      <AgentApprovalDialog />
       {/* Chat History (when expanded) */}
       {showChatHistory && (
         <div className="fixed bottom-24 right-6 w-96 h-96 glass rounded-2xl p-4 z-40">

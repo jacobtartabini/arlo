@@ -16,8 +16,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
-import { getArloToken } from "@/lib/arloAuth";
+import { invokeEdgeFunction } from "@/lib/edge-functions";
 
 interface ArloAIModuleProps {
   id: string;
@@ -54,34 +53,37 @@ export function ArloAIModule({ id, onClose, noteContent, onInsertText }: ArloAIM
     setIsLoading(true);
 
     try {
-      const token = await getArloToken();
-      if (!token) {
-        throw new Error("Authentication required");
-      }
-
       const conversationHistory = messages.slice(-10).map((message) => ({
         role: message.role,
         content: message.content,
       }));
 
+      const system = `You are Arlo, a trusted executive assistant helping the user work inside their notes.
+
+Rules:
+- Be concise but complete; use short sections or bullet points when helpful.
+- If the user asks to summarize, do so with actionable takeaways.
+- If note context is provided, treat it as source material.
+- No greetings or sign-offs.`;
+
       const prompt = noteContent?.trim()
-        ? `${userMessage}\n\nNote context:\n${noteContent}`
+        ? `${userMessage}\n\nNote context:\n${noteContent.trim()}`
         : userMessage;
 
-      const { data, error } = await supabase.functions.invoke("arlo-ai", {
-        headers: { "X-Arlo-Authorization": `Bearer ${token}` },
-        body: {
-          prompt,
-          conversation: conversationHistory,
-        },
-      });
+      const apiMessages: Message[] = [...conversationHistory, { role: "user", content: prompt }];
 
-      if (error) {
-        throw error;
+      const result = await invokeEdgeFunction<{ text?: string; error?: string }>(
+        "arlo-ai",
+        { messages: apiMessages, system, max_tokens: 700 },
+        { requireAuth: true },
+      );
+
+      if (!result.ok) {
+        throw new Error(result.message || "Request failed");
       }
 
-      const response = data?.message;
-      if (!response || typeof response !== "string") {
+      const response = result.data?.text;
+      if (!response || typeof response !== "string" || !response.trim()) {
         throw new Error("No AI response received");
       }
 

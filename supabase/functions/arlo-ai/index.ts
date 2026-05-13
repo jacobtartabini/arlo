@@ -30,6 +30,41 @@ const IP_RATE_LIMIT = {
 
 const DEFAULT_MAX_TOKENS = 400
 
+type CacheEntry = { at: number; text: string }
+const CACHE_TTL_MS = 30_000
+const responseCache = new Map<string, CacheEntry>()
+
+function makeCacheKey(args: { model: string; max_tokens: number; system: string; messages: ChatTurn[] }): string {
+  // Keep key small-ish: last 6 turns + system + model + max_tokens
+  const tail = args.messages.slice(-6)
+  return JSON.stringify({
+    model: args.model,
+    max_tokens: args.max_tokens,
+    system: args.system,
+    messages: tail,
+  })
+}
+
+function getCachedResponse(key: string): string | null {
+  const hit = responseCache.get(key)
+  if (!hit) return null
+  if (Date.now() - hit.at > CACHE_TTL_MS) {
+    responseCache.delete(key)
+    return null
+  }
+  return hit.text
+}
+
+function setCachedResponse(key: string, text: string) {
+  responseCache.set(key, { at: Date.now(), text })
+  // opportunistic cleanup
+  if (responseCache.size > 200) {
+    for (const [k, v] of responseCache.entries()) {
+      if (Date.now() - v.at > CACHE_TTL_MS) responseCache.delete(k)
+    }
+  }
+}
+
 function defaultAnthropicModel(): string {
   // Normalize env overrides too, so stale aliases don't break production.
   return normalizeAnthropicModel(Deno.env.get('ARLO_AI_MODEL'))
@@ -154,6 +189,12 @@ Rules:
 - If unsure, say so in one short sentence.`
 
   try {
+    const cacheKey = makeCacheKey({ model, max_tokens, system, messages: normalized })
+    const cached = getCachedResponse(cacheKey)
+    if (cached) {
+      return jsonResponse(req, { text: cached, cached: true })
+    }
+
     const payload = await callAnthropicMessages({
       model,
       system,
@@ -167,7 +208,14 @@ Rules:
       return errorResponse(req, 'Empty response from AI model', 502)
     }
 
-    return jsonResponse(req, { text })
+    setCachedResponse(cacheKey, text)
+
+    return jsonResponse(req, {
+      text,
+      cached: false,
+      usage: payload.usage ?? null,
+      model: payload.model ?? model,
+    })
   } catch (e) {
     const message = buildAnthropicErrorMessage(e, 'Unexpected error')
     console.error('[arlo-ai] Unexpected error:', message)
